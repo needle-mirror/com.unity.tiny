@@ -45,10 +45,19 @@ namespace Unity.Tiny
                     EditorGUI.showMixedValue = mixed;
                     if (EditorGUI.EndChangeCheck())
                     {
+                        var bindings = firstEntity.Registry.Context.GetManager<BindingsManager>();
                         foreach (var entity in entities)
                         {
                             entity.Enabled = enabled;
                             entity.View.gameObject.SetActive(enabled);
+                            foreach (var e in entity.View.GetComponentsInChildren<Transform>()
+                                .Select(t => t.GetComponent<TinyEntityView>())
+                                .NotNull()
+                                .Select(view => view.EntityRef.Dereference(view.Registry))
+                                .NotNull())
+                            {
+                                bindings.Transfer(e);
+                            }
                         }
                     }
                     
