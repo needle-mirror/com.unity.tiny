@@ -1,8 +1,49 @@
-# Changelog
+
 All notable changes to this package will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
+# Changelog
+
+## [0.15.3] - 2019-05-31
+* First Tiny C# preview release. This release is **not backward-compatible** with previous releases.
+* Must use Unity 2019.2.0b3 and above
+  
+### [Editor]
+* Added the ability for the editor to change context when working in a DOTS project
+* Added the Searcher when adding a component in the Inspector window
+* Added a new Open DOTS C# 
+* Relocated build options to the top
+* Removed Physics2D, Tilemaps, and Particles
+* Removed Component type creation
+* Removed live-link
+* Removed QR Code
+* Removed the build report
+* Removed Component Families
+  
+### [Samples]
+* Removed all previous samples and replaced them with new sample projects
+* Samples are now imported from the Package Manager'
+
+### [Scripting]
+* Now supports the DOTS API and C#
+* Removed support for Typescript
+
+### [Hierarchy]
+* Renamed EntityGroups to Scenes
+* Added a new Configuration Scene
+
+### [Project Settings]
+* Renamed "Tiny" settings to "DOTS"
+* Removed most settings from the Project Settings
+
+### [Prefabs]
+* Removed Prefabs
+
+### [Runtime]
+* C#
+* New build platform options are now available: Dotnet, IL2CPP, AsmJS, and WASM (known issues on certain browsers)
+* Removed TypeScript
 
 ## [0.14.5] - 2019-04-23
 * Fixed tools distribution tool to access the public repository instead of testing
@@ -12,6 +53,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 * Fixed bindings of an entity in the editor when an entity is re-enabled from a disabled state
 
 ## [0.14.3] - 2019-03-12
+* Fixed the freezing of the editor when quitting Unity with a Tiny project opened
+* Must use Unity 2018.3.0f2 and above
+
+## [0.14.2] - 2019-03-05
 * Fixed the freezing of the editor when quitting Unity with a Tiny project opened
 * Must use Unity 2018.3.0f2 and above
 

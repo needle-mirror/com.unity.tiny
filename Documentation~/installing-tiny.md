@@ -13,11 +13,6 @@ Follow these steps:
 
 ## Prerequisites
 
-Tiny mode works when installed in a new Unity 2018.3 project. If you install it in an existing project, you may have to manually change some project settings to ensure compatibility.
+Tiny Mode works when installed in a new Unity 2019.2.0b1 (or above) project. If you install it in an existing project, you may have to manually change some project settings to ensure compatibility.
 
-### .Net 4.x
-
-Tiny Mode requires that your project use the latest version of the scripting runtime. You can update this setting by doing the following:
-
-1. From the menu, choose **Edit > Project Settings...** to open the Project Settings window.
-2. In the **Player** section, set the **Configuration > Scripting Runtime Version** to **.Net 4.x Equivalent**.
+The minimum requirements for Scripting in Tiny Mode are [Visual Studio 2017 15.8](https://devblogs.microsoft.com/visualstudio/visual-studio-2017-version-15-8/) or [JetBrains Rider 2019.1](https://blog.jetbrains.com/dotnet/2019/04/30/rider-2019-1-arrived/).

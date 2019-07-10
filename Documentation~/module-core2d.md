@@ -59,13 +59,10 @@ _Note: Some settings such as **Allow Rotation** and **Tight Packing** are not su
 
 The Sprite Atlas should be exported with the project. An exported Sprite Atlas will generate an entity with a [SpriteAtlas](#spriteatlas) component, as well as a texture. Sprites part of a Sprite Atlas will be exported with path `assets/sprites/<Sprite Atlas name>/<Sprite name>`. It is possible to get those Sprites by searching through the World's entities: `world.getByName(<Sprite path>)`. Please refer to the `SkinSystem` in the [`Flappy`](#example-flappy) project for an example.
 
-> A Sprite Atlas will not be exported with the project if none of its sprites is  referenced by a Tiny entity (e.g. in a [Sprite2DRenderer](#sprite2drenderer) component). In this case, you can add an explicit reference to one of its sprites in the [Assets tab](../tiny-editor.md#assets-tab). By doing so, the Sprite Atlas should be exported properly and its sprites should be accessible in runtime.
+A Sprite Atlas will not be exported with the project if none of its sprites is  referenced by a Tiny entity (e.g. in a [Sprite2DRenderer](#sprite2drenderer) component). In this case, you can add an explicit reference to one of its sprites in the [Assets tab](../tiny-editor.md#assets-tab). By doing so, the Sprite Atlas should be exported properly and its sprites should be accessible in runtime.
 
-### Example: Flying Yolk Project
 
-The **Flying Yolk** project found in `Assets/UTinySamples` covers the use of the Core2D Module components and of Sprite Atlas. In the project, you will find an example about creating a game scene with a camera, positioning entities, rendering sprites, animating sprites, and using multiple themes with Sprite Atlas.
-
-> This table can be used to associate a Core2D Component to an entity and/or a system.
+This table can be used to associate a Core2D Component to an entity and/or a system.
 
 | Core2D Components | Entity Name | System Name |
 | ------------- | ------------- | ------------- |
@@ -79,11 +76,8 @@ The **Flying Yolk** project found in `Assets/UTinySamples` covers the use of the
 | [Sprite2DSequencePlayer](#sprite2dsequenceplayer) | Bird |  |
 | [Transform](#transform) | WorldScale, Backgrounds, Grounds, ground0, ground1, ground2, ground3, Bird, Bounds, Camera, GetReady, Tutorial, Title, GameOver, Scoreboard, FinalScore, Character_2, Character_1, Character_0, HighScore, Pipes, Pipe_Top, Pipe_Bottom, Score | AutoDestroySystem, RepeatedBackgroundSystem, ScrollingObjectSystem |
 
-This project contains three Sprite Atlases (`Game`, `Day`, `Night`). `Game` contains common assets whereas `Day` and `Night` contain skin sprites (background, bird, pipe). To switch between the `Day` and `Night` skin, we rename sprites for the same entity with the same name (e.g. `bg` sprite in the [Assets tab](../tiny-editor.md#assets-tab)).
 
 ## Components
-
-Tiny is built around small, lightweight components. This way you only pay for what you need. This design usually creates more component types to represent data held in a single Unity component, which can be confusing at first for some developers.
 
 Use this table to associate familiar Unity concepts with Tiny Mode.
 

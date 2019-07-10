@@ -1,6 +1,6 @@
 # Getting started
 
-To start building a project in Tiny Mode, you must install the Tiny Mode package in your project 
+To start creating a project in Tiny Mode, you must install the Tiny Mode package in your project 
 
 See [Installing the package](installing-tiny.md) further down in this document.
 

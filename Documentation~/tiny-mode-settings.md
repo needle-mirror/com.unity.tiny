@@ -6,9 +6,5 @@ These settings give you control over how your project is organized and how it sh
 
 There are six sections to the Tiny Mode settings in the inspector:
 
-- [The main settings](settings-main.md)
-- [Assets](settings-assets.md)
-- [Build Report](settings-build-report.md)
-- [Components](settings-components.md)
-- [Entities](settings-entities.md)
-- [Modules](settings-modules.md)
+- [The main Project settings](settings-main.md)
+- [The Assembly Definition settings](settings-asmdef.md)

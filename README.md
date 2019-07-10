@@ -4,8 +4,8 @@ This package contains all you need to start using Tiny Mode.
 Tiny Mode enables you to create lightweight Web-based games using the Unity Editor.
 
 # Prerequisites
-## Unity 2018.3
-This package requires Unity 2018.3 or later. It does not support previous versions. Get it [here](https://unity3d.com/get-unity/update).
+## Unity 2019.1
+This package requires Unity 2019.1 or later. It does not support previous versions. Get it [here](https://unity3d.com/get-unity/update).
 
 # Getting Started
 ## Open Unity

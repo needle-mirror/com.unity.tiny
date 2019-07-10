@@ -15,8 +15,6 @@ This section demonstrates how to use the HitBox2D module through common use case
 
 Alternatively, you can add a [RectHitBox2D](#recthitbox2d) component instead of a [Sprite2DRendererHitBox2D](#sprite2drendererhitbox2d) if you want to specify the hitbox's position and scale.
 
-Please refer to the `raider` or `spaceship` entity in the [`GalaxyRaiders`](#example-galaxy-raiders) project for examples.
-
 ### Detect Collisions
 
 1. Create two [Sprite2D entities](./manual-module-core2d.md#simple-sprite-rendering).
@@ -28,11 +26,6 @@ You can use the `overlaps` member of the [HitBoxOverlapResults](#hitboxoverlapre
 
 > Both entities have to be under the same camera.
 
-Please refer to the `DamageSystem` in the [`GalaxyRaiders`](#example-galaxy-raiders) project for an example.
-
-### Example: Galaxy Raiders
-
-The `GalaxyRaiders` project found in `Assets/UTinySamples` covers the use of the HitBox2D Module components. In the project, you will find examples about adding a hitbox on an entity and implementing game logic when hitboxes overlap.
 
 > This table can be used to associate a HitBox2D Component to a sample entity and/or system.
 
@@ -43,8 +36,6 @@ The `GalaxyRaiders` project found in `Assets/UTinySamples` covers the use of the
 | [Sprite2DRendererHitBox2D](#sprite2drendererhitbox2d) | raiderLaser, spaceship, spaceshipLaser |  |
 
 ## Components
-
-Tiny is built around small, lightweight components. This way you only pay for what you need. This design usually creates more component types to represent data held in a single Unity component, which can be confusing at first for some developers.
 
 > Use this table to associate familiar Unity concepts with Tiny.
 
