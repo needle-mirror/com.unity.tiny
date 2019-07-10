@@ -9,7 +9,7 @@
       "Unity.Tiny.Debugging"
     ],
     "optionalUnityReferences": [],
-    "excludePlatforms": [ "WebGL" ],
+    "excludePlatforms": [ "WebGL", "Android", "IOS" ],
     "allowUnsafeCode": true,
     "cpp": [ "cpp~"]
 }

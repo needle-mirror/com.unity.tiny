@@ -11,10 +11,11 @@ namespace Unity.Tiny.Text
         /// <summary>
         /// Creates a NativeFont entity.
         /// </summary>
-        public static Entity CreateNativeFont(EntityManager mgr, FontName fontName, float worldUnitsToPt)
+        public static Entity CreateNativeFont(EntityManager mgr, FontName fontName, string ttfFileName, float worldUnitsToPt)
         {
-            Entity e = mgr.CreateEntity(typeof(NativeFont));
+            Entity e = mgr.CreateEntity(typeof(NativeFont), typeof(NativeFontLoadFromFile));
             mgr.SetComponentData(e, new NativeFont() {name = fontName, worldUnitsToPt = worldUnitsToPt});
+            mgr.AddBufferFromString<NativeFontLoadFromFileName>(e, ttfFileName);
             return e;
         }
 

@@ -62,14 +62,6 @@ bool Matrix4x4f::IsIdentity(float threshold) const
     return false;
 }
 
-float Matrix4x4f::MaxAbsScale() const
-{
-    float a = SqrMagnitude(GetAxisX());
-    a = std::max(a,SqrMagnitude(GetAxisY()));
-    a = std::max(a,SqrMagnitude(GetAxisZ()));
-    return sqrtf(a);
-}
-
 void Matrix4x4f::RemoveScale()
 {
     SetAxisX(Normalize(GetAxisX()));

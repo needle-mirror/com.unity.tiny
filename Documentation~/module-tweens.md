@@ -19,4 +19,4 @@ Warning: Because tweening is driven by entities, it is easy to forget to destroy
 
 Note: Not all values can be tweened. Only **Color, Vector2, Vector3, float, and Quaternion** can be tweened. It is possible to tween individual values in sub-structs though. For example, it is possible to tween only the alpha channel of a color as a single float by passing for example **Sprite2DRenderer.color.a** into **addTween**. 
 
-(See this module's API documentation for more information)
+[See this module's API documentation for more information](../api/Unity.Tiny.Tweens.html)

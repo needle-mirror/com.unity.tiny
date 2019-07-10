@@ -9,7 +9,6 @@ using Unity.Tiny.Core2D;
  * @module
  * @name Unity.Tiny
  */
-[assembly: ModuleDescription("Unity.Tiny.UIControls", "Basic UI controls")]
 namespace Unity.Tiny.UIControls
 {
     public delegate void EventCallback(Entity e);

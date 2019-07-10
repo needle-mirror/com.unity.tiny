@@ -13,26 +13,19 @@ namespace Unity.Editor
         string GetEntityName(Entity entity);
     }
 
-    internal class SessionCacheManager : SessionManager, ISessionCacheManager
+    internal class SessionCacheManager : ISessionManagerInternal, ISessionCacheManager
     {
         private IWorldManagerInternal m_WorldManager;
-        private readonly Dictionary<Guid, string> m_EntityGuidToName;
+        private readonly Dictionary<Guid, string> m_EntityGuidToName = new Dictionary<Guid, string>();
 
         private EntityManager EntityManager => m_WorldManager.EntityManager;
 
-        public SessionCacheManager(Session session) : base(session)
+        public void Load(Session session)
         {
-            m_EntityGuidToName = new Dictionary<Guid,string>();
+            m_WorldManager = session.GetManager<IWorldManagerInternal>();
         }
 
-        public override void Load()
-        {
-            m_WorldManager = Session.GetManager<IWorldManagerInternal>();
-        }
-
-        public override void Unload()
-        {
-        }
+        public void Unload(Session session) { }
 
         private void HandleChanges(Changes changes)
         {

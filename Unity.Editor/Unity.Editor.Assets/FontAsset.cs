@@ -8,10 +8,10 @@ namespace Unity.Editor.Assets
     [EntityWithComponentsBinding(typeof(BitmapFont))]
     internal class BitmapFontAsset: UnityObjectAsset<TMPro.TMP_FontAsset>
     {
-        public override AssetInfo GetAssetInfo(IAssetEnumerator ctx, TMP_FontAsset font)
+        public override AssetInfo GetAssetInfo(IAssetEnumerator context, TMP_FontAsset font)
         {
             var fontAsset = new AssetInfo(font, font.name);
-            var textureAsset = ctx.GetAssetInfo(font.atlasTexture);
+            var textureAsset = context.GetAssetInfo(font.atlasTexture);
             textureAsset.Parent = fontAsset;
 
             return fontAsset;
@@ -20,19 +20,19 @@ namespace Unity.Editor.Assets
 
     internal class FontAssetImporter : UnityObjectAssetImporter<TMPro.TMP_FontAsset>
     {
-        public override Entity Import(IAssetImporter ctx, TMP_FontAsset font)
+        public override Entity Import(IAssetImporter context, TMP_FontAsset font)
         {
-            var entity = ctx.CreateEntity(typeof(BitmapFont), typeof(CharacterInfoBuffer));
+            var entity = context.CreateEntity(typeof(BitmapFont), typeof(CharacterInfoBuffer));
 
-            ctx.SetComponentData(entity, new BitmapFont()
+            context.SetComponentData(entity, new BitmapFont()
             {
-                textureAtlas = ctx.GetEntity(font.atlasTexture),
+                textureAtlas = context.GetEntity(font.atlasTexture),
                 size = font.creationSettings.pointSize,
                 ascent = font.faceInfo.ascentLine,
                 descent = font.faceInfo.descentLine
             });
 
-            var buffer = ctx.GetBuffer<CharacterInfoBuffer>(entity).Reinterpret<CharacterInfo>();
+            var buffer = context.GetBuffer<CharacterInfoBuffer>(entity).Reinterpret<CharacterInfo>();
             foreach (var lookup in font.characterLookupTable)
             {
                 var glyph = lookup.Value;

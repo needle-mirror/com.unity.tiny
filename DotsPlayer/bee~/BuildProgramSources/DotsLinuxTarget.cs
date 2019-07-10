@@ -5,6 +5,7 @@ using Unity.BuildSystem.NativeProgramSupport;
 abstract class DotsLinuxTarget : DotsBuildSystemTarget
 {
     protected override ToolChain ToolChain => new LinuxGccToolchain(LinuxGccSdk.Locatorx64.UserDefaultOrDummy);
+    protected override bool CanRunMultiThreadedJobs { get; } = false;
 }
 
 class DotsLinuxDotNetTarget : DotsLinuxTarget

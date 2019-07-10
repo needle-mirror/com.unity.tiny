@@ -9,13 +9,11 @@ namespace Unity.Editor.Build
     {
         private readonly HashSet<Entry> m_Entries = new HashSet<Entry>();
 
-        public class Entry : IEquatable<Entry>
+        private class Entry : IEquatable<Entry>
         {
             public Guid AssetGuid;
             public string AssetPath;
-            public uint ExportVersion;
-            public Guid ExportHash;
-            public List<string> ExportedFiles = new List<string>();
+            public List<string> ExportedFiles;
 
             public bool Equals(Entry other)
             {
@@ -31,17 +29,19 @@ namespace Unity.Editor.Build
         public IReadOnlyDictionary<Guid, string> Assets => m_Entries.ToDictionary(x => x.AssetGuid, x => x.AssetPath);
         public IReadOnlyCollection<FileInfo> ExportedFiles => m_Entries.SelectMany(x => x.ExportedFiles.Select(f => new FileInfo(f))).ToList();
 
-        public Entry Add(Guid assetGuid, string assetPath, IEnumerable<FileInfo> exportedFiles, uint exportVersion = 1, Guid exportHash = new Guid())
+        public void Add(Guid assetGuid, string assetPath, IEnumerable<FileInfo> exportedFiles)
         {
-            var entry = new Entry
+            if (exportedFiles == null || exportedFiles.Count() == 0)
+            {
+                return;
+            }
+
+            m_Entries.Add(new Entry
             {
                 AssetGuid = assetGuid,
-                AssetPath = assetPath,
-                ExportVersion = exportVersion,
-                ExportHash = exportHash,
+                AssetPath = assetPath ?? string.Empty,
                 ExportedFiles = exportedFiles.Select(f => f.FullName).ToList()
-            };
-            return m_Entries.Add(entry) ? entry : null;
+            });
         }
     }
 }

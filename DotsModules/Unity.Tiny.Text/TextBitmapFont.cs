@@ -252,19 +252,12 @@ namespace Unity.Tiny.Text
 
                 if (newSize < minSize)
                 {
-                    //TODO: Update when float.ToString will not throws an exception anymore
-                    string l = "Text: " + text;
-                    l += " is not renderable, the generated font size " + ((int)newSize).ToString();
-                    l += " is smaller than the minimum allowed " + ((int)minSize).ToString();
-                    Debug.Log(l);
+                    Debug.LogFormat("Text: {0} is not renderable, the resized font {1} is smaller than the minimum allowed {2}", text, newSize, minSize);
+                    return 0.0f;
                 }
             }
 
-            //TODO: Update when float.ToString will not throws an exception anymore
-            string line = "Text with bitmap font, measured with: " + ((int)width).ToString();
-            line += " measured height: ";
-            line += ((int)height).ToString();
-            Debug.Log(line);
+            Debug.LogFormat("Text with bitmap font: {0} , measured with {1} measure height {2}", text, width, height);
 
             privBitmap.bounds.width = width;
             privBitmap.bounds.height = height;

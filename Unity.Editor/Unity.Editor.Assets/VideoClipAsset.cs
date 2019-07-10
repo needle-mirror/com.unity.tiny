@@ -5,23 +5,24 @@ using System.Collections.Generic;
 using System.Text;
 using Unity.Editor.Extensions;
 using Unity.Authoring.Hashing;
+using Unity.Tiny.Video;
 
 namespace Unity.Editor.Assets
 { 
-    [EntityWithComponentsBinding(typeof(Unity.Tiny.Video.VideoClip))]
+    [EntityWithComponentsBinding(typeof(VideoClip))]
     internal class VideoClipAsset : UnityObjectAsset<UnityEngine.Video.VideoClip>
     {
-        public override AssetInfo GetAssetInfo(IAssetEnumerator ctx, UnityEngine.Video.VideoClip clip)
+        public override AssetInfo GetAssetInfo(IAssetEnumerator context, UnityEngine.Video.VideoClip clip)
         {
             return new AssetInfo(clip, clip.name);
         }
     }
     internal class VideoClipAssetImporter : UnityObjectAssetImporter<UnityEngine.Video.VideoClip>
     {
-        public override Entity Import(IAssetImporter ctx, UnityEngine.Video.VideoClip clip)
+        public override Entity Import(IAssetImporter context, UnityEngine.Video.VideoClip clip)
         {
-            var entityVideo = ctx.CreateEntity(typeof(Unity.Tiny.Video.VideoClip), typeof(Unity.Tiny.Video.VideoClipLoadFromFile));
-            ctx.AddBufferFromString<Unity.Tiny.Video.VideoClipLoadFromFileName>(entityVideo, "Data/" + clip.GetGuid().ToString("N"));
+            var entityVideo = context.CreateEntity(typeof(VideoClip), typeof(VideoClipLoadFromFile), typeof(VideoClipLoadFromFileName));
+            context.SetBufferFromString<VideoClipLoadFromFileName>(entityVideo, "Data/" + clip.GetGuid().ToString("N"));
             return entityVideo;
         }
     }
@@ -30,12 +31,12 @@ namespace Unity.Editor.Assets
     {
         public override uint ExportVersion => 1;
 
-        public override IEnumerable<FileInfo> Export(FileInfo outputFile, UnityEngine.Video.VideoClip clip)
+        public override IEnumerable<FileInfo> Export(IAssetExporter context, FileInfo outputFile, UnityEngine.Video.VideoClip clip)
         {
              return AssetExporter.ExportSource(outputFile, clip);
         }
 
-        public override Guid GetExportHash(UnityEngine.Video.VideoClip clip)
+        public override Guid GetExportHash(IAssetExporter context, UnityEngine.Video.VideoClip clip)
         {
             var bytes = new List<byte>();
 

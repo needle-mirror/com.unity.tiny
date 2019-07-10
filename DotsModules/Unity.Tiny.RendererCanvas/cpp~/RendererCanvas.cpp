@@ -60,6 +60,7 @@ public:
     HTMLRendererPrivate() : initialized(false) {}
 
     void renderShape(EntityManager &man, DisplayListEntry& de);
+    void renderTilemap(EntityManager &man, DisplayListEntry& de);
     void renderText(EntityManager &man, DisplayListEntry& de);
     void renderTextWithNativeFont(EntityManager &man, DisplayListEntry& de);
     void renderTextWithBitmapFont(EntityManager &man, DisplayListEntry& de);
@@ -139,6 +140,7 @@ HTMLRendererPrivate::init(EntityManager& w)
     InitComponentId<Sprite2DRenderer>();
     InitComponentId<Sprite2DBorder>();
     InitComponentId<Sprite2D>();
+    //InitComponentId<Tilemap>();
     InitComponentId<Text2DRenderer>();
     InitComponentId<Text2DStyleNativeFont>();
     InitComponentId<Text2DStyleBitmapFont>();
@@ -206,6 +208,19 @@ HTMLRendererPrivate::beginScene(EntityManager& man, const Vector2f& targetSize)
     man.forEach<Entity, Sprite2DRenderer>(
         {ComponentSpec::subtractive<Sprite2DRendererHTML>()},
         [&man](Entity& e, Sprite2DRenderer&) { man.addComponent<Sprite2DRendererHTML>(e); });*/
+
+    // release private tilemap component
+   /* man.forEach<Entity, TileHTML>({ComponentSpec::subtractive<Tile>()},
+                                              [&man](Entity& e, TileHTML& sr) {
+                                                  if (sr.tintedIndex > 0)
+                                                      js_canvasReleaseTintedSprite(sr.tintedIndex);
+                                                  man.removeComponent<TileHTML>(e);
+                                              });
+    // make sure we have a private component
+    man.forEach<Entity, Tile>(
+        {ComponentSpec::subtractive<TileHTML>()},
+        [&man](Entity& e, Tile&) { man.addComponent<TileHTML>(e); });
+        */
 
     // update rtt components as well
     updateRTT(man);
@@ -481,6 +496,97 @@ HTMLRendererPrivate::renderShape(EntityManager& man, DisplayListEntry& de)
     js_canvasRenderShape((const float*)verts, nv, (const uint16_t*)inds, ni,
                        sr->color.r * 255.0f, sr->color.g * 255.0f, sr->color.b * 255.0f, sr->color.a);
                        */
+}
+
+void
+HTMLRendererPrivate::renderTilemap(EntityManager& man, DisplayListEntry& de)
+{
+    /*
+    const TilemapRenderer* tmr = man.getComponentPtrConstUnsafe<TilemapRenderer>(de.e);
+    const Tilemap* tm = man.getComponentPtrConstUnsafe<Tilemap>(tmr->tilemap);
+    const TilemapPrivate* tmp = man.getComponentPtrConstUnsafe<TilemapPrivate>(tmr->tilemap);
+    Assert(tmp && tmr && tm);
+
+    // draw all chunks
+    Matrix4x4f mtile;
+    mtile.SetTRS(tm->position, tm->rotation, tm->scale);
+    bool noTileTransform = mtile.IsIdentity(); // pivots can be ignored if there is no tile transform
+    Vector3f spacing = tm->cellGap + tm->cellSize;
+
+    if (noTileTransform) {
+        float txa, txb, txc, txd, txe, txf;
+        makeCanvasTransform(currentViewMatrix, de.finalMatrix, txa, txb, txc, txd, txe, txf);
+        js_canvasSetTransformOnly(txa, txb, txc, txd, txe, txf);
+    }
+
+    for (int i = 0; i < (int)tmp->chunks.size(); i++) {
+        // batching really does not help in canvas except for clipping
+        const TilemapChunkPrivate& tc = tmp->chunks[i];
+        if (BoundsAreOutside(tc.bounds, de.finalMatrix, currentCamClip))
+            continue;
+
+        const Image2D* image = man.getComponentPtrConstUnsafe<Image2D>(tc.image);
+        const Image2DHTML* imagehtml = man.getComponentPtrConstUnsafe<Image2DHTML>(tc.image);
+
+        setBlendingAndSmoothing(tmr->blending, !image->disableSmoothing);
+
+        for (int i = 0; i < (int)tc.tiles.size(); i++) {
+            // render single tile to canvas
+            const TilemapChunkTilePrivate& tile = tc.tiles[i];
+            Color c = tmr->color * tc.spriteColors[tile.spriteidx];
+            Rect sb = fixupPixelRectangle(tc.spriteRects[tile.spriteidx], image->imagePixelSize);
+            if (noTileTransform) {
+                // fast path, do not need to change canvas transform per tile
+                const Rect b(tile.position.x * spacing.x, tile.position.y * spacing.y, tm->cellSize.x, tm->cellSize.y);
+                if (isWhite(c)) {
+                    js_canvasRenderNormalSpriteWhiteNoTransform(c.a, imagehtml->imageIndex, sb.x, sb.y, sb.width, sb.height,
+                                                                b.x, -b.height - b.y, b.width, b.height);
+                } else {
+                    // colorized
+                    TileHTML *th = man.getComponentPtrUnsafe<TileHTML>(tc.tileEntity[tile.spriteidx]);
+                    int tintedIdx = updateOrCreateTintedTile(th, imagehtml->imageIndex, sb, c);
+                    js_canvasRenderNormalSpriteTintedNoTransform(c.a, tintedIdx, b.x, -b.height - b.y, b.width, b.height);
+                }
+            } else {
+                // slow path
+                // set up individual per tile transform
+                // TODO: optimize this, should be one closed form for the 3x2 matrix we actually use
+                Matrix4x4f mtemp, mtemp2;
+                Vector3f realpivot =
+                    tm->anchor + Vector3f(tc.spritePivots[tile.spriteidx].x, tc.spritePivots[tile.spriteidx].y, 0.0f);
+                Matrix4x4f mpivottrans;
+                mpivottrans.SetTranslate(realpivot);
+                Matrix4x4f mtiletoobjscale;
+                mtiletoobjscale.SetScale(tm->cellSize);
+                Matrix4x4f mtiletoobjtrans;
+                mtiletoobjtrans.SetTranslate(Vector3f(tile.position.x * spacing.x, tile.position.y * spacing.y, 0.0f));
+                Matrix4x4f m; // obj -> world
+
+                MultiplyMatrices4x4(&currentViewMatrix, &de.finalMatrix, &m);
+                // mt = [unittile] -> -pivot -> mtile -> +pivot -> tilescale -> mtiletoobjtrans -> m[obj2world]
+                mtemp2.SetTranslate(realpivot * -1.0f);
+                MultiplyMatrices4x4(&mtile, &mtemp2, &mtemp);
+                MultiplyMatrices4x4(&mpivottrans, &mtemp, &mtemp2);
+                MultiplyMatrices4x4(&mtiletoobjscale, &mtemp2, &mtemp);
+                MultiplyMatrices4x4(&mtiletoobjtrans, &mtemp, &mtemp2);
+                MultiplyMatrices4x4(&m, &mtemp2, &mtemp);
+
+                if (isWhite(c)) {
+                    js_canvasRenderNormalSpriteWhite(
+                        mtemp.Get(0, 0), mtemp.Get(1, 0), -mtemp.Get(0, 1), -mtemp.Get(1, 1), mtemp.Get(0, 3),
+                        mtemp.Get(1, 3), c.a, imagehtml->imageIndex, sb.x, sb.y, sb.width, sb.height, 0, 0, 1, -1);
+                } else {
+                    // colorized
+                    TileHTML *th = man.getComponentPtrUnsafe<TileHTML>(tc.tileEntity[tile.spriteidx]);
+                    int tintedIdx = updateOrCreateTintedTile(th, imagehtml->imageIndex, sb, c);
+                    js_canvasRenderNormalSpriteTinted(
+                        mtemp.Get(0, 0), mtemp.Get(1, 0), -mtemp.Get(0, 1), -mtemp.Get(1, 1), mtemp.Get(0, 3),
+                        mtemp.Get(1, 3), c.a, tintedIdx, 0, 0, 1, -1);
+                }
+            }
+        }
+    }
+    */
 }
 
 void
@@ -1006,6 +1112,10 @@ HTMLRendererPrivate::renderSpriteBatch(int n, DisplayListEntry* list, EntityMana
     case DisplayListEntryType::Shape:
         for (int i = 0; i < n; i++)
             renderShape(man, list[i]);
+        return;
+    case DisplayListEntryType::Tilemap:
+        for (int i = 0; i < n; i++)
+            renderTilemap(man, list[i]);
         return;
     case DisplayListEntryType::Text:
         for (int i = 0; i < n; i++)

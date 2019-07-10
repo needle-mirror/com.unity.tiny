@@ -1,6 +1,8 @@
 # Core2D Module
 
-The Core2D module provides support for a subset of Unity's 2D features in Tiny Mode. This page provides common use cases, examples, and a reference of the Core2D components.
+The Core2D module provides support for a subset of Unity's 2D features in DOTS Mode. This page provides common use cases, examples, and a reference of the Core2D components.
+
+[See this module's API documentation for more information](../api/Unity.Tiny.Core2D.html)
 
 ### Simple Sprite Rendering
 
@@ -30,13 +32,13 @@ Depending on your desired visual outcome, you can configure the [Sprite2DRendere
 
 ### Sorting Sprites
 
-By default, Tiny Mode orders sprites according to the Z axis. You can use the following components to change this behavior:
+By default, DOTS Mode orders sprites according to the Z axis. You can use the following components to change this behavior:
 
 - Use the [LayerSorting](#layersorting) component to place sprites on the specified Unity sorting layer or in the specified order. The LayerSorting component is ofter used to sort background sprites with foreground sprites. This component enables you to have as many sorting layers as you want.
 - Use the [SortingGroup](#sortinggroup) component to group sprites together within a hierarchy. This component prevents multi-sprite objects from conflicting their ordering with other multi-sprite objects.
 - Use the [Camera2DAxisSort](#camera2daxissort) component to modify the default `(0, 0, 1)` sort axis of cameras. This component orders sprites along the Y axis to create a fake perspective effect where lower Y sprites appear on top of higher Y sprites.
 
-Tiny Mode uses the same priority as Unity for these different sorting components:
+DOTS Mode uses the same priority as Unity for these different sorting components:
 
 1. Sort by [LayerSorting](#layersorting) layer. If it's a tie, then:
 2. Sort by [LayerSorting](#layersorting) order. If it's a tie, then:
@@ -55,7 +57,7 @@ A [Sprite Atlas](https://docs.unity3d.com/Manual/class-SpriteAtlas.html) is a te
 
 Alternatively, you can add a folder to the **Objects for Packing** if you have multiple sprites to add to your Sprite Atlas. You can preview the Sprite Atlas using the **Pack Preview** button.
 
-_Note: Some settings such as **Allow Rotation** and **Tight Packing** are not supported in Tiny Mode yet._
+_Note: Some settings such as **Allow Rotation** and **Tight Packing** are not supported in DOTS Mode yet._
 
 The Sprite Atlas should be exported with the project. An exported Sprite Atlas will generate an entity with a [SpriteAtlas](#spriteatlas) component, as well as a texture. Sprites part of a Sprite Atlas will be exported with path `assets/sprites/<Sprite Atlas name>/<Sprite name>`. It is possible to get those Sprites by searching through the World's entities: `world.getByName(<Sprite path>)`. Please refer to the `SkinSystem` in the [`Flappy`](#example-flappy) project for an example.
 
@@ -79,7 +81,7 @@ This table can be used to associate a Core2D Component to an entity and/or a sys
 
 ## Components
 
-Use this table to associate familiar Unity concepts with Tiny Mode.
+Use this table to associate familiar Unity concepts with DOTS Mode.
 
 | Unity Component | Core2D Components                                            |
 | --------------- | ------------------------------------------------------------ |
@@ -351,3 +353,5 @@ See [ShaderLab: Blending](https://docs.unity3d.com/Manual/SL-Blend.html) for a g
 |g|Green channel.|
 |b|Blue channel.|
 |a|Alpha channel.|
+
+[See this module's API documentation for more information](../api/Unity.Tiny.Core2D.html)

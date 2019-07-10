@@ -2,7 +2,6 @@ using Unity.Collections;
 using Unity.Entities;
 using Unity.Tiny;
 
-[assembly: ModuleDescription("Unity.Tiny.Audio", "Audio module")]
 namespace Unity.Tiny.Audio
 {
     /// <summary>

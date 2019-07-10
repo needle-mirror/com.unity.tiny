@@ -1,47 +1,58 @@
 using NUnit.Framework;
+using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Unity.Editor.Build;
-using Unity.Editor.Extensions;
 
 namespace Unity.Editor.Tests
 {
     internal class BuildTests
     {
-        private DirectoryInfo TestDirectory;
-        private Project Project;
+        private const string k_ProjectPath = "Assets/Samples/HelloWorld/HelloWorld.project";
 
-        [SetUp]
-        public void SetUp()
+        private static object[] GetBuildTestCaseSource()
         {
-            TestDirectory = Application.RootDirectory.Combine("Tests");
-            if (TestDirectory.Exists)
+            var buildTestCases = new List<object[]>();
+            foreach (var buildTarget in BuildTargetSettings.AvailableBuildTargets)
             {
-                TestDirectory.Delete(true);
+                foreach (var configuration in Enum.GetValues(typeof(Configuration)).Cast<Configuration>())
+                {
+                    buildTestCases.Add(new object[] { k_ProjectPath, buildTarget, configuration });
+                }
             }
-            Project = Project.Create(TestDirectory.Combine("Projects"), "Test Project Banana");
+            return buildTestCases.ToArray();
         }
 
-        [Test]
-        [Ignore("Cannot test domain reload")]
-        public void BuildNewProject()
+        [Test, TestCaseSource(nameof(GetBuildTestCaseSource))]
+        public void BuildProject(string projectPath, BuildTarget buildTarget, Configuration configuration)
         {
-            var result = BuildPipeline.Build(new BuildSettings()
+            var projectFile = new FileInfo(projectPath);
+            if (!projectFile.Exists)
             {
-                Project = Project,
-                Platform = new DesktopDotNetPlatform(),
-                Configuration = Configuration.Debug,
-                OutputDirectory = TestDirectory.Combine("DotsRuntimeBuild")
-            });
-            Assert.IsTrue(result.Success);
-        }
+                UnityEngine.Debug.LogWarning($"Skipping {nameof(BuildProject)} test case since {projectPath} could not be found.");
+                return;
+            }
 
-        [TearDown]
-        public void TearDown()
-        {
-            if (Project != null)
+            var project = Project.Open(projectFile);
+            Assert.IsNotNull(project);
+            Assert.IsTrue(Project.Projects.Contains(project));
+
+            try
             {
-                Project.Dispose();
-                Project = null;
+                var result = BuildPipeline.Build(new BuildSettings()
+                {
+                    Project = project,
+                    BuildTarget = buildTarget,
+                    Configuration = configuration,
+                    OutputDirectory = Application.OutputDirectory
+                });
+                Assert.IsTrue(result.Success);
+            }
+            finally
+            {
+                project.Dispose();
+                Assert.IsFalse(Project.Projects.Contains(project));
             }
         }
     }

@@ -4,7 +4,6 @@ using Unity.Mathematics;
 using Unity.Tiny;
 using Unity.Tiny.Core;
 
-[assembly: ModuleDescription("Unity.Tiny.Sprite2D", "2D sprites and surrounding components")]
 namespace Unity.Tiny.Core2D
 {
     /// <summary>

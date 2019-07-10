@@ -141,6 +141,9 @@ namespace Unity.Tiny.Rendering
 
         protected override void OnDestroy()
         {
+            if (!initialized)
+                return;
+
             DeInitNative(wrapper);
             CPlusPlus.ReleaseHandleForEntityManager(wrapper);
             wrapper = IntPtr.Zero;

@@ -1,6 +1,9 @@
 #include <stdlib.h>
 #include "string.h"
 #include <stdint.h>
+#if !UNITY_SINGLETHREADED_JOBS
+#include <mutex>
+#endif
 
 #include "BumpAllocator.h"
 
@@ -26,6 +29,9 @@ enum class Allocator
 };
 
 static BumpAllocator sBumpAlloc;
+#if !UNITY_SINGLETHREADED_JOBS
+static std::mutex sBumpAlloc_mutex;
+#endif
 
 #ifdef GUARD_HEAP
 
@@ -92,7 +98,12 @@ void* CALLEXPORT unsafeutility_malloc(int64_t size, int alignment, Allocator all
     return r+sizeof(GuardHeader);
 #else
     if (allocatorType == Allocator::Temp)
+    {
+#if !UNITY_SINGLETHREADED_JOBS
+        std::lock_guard<std::mutex> guard(sBumpAlloc_mutex);
+#endif
         return sBumpAlloc.alloc((int)size, alignment);
+    }
     return malloc((size_t)size);
 #endif
 }
@@ -139,6 +150,9 @@ void CALLEXPORT unsafeutility_memclear(void* destination, int64_t size)
 DOEXPORT
 void CALLEXPORT unsafeutility_freetemp()
 {
+#if !UNITY_SINGLETHREADED_JOBS
+    std::lock_guard<std::mutex> guard(sBumpAlloc_mutex);
+#endif
     sBumpAlloc.reset();
 }
 

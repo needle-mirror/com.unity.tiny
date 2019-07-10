@@ -6,7 +6,6 @@ using Unity.Tiny.Core2D;
 using Unity.Collections;
 using Unity.Tiny.UILayout;
 
-[assembly: ModuleDescription("Unity.Tiny.Text", "Core text")]
 namespace Unity.Tiny.Text
 {
 
@@ -125,6 +124,53 @@ namespace Unity.Tiny.Text
     }
 
     /// <summary>
+    /// Initialize a Native font from file (.ttf)
+    /// <remarks>
+    /// You need to specify the file name with <see cref="NativeFontLoadFromFileName"> next to this component
+    /// </remarks>
+    /// </summary>
+    [HideInInspector]
+    public struct NativeFontLoadFromFile : IComponentData
+    {
+        private int dummy;
+    }
+
+    /// <summary>
+    /// The path of the font (.ttf) to load at runtime corresponding to the NativeFont.FontName.
+    /// The ttf has to contain only one font.
+    /// </summary>
+    /// <remarks>
+    /// This component should be attached to the font entity. Not the text entity
+    /// </remarks>
+    [HideInInspector]
+    public struct NativeFontLoadFromFileName : IBufferElementData
+    {
+        public char c;
+    }
+
+    public enum FontStatus
+    {
+        Invalid,
+        Loaded,
+        Loading,
+        LoadError
+    }
+
+    //This needs to be internal (only used during font loading). Currently it can't or it is less accessible than the GenericAssetLoader methods (public)
+    [HideInInspector]
+    public struct NativeFontPrivate : ISystemStateComponentData
+    {
+        public int fontHandle;
+    }
+
+    //This needs to be internal (only used during font loading). Currently it can't or it is less accessible than the GenericAssetLoader methods (public)
+    [HideInInspector]
+    public struct NativeFontLoading : ISystemStateComponentData
+    {
+        public long internalId;
+    }
+
+    /// <summary>
     ///  Add this component to an entity to specify a native font.
     /// </summary>
     /// <remarks>
@@ -148,6 +194,12 @@ namespace Unity.Tiny.Text
         /// </summary>
         [HideInInspector]
         public float worldUnitsToPt;
+
+        /// <summary>
+        /// Font loading status
+        /// </summary>
+        [HideInInspector]
+        public FontStatus status;
     }
 
     /// <summary>

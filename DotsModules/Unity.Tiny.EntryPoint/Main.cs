@@ -5,6 +5,7 @@ using Unity.Collections;
 using Unity.Tiny.Core;
 using Unity.Tiny.Scenes;
 using Unity.Tiny.Debugging;
+using System.Collections.Generic;
 
 namespace Unity.Tiny.EntryPoint
 {
@@ -21,6 +22,7 @@ namespace Unity.Tiny.EntryPoint
         private static TinyEnvironment m_Environment;
         private static BootPhase m_BootPhase;
         private static Entity m_ConfigScene;
+        private static Entity m_AssetsScene;
 
         // NOTE: The boot up flow is inside the MainLoop as we want to be able to load configuration files
         // before executing any systems, however for web builds we must do such loading inside the mainloop to ensure
@@ -57,62 +59,72 @@ namespace Unity.Tiny.EntryPoint
             {
                 m_World.Update();
             }
-            else if(m_BootPhase == BootPhase.Booting)
-            {
-                var em = m_World.EntityManager;
-
-                // Destroy current config entity
-                if (em.Exists(m_Environment.configEntity))
-                {
-                    em.DestroyEntity(m_Environment.configEntity);
-                    m_Environment.configEntity = Entity.Null;
-                }
-
-                m_ConfigScene = SceneService.LoadConfigAsync();
-
-                m_BootPhase = BootPhase.LoadingConfig;
-            }
-            else if(m_BootPhase == BootPhase.LoadingConfig)
-            {
-                var em = m_World.EntityManager;
-                var sceneStreamingSystem = m_World.GetOrCreateSystem<SceneStreamingSystem>();
-
-                // Tick this world specifically to ensure our request is handled
-                sceneStreamingSystem.Update();
-
-                var sceneStatus = SceneService.GetSceneStatus(m_ConfigScene);
-                if (sceneStatus == SceneStatus.Loaded)
-                {
-                    using (var configurationQuery = em.CreateEntityQuery(typeof(ConfigurationTag)))
-                    {
-                        if (configurationQuery.CalculateLength() == 0)
-                        {
-                            throw new Exception($"Failed to load boot configuration scene.");
-                        }
-
-                        using (var configEntityList = configurationQuery.ToEntityArray(Allocator.Temp))
-                        {
-                            // Set new config entity
-                            if (configEntityList.Length > 1)
-                            {
-                                throw new Exception($"More than one configuration entity found in boot configuration scene.");
-                            }
-                            m_Environment.configEntity = configEntityList[0];
-                        }
-                    }
-
-                    LoadStartupScenes();
-
-                    m_BootPhase = BootPhase.Running;
-                }
-                else if (sceneStatus == SceneStatus.FailedToLoad)
-                {
-                    throw new Exception($"Failed to load the boot configuration scene.");
-                }
-            }
             else
             {
-                throw new Exception("Invalid BootPhase specified");
+                var em = m_World.EntityManager;
+                var sceneStreamingSystem = m_World.GetExistingSystem<SceneStreamingSystem>();
+
+                switch (m_BootPhase)
+                {
+                    case BootPhase.Booting:
+                        {
+                            // Destroy current config entity
+                            if (em.Exists(m_Environment.configEntity))
+                            {
+                                em.DestroyEntity(m_Environment.configEntity);
+                                m_Environment.configEntity = Entity.Null;
+                            }
+
+                            m_ConfigScene = SceneService.LoadConfigAsync();
+                            m_AssetsScene = SceneService.LoadAssetsAsync();
+
+                            m_BootPhase = BootPhase.LoadingConfig;
+                            break;
+                        }
+                    case BootPhase.LoadingConfig:
+                        {
+                            // Tick this world specifically to ensure our load requests are handled
+                            sceneStreamingSystem.Update();
+
+                            var configStatus = SceneService.GetSceneStatus(m_ConfigScene);
+                            if (m_Environment.configEntity == Entity.Null && configStatus == SceneStatus.Loaded)
+                            {
+                                using (var configurationQuery = em.CreateEntityQuery(typeof(ConfigurationTag)))
+                                {
+                                    if (configurationQuery.CalculateLength() == 0)
+                                    {
+                                        throw new Exception($"Failed to load boot configuration scene.");
+                                    }
+
+                                    using (var configEntityList = configurationQuery.ToEntityArray(Allocator.Temp))
+                                    {
+                                        // Set new config entity
+                                        if (configEntityList.Length > 1)
+                                        {
+                                            throw new Exception($"More than one configuration entity found in boot configuration scene.");
+                                        }
+                                        m_Environment.configEntity = configEntityList[0];
+                                    }
+                                }
+                            }
+                            else if (configStatus == SceneStatus.FailedToLoad)
+                            {
+                                throw new Exception($"Failed to load the boot configuration scene.");
+                            }
+
+                            var assetStatus = SceneService.GetSceneStatus(m_AssetsScene);
+                            // Note, failing to load the asset scene since this is acceptable e.g. there may not be an asset scene
+                            if (assetStatus == SceneStatus.Loaded || assetStatus == SceneStatus.FailedToLoad)
+                            {
+                                LoadStartupScenes();
+                                m_BootPhase = BootPhase.Running;
+                            }
+
+                            break;
+                        }
+                    default:
+                        throw new Exception("Invalid BootPhase specified");
+                }
             }
 
             return !m_World.QuitUpdate;
@@ -123,7 +135,6 @@ namespace Unity.Tiny.EntryPoint
             using (var startupScenes = m_Environment.GetConfigBufferData<StartupScenes>().ToNativeArray(Allocator.Temp))
             {
                 var em = m_World.EntityManager;
-
                 for (var i = 0; i < startupScenes.Length; ++i)
                 {
                     SceneService.LoadSceneAsync(startupScenes[i].SceneReference);

@@ -21,11 +21,19 @@ namespace Unity.Editor.Persistence
     internal static class AssetDatabaseUtility
     {
         /// <summary>
-        /// Returns the `Unity` asset path for the given file.
+        /// Returns the `Unity` asset guid for the given file.
         /// </summary>
         public static string GetAssetGuid(FileInfo fileInfo)
         {
-            return AssetDatabase.AssetPathToGUID(GetPathRelativeToProjectPath(fileInfo.FullName));
+            if (fileInfo.Exists)
+            {
+                var assetPath = GetPathRelativeToProjectPath(fileInfo.FullName);
+                if (!string.IsNullOrEmpty(assetPath))
+                {
+                    return AssetDatabase.AssetPathToGUID(assetPath);
+                }
+            }
+            return null;
         }
         
         /// <summary>
@@ -33,21 +41,25 @@ namespace Unity.Editor.Persistence
         /// </summary>
         public static string GetPathRelativeToProjectPath(string path)
         {
-            // @TODO FIXME
-            var packageName = "Packages/com.unity.tiny";
+            if (string.IsNullOrEmpty(path))
+            {
+                return null;
+            }
+
+            var packagePath = Application.PackageDirectory.FullName.ToForwardSlash();
             var assetPath = Path.GetFullPath(path).ToForwardSlash();
 
             // check if the given path is a package path (relative or installed)
             // assumption: true if the path contains the package name
-            var packagePartIndex = assetPath.LastIndexOf(packageName, StringComparison.Ordinal);
+            var packagePartIndex = assetPath.LastIndexOf(packagePath, StringComparison.Ordinal);
             if (packagePartIndex >= 0)
             {
-                var localPath = packageName + assetPath.Substring(assetPath.IndexOf('/', packagePartIndex));
+                var localPath = packagePath + assetPath.Substring(assetPath.IndexOf('/', packagePartIndex));
                 return localPath;
             }
 
             // otherwise, we assume it can be any path, and attempt normalization
-            var projectPath = new DirectoryInfo(".").FullName.ToForwardSlash() + "/";
+            var projectPath = Application.RootDirectory.FullName.ToForwardSlash() + "/";
             assetPath = assetPath.Replace(projectPath, string.Empty);
             return assetPath;
         }

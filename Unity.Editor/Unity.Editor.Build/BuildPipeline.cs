@@ -55,9 +55,9 @@ namespace Unity.Editor.Build
                 get
                 {
                     var projectName = Project.Name.ToIdentifier();
-                    var platformName = BuildSettings.Platform.GetBeeTargetName();
+                    var buildTargetName = BuildSettings.BuildTarget.GetBeeTargetName();
                     var configurationName = BuildSettings.Configuration.ToString();
-                    var targetName = $"{projectName}-{platformName}-{configurationName}";
+                    var targetName = $"{projectName}-{buildTargetName}-{configurationName}";
                     return targetName.ToLower();
                 }
             }
@@ -67,7 +67,7 @@ namespace Unity.Editor.Build
                 get
                 {
                     var file = BuildDirectory.GetFile(Project.Name.ToIdentifier());
-                    return file.ChangeExtension(BuildSettings.Platform.GetExecutableExtension());
+                    return file.ChangeExtension(BuildSettings.BuildTarget.GetExecutableExtension());
                 }
             }
         }
@@ -89,8 +89,8 @@ namespace Unity.Editor.Build
                 BuildStep.RunBee
             };
 
-            // Setup build steps per platform and configuration
-            var platform = buildSettings.Platform;
+            // Setup build steps per build platform and configuration
+            var platform = buildSettings.BuildTarget;
             var configuration = buildSettings.Configuration;
             switch (configuration)
             {

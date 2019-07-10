@@ -11,17 +11,23 @@ using Unity.BuildTools;
 
 static class TypeRegistrationTool
 {
-    static readonly Lazy<CSharpProgram> _entityBuildUtils = new Lazy<CSharpProgram>(() => new CSharpProgram()
+    private static readonly Lazy<CSharpProgram> _entityBuildUtils = new Lazy<CSharpProgram>(() =>
     {
-        FileName = "Unity.Entities.BuildUtils.dll",
-        Sources =
+        var program = new CSharpProgram()
         {
-            BuildProgramConfigFile.AsmDefDescriptionFor("Unity.Entities.BuildUtils").Path.Parent.Files("*.cs", recurse: false)
-        },
-        Unsafe = true,
-        References = {StevedoreUnityCecil.Paths},
-        LanguageVersion = "7.2",
-        ProjectFilePath = "Unity.Entities.BuildUtilities.csproj"
+            FileName = "Unity.Entities.BuildUtils.dll",
+            Sources =
+            {
+                BuildProgramConfigFile.AsmDefDescriptionFor("Unity.Entities.BuildUtils").Path.Parent
+                    .Files("*.cs", recurse: false)
+            },
+            Unsafe = true,
+            References = {StevedoreUnityCecil.Paths},
+            LanguageVersion = "7.2",
+            ProjectFilePath = "Unity.Entities.BuildUtilities.csproj"
+        };
+        program.SetupDefault();
+        return program;
     });
 
     public static CSharpProgram EntityBuildUtils => _entityBuildUtils.Value;

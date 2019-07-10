@@ -22,13 +22,27 @@ namespace Unity.Editor
         EntityArchetype FromGameObject(GameObject go);
         EntityArchetype AudioSource { get; }
         EntityArchetype VideoSource { get;  }
+
+        /// <summary>
+        /// Ensure <paramref name="entity"/> has all component specified by <paramref name="archetype"/>, and add them if missing.
+        /// Added components will be set to component type default value.
+        /// </summary>
+        /// <param name="entity"><see cref="Entity"/> to validate.</param>
+        /// <param name="archetype"><see cref="EntityArchetype"/> used for validation.</param>
+        void EnsureArchetype(Entity entity, EntityArchetype archetype);
     }
 
-    internal class ArchetypeManager : SessionManager, IArchetypeManager
+    internal class ArchetypeManager : ISessionManagerInternal, IArchetypeManager
     {
-        public ArchetypeManager(Session session) : base(session)
+        private Session m_Session;
+        private IWorldManager m_WorldManager;
+
+        public void Load(Session session)
         {
-            var entityManager = session.GetManager<IWorldManager>().EntityManager;
+            m_Session = session;
+            m_WorldManager = session.GetManager<IWorldManager>();
+
+            var entityManager = m_WorldManager.EntityManager;
             Empty = entityManager.CreateArchetype(
                 typeof(Parent),
                 typeof(Translation),
@@ -121,21 +135,14 @@ namespace Unity.Editor
                 typeof(UICanvas));
         }
 
-        public EntityArchetype Empty { get; }
-        public EntityArchetype Config { get; }
-        public EntityArchetype Camera { get; }
-        public EntityArchetype Sprite { get; }
-        public EntityArchetype SpriteSequence { get; }
-        public EntityArchetype UICanvas { get; }
-        public EntityArchetype AudioSource { get; }
-        public EntityArchetype VideoSource { get; }
+        public void Unload(Session session) { }
 
         public unsafe EntityArchetype FromGameObject(GameObject go)
         {
             // TODO: this method should assemble an archetype using binding callbacks
             // For now it's hardcoded for a few core data types
             
-            var entityManager = Session.GetManager<IWorldManager>().EntityManager;
+            var entityManager = m_WorldManager.EntityManager;
             using (var componentTypes = new NativeList<ComponentType>(32, Allocator.Temp))
             {
                 componentTypes.Add(typeof(Parent));
@@ -184,5 +191,23 @@ namespace Unity.Editor
                 return entityManager.CreateArchetype((ComponentType*)componentTypes.GetUnsafePtr(), componentTypes.Length);
             }
         }
+
+        #region IArchetypeManager
+
+        public EntityArchetype Empty { get; private set; }
+        public EntityArchetype Config { get; private set; }
+        public EntityArchetype Camera { get; private set; }
+        public EntityArchetype Sprite { get; private set; }
+        public EntityArchetype SpriteSequence { get; private set; }
+        public EntityArchetype UICanvas { get; private set; }
+        public EntityArchetype AudioSource { get; private set; }
+        public EntityArchetype VideoSource { get; private set; }
+
+        public void EnsureArchetype(Entity entity, EntityArchetype archetype)
+        {
+            ArchetypeUtility.AddMissingComponentsFromArchetype(m_WorldManager.EntityManager, entity, archetype);
+        }
+
+        #endregion
     }
 }

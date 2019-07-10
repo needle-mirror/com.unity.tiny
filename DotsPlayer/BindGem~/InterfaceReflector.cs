@@ -299,11 +299,11 @@ namespace ExtensionMethods
             var type = enumType.Fields.First(f => f.Name == "value__").FieldType;
             if (type.MetadataType == MetadataType.Byte)
                 return 8;
-            if (type.MetadataType == MetadataType.Int16)
+            if (type.MetadataType == MetadataType.Int16 || type.MetadataType == MetadataType.UInt16)
                 return 16;
-            if (type.MetadataType == MetadataType.Int32)
+            if (type.MetadataType == MetadataType.Int32 || type.MetadataType == MetadataType.UInt32)
                 return 32;
-            if (type.MetadataType == MetadataType.Int64)
+            if (type.MetadataType == MetadataType.Int64 || type.MetadataType == MetadataType.UInt64)
                 return 64;
 
             throw new InvalidOperationException($"Unhandled enum base type {type}");

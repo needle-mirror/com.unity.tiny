@@ -105,5 +105,20 @@ namespace Unity.Editor.Bindings
         {
             return m_AssetManager.GetUnityObject<TObject>(entity);
         }
+
+        public void AddBufferFromString<T>(Entity entity, string value) where T : struct, IBufferElementData
+        {
+            m_EntityManager.AddBufferFromString<T>(entity, value);
+        }
+
+        public string GetBufferAsString<T>(Entity entity) where T : struct, IBufferElementData
+        {
+            return m_EntityManager.GetBufferAsString<T>(entity);
+        }
+
+        public void SetBufferFromString<T>(Entity entity, string value) where T : struct, IBufferElementData
+        {
+            m_EntityManager.SetBufferFromString<T>(entity, value);
+        }
     }
 }

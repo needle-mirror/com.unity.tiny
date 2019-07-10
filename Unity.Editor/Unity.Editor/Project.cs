@@ -3,18 +3,16 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Unity.Authoring;
-using Unity.Authoring.Core;
 using Unity.Collections;
-using Unity.Editor.Build;
 using Unity.Editor.Extensions;
 using Unity.Editor.Persistence;
+using Unity.Editor.Utilities;
 using Unity.Entities;
 using Unity.Serialization.Json;
-using Unity.Tiny.Core;
 using Unity.Tiny.Core2D;
 using Unity.Tiny.Scenes;
 using UnityEditor;
-using Assert = UnityEngine.Assertions.Assert;
+using BuildTarget = Unity.Editor.Build.BuildTarget;
 
 namespace Unity.Editor
 {
@@ -25,6 +23,7 @@ namespace Unity.Editor
     {
         private const string k_ConfigurationFileExtension = "configuration";
         private const string k_AssemblyDefinitionFileExtension = "asmdef";
+        internal const string k_OpenNewlyCreatedProjectSessionKey = "OpenNewlyCreatedProject";
 
         private static readonly List<Project> s_Projects = new List<Project>();
 
@@ -32,8 +31,6 @@ namespace Unity.Editor
         internal static event Action<Project> ProjectOpened = delegate { };
         internal static event Action<Project> ProjectDisposing = delegate { };
         internal static event Action<Project> ProjectDisposed = delegate { };
-
-        internal const string OpenNewlyCreatedProjectSessionKey = "OpenNewlyCreatedProject";
 
         internal static IReadOnlyCollection<Project> Projects => s_Projects.AsReadOnly();
 
@@ -57,17 +54,12 @@ namespace Unity.Editor
         public EntityManager EntityManager => WorldManager.EntityManager;
 
         /// <summary>
-        /// Returns the directory where the Project is saved.
-        /// </summary>
-        public DirectoryInfo Directory => GetProjectFile()?.Directory;
-
-        /// <summary>
         /// Returns the Project Settings associated with the Project.
         /// </summary>
         public ProjectSettings Settings { get; set; }
 
         /// <summary>
-        /// Returns the <see cref="System.Guid"/> of the project.
+        /// Returns the <see cref="System.Guid"/> of the Project.
         /// </summary>
         public Guid Guid { get; private set; }
 
@@ -78,11 +70,12 @@ namespace Unity.Editor
 
         private Project()
         {
-            Session = Session.Create();
+            Session = SessionFactory.Create();
             WorldManager = Session.GetManager<IWorldManager>();
             ArchetypeManager = Session.GetManager<IArchetypeManager>();
             PersistenceManager = Session.GetManager<IPersistenceManager>();
             EditorSceneManager = Session.GetManager<IEditorSceneManager>();
+            Settings = ProjectSettings.Default;
         }
 
         public void Dispose()
@@ -103,65 +96,50 @@ namespace Unity.Editor
 
         internal static Project Create(DirectoryInfo directory, string name)
         {
-            const string progressBarTitle = "Generating new DOTS project";
-
-            EditorUtility.DisplayProgressBar(progressBarTitle, string.Empty, 0);
-
-            Project project;
-
-            try
+            using (var progressBarScope = new ProgressBarScope("Generating New DOTS Project", "Creating project..."))
             {
+                var project = new Project();
                 var projectDirectory = directory.Combine(name);
-                projectDirectory.EnsureExists();
-
                 var projectFile = projectDirectory.GetFile(name).ChangeExtension("project");
 
+                // Create project files
                 AssetDatabase.StartAssetEditing();
-
                 try
                 {
-                    project = new Project
-                    {
-                        Settings = ProjectSettings.Default
-                    };
-
-                    EditorUtility.DisplayProgressBar(progressBarTitle, "Creating assemblies", 0.2f);
-                    GenerateNewProjectAsmdef(projectDirectory, name);
-                    EditorUtility.DisplayProgressBar(progressBarTitle, "Creating assets", 0.6f);
-                    GenerateNewProjectAssets(projectDirectory, name, project.WorldManager, project.ArchetypeManager, project.PersistenceManager);
+                    projectDirectory.EnsureExists();
+                    progressBarScope.Update("Creating assembly definition...", 0.2f);
+                    project.GenerateNewProjectAsmdef(projectDirectory, name);
+                    progressBarScope.Update("Creating assets...", 0.4f);
+                    project.GenerateNewProjectAssets(projectDirectory, name);
                 }
                 finally
                 {
                     AssetDatabase.StopAssetEditing();
                 }
 
-                SessionState.SetString(OpenNewlyCreatedProjectSessionKey, projectFile.FullName);
+                // Force a re-import to trigger a script recompilation for the new assemblies
+                progressBarScope.Update("Refreshing asset database...", 0.6f);
+                AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
 
-                EditorUtility.DisplayProgressBar(progressBarTitle, "Compiling project assemblies", 0.8f);
-
-                // Force a re-import to trigger a script recompilation for the new assemblies.
-                AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate | ImportAssetOptions.ForceSynchronousImport);
-
-                // All generated assets are now imported.
-                // Patch up any guid references for the `Project` settings.
+                // All generated assets are now imported
+                // Patch up any guid references for the `Project` settings
                 project.Settings.Configuration = new Guid(projectFile.ChangeExtension(k_ConfigurationFileExtension).ToAssetGuid());
                 project.Settings.MainAsmdef = new Guid(projectFile.ChangeExtension(k_AssemblyDefinitionFileExtension).ToAssetGuid());
 
                 // Save the .project file
+                progressBarScope.Update("Saving new project...", 0.8f);
                 Persist(projectFile, project);
-            }
-            finally
-            {
-                EditorUtility.ClearProgressBar();
-            }
 
-            s_Projects.Add(project);
-            ProjectCreated(project);
+                // Add project to list and run create event
+                s_Projects.Add(project);
+                ProjectCreated(project);
 
-            return project;
+                DomainCache.CacheIncludedAssemblies(project);
+                return project;
+            }
         }
 
-        private static void GenerateNewProjectAsmdef(DirectoryInfo projectDirectory, string name)
+        private void GenerateNewProjectAsmdef(DirectoryInfo projectDirectory, string name)
         {
             var asmdef = new AssemblyDefinition
             {
@@ -212,55 +190,47 @@ namespace Unity.Editor
             // Add one C# file so the compilation pipeline doesn't complain
             var assemblyInfoTemplate = Application.PackageDirectory.Combine("Unity.Editor", "Unity.Editor").GetFile("AssemblyInfo.cs.in");
             var assemblyInfoFile = projectDirectory.Combine("Scripts").GetFile("AssemblyInfo.cs");
-            assemblyInfoTemplate.CopyTo(assemblyInfoFile);
+            assemblyInfoTemplate.CopyTo(assemblyInfoFile, true);
 
             var assemblyDefinitionFile = projectDirectory.GetFile(name).ChangeExtension(k_AssemblyDefinitionFileExtension);
             asmdef.Serialize(assemblyDefinitionFile);
         }
 
-        private static void GenerateNewProjectAssets(
-            DirectoryInfo projectDirectory,
-            string name,
-            IWorldManager worldManager,
-            IArchetypeManager archetypeManager,
-            IPersistenceManager persistenceManager
-        )
+        private void GenerateNewProjectAssets(DirectoryInfo projectDirectory, string name)
         {
             // Create config entity
-            var configEntity = worldManager.CreateEntity(archetypeManager.Config);
-            worldManager.EntityManager.SetComponentData(configEntity, DisplayInfo.Default);
+            var configEntity = WorldManager.CreateEntity(ArchetypeManager.Config);
+            EntityManager.SetComponentData(configEntity, DomainCache.GetDefaultValue<DisplayInfo>());
 
             // Generate main scene
-            var cameraEntity = worldManager.CreateEntity("Camera", archetypeManager.Camera);
-            worldManager.EntityManager.SetComponentData(cameraEntity, Camera2D.Default);
-            worldManager.EntityManager.SetComponentData(cameraEntity, DomainCache.GetDefaultValue<Camera2D>());
-            worldManager.EntityManager.SetComponentData(cameraEntity, DomainCache.GetDefaultValue<Rotation>());
-            worldManager.EntityManager.SetComponentData(cameraEntity, DomainCache.GetDefaultValue<NonUniformScale>());
+            var cameraEntity = WorldManager.CreateEntity("Camera", ArchetypeManager.Camera);
+            EntityManager.SetComponentData(cameraEntity, DomainCache.GetDefaultValue<Camera2D>());
+            EntityManager.SetComponentData(cameraEntity, DomainCache.GetDefaultValue<Rotation>());
+            EntityManager.SetComponentData(cameraEntity, DomainCache.GetDefaultValue<NonUniformScale>());
 
             using (var entities = new NativeArray<Entity>(cameraEntity.AsArray(), Allocator.Temp))
             {
-                var scene = SceneManager.Create(worldManager.EntityManager, entities, Guid.NewGuid());
+                var scene = SceneManager.Create(EntityManager, entities, Guid.NewGuid());
                 var sceneFile = projectDirectory.Combine("Scenes").GetFile("MainScene.scene");
                 sceneFile.Directory.EnsureExists();
-                persistenceManager.SaveScene(worldManager.EntityManager, scene, sceneFile.FullName);
+                PersistenceManager.SaveScene(EntityManager, scene, sceneFile.FullName);
 
                 var sceneReference = new SceneReference { SceneGuid = scene.SceneGuid.Guid };
-
-                AddScene(worldManager.EntityManager, worldManager.GetConfigEntity(), sceneReference);
-                AddStartupScene(worldManager.EntityManager, worldManager.GetConfigEntity(), sceneReference);
+                AddScene(sceneReference);
+                AddStartupScene(sceneReference);
             }
 
             // Generate configuration scene
             using (var entities = new NativeArray<Entity>(configEntity.AsArray(), Allocator.Temp))
             {
-                var configurationScene = SceneManager.Create(worldManager.EntityManager, entities, ConfigurationScene.Guid);
+                var configurationScene = SceneManager.Create(EntityManager, entities, ConfigurationScene.Guid);
                 var configurationFile = projectDirectory.GetFile(name).ChangeExtension("configuration");
                 configurationFile.Directory.EnsureExists();
-                persistenceManager.SaveScene(worldManager.EntityManager, configurationScene, configurationFile.FullName);
+                PersistenceManager.SaveScene(EntityManager, configurationScene, configurationFile.FullName);
 
                 // Hack: remove scene guid/instance id and persistence id
-                worldManager.EntityManager.RemoveComponent<SceneGuid>(configEntity);
-                worldManager.EntityManager.RemoveComponent<SceneInstanceId>(configEntity);
+                EntityManager.RemoveComponent<SceneGuid>(configEntity);
+                EntityManager.RemoveComponent<SceneInstanceId>(configEntity);
             }
         }
 
@@ -293,15 +263,18 @@ namespace Unity.Editor
                 {
                     project.PersistenceManager.LoadScene(entityManager, configFile.FullName);
 
-                    // Hack: remove scene guid/instance id
+                    // Make sure the config entity has all the required components
                     var configEntity = project.WorldManager.GetConfigEntity();
+                    project.ArchetypeManager.EnsureArchetype(configEntity, project.ArchetypeManager.Config);
+
+                    // Hack: remove scene guid/instance id
                     entityManager.RemoveComponent<SceneGuid>(configEntity);
                     entityManager.RemoveComponent<SceneInstanceId>(configEntity);
                 }
                 else
                 {
                     var configEntity = project.WorldManager.CreateEntity(project.ArchetypeManager.Config);
-                    entityManager.SetComponentData(configEntity, DisplayInfo.Default);
+                    entityManager.SetComponentData(configEntity, DomainCache.GetDefaultValue<DisplayInfo>());
                 }
             }
 
@@ -389,7 +362,7 @@ namespace Unity.Editor
             project.Guid = new Guid(AssetDatabase.AssetPathToGUID(projectAssetPath));
         }
 
-        private static bool IsAssemblyIncluded(AssemblyDefinition asmdef, Platform platform)
+        private static bool IsAssemblyIncluded(AssemblyDefinition asmdef, BuildTarget buildTarget)
         {
             var emptyIncludes = (asmdef.includePlatforms == null || asmdef.includePlatforms.Length == 0);
             var emptyExcludes = (asmdef.excludePlatforms == null || asmdef.excludePlatforms.Length == 0);
@@ -399,7 +372,7 @@ namespace Unity.Editor
                 return true;
             }
 
-            var platformName = platform.GetUnityPlatformName();
+            var platformName = buildTarget.GetUnityPlatformName();
 
             if (!emptyIncludes && !asmdef.includePlatforms.Contains(platformName))
             {
@@ -416,7 +389,7 @@ namespace Unity.Editor
 
         internal IEnumerable<AssemblyDefinition> IncludedAssemblyDefinitions()
         {
-            var projectDir = Directory;
+            var projectDir = GetProjectFile().Directory;
             if (projectDir == null || !projectDir.Exists)
             {
                 yield break;
@@ -424,7 +397,7 @@ namespace Unity.Editor
 
             var assemblyNames = new HashSet<string>();
             var assemblies = new Stack<AssemblyDefinition>();
-            var platform = Session.GetManager<WorkspaceManager>().ActivePlatform;
+            var buildTarget = Session.GetManager<WorkspaceManager>().ActiveBuildTarget;
 
             // TODO: improve rather weak heuristic to find main project assemblies from a Project
             foreach (var asmDefFile in projectDir.EnumerateFiles("*.asmdef", SearchOption.AllDirectories))
@@ -432,7 +405,7 @@ namespace Unity.Editor
                 var asmdef = AssemblyDefinition.Deserialize(asmDefFile);
                 if (asmDefFile.Directory.GetFiles("*.project").Any())
                 {
-                    if (IsAssemblyIncluded(asmdef, platform))
+                    if (IsAssemblyIncluded(asmdef, buildTarget))
                     {
                         assemblyNames.Add(asmdef.name);
                         assemblies.Push(asmdef);
@@ -457,7 +430,7 @@ namespace Unity.Editor
                         }
 
                         var asmDef = AssemblyDefinition.Deserialize(new FileInfo(asmDefPath));
-                        if (assemblyNames.Add(asmDef.name) && IsAssemblyIncluded(asmDef, platform))
+                        if (assemblyNames.Add(asmDef.name) && IsAssemblyIncluded(asmDef, buildTarget))
                         {
                             assemblies.Push(asmDef);
                         }
@@ -468,7 +441,7 @@ namespace Unity.Editor
 
         internal IEnumerable<System.Reflection.Assembly> IncludedAssemblies()
         {
-            var domainAssemblies = AppDomain.CurrentDomain.GetAssemblies().ToDictionary(a => a.GetName().Name);
+            var domainAssemblies = GetAssembliesByName(AppDomain.CurrentDomain);
             foreach (var assemblyDefinition in IncludedAssemblyDefinitions())
             {
                 if (domainAssemblies.TryGetValue(assemblyDefinition.name, out var assembly))
@@ -478,92 +451,44 @@ namespace Unity.Editor
             }
         }
 
-        internal NativeArray<SceneReference> GetScenes(Allocator allocator = Allocator.Temp)
+        private Dictionary<string, System.Reflection.Assembly> GetAssembliesByName(AppDomain appDomain)
         {
-            return GetScenes(EntityManager, WorldManager.GetConfigEntity(), allocator);
+            var assembliesByName = new Dictionary<string, System.Reflection.Assembly>();
+            foreach (var assembly in appDomain.GetAssemblies())
+            {
+                assembliesByName.TryAdd(assembly.GetName().Name, assembly);
+            }
+            return assembliesByName;
         }
 
-        internal static NativeArray<SceneReference> GetScenes(EntityManager entityManager, Entity configEntity, Allocator allocator = Allocator.Temp)
+        internal NativeArray<SceneReference> GetScenes(Allocator allocator = Allocator.Temp)
         {
-            Assert.AreNotEqual(Entity.Null, configEntity);
-            Assert.IsTrue(entityManager.HasComponent<ConfigurationTag>(configEntity));
-            Assert.IsTrue(entityManager.HasComponent<Scenes>(configEntity));
-            return entityManager.GetBufferRO<Scenes>(configEntity).Reinterpret<SceneReference>().ToNativeArray(allocator);
+            return ConfigurationUtility.GetScenes(EntityManager, WorldManager.GetConfigEntity(), allocator);
         }
 
         internal void AddScene(SceneReference sceneReference)
         {
-            AddScene(EntityManager, WorldManager.GetConfigEntity(), sceneReference);
-        }
-
-        internal static void AddScene(EntityManager entityManager, Entity configEntity, SceneReference sceneReference)
-        {
-            Assert.AreNotEqual(Entity.Null, configEntity);
-            Assert.IsTrue(entityManager.HasComponent<ConfigurationTag>(configEntity));
-            Assert.IsTrue(entityManager.HasComponent<Scenes>(configEntity));
-            var scenes = entityManager.GetBuffer<Scenes>(configEntity).Reinterpret<SceneReference>();
-            if (!scenes.Contains(sceneReference))
-            {
-                scenes.Add(sceneReference);
-            }
+            ConfigurationUtility.AddScene(EntityManager, WorldManager.GetConfigEntity(), sceneReference);
         }
 
         internal void RemoveScene(SceneReference sceneReference)
         {
-            RemoveScene(EntityManager, WorldManager.GetConfigEntity(), sceneReference);
-        }
-
-        internal static void RemoveScene(EntityManager entityManager, Entity configEntity, SceneReference sceneReference)
-        {
-            Assert.AreNotEqual(Entity.Null, configEntity);
-            Assert.IsTrue(entityManager.HasComponent<ConfigurationTag>(configEntity));
-            Assert.IsTrue(entityManager.HasComponent<Scenes>(configEntity));
-            entityManager.GetBuffer<Scenes>(configEntity).Reinterpret<SceneReference>().Remove(sceneReference);
-            Assert.IsTrue(entityManager.HasComponent<StartupScenes>(configEntity));
-            entityManager.GetBuffer<StartupScenes>(configEntity).Reinterpret<SceneReference>().Remove(sceneReference);
+            ConfigurationUtility.RemoveScene(EntityManager, WorldManager.GetConfigEntity(), sceneReference);
         }
 
         internal NativeArray<SceneReference> GetStartupScenes(Allocator allocator = Allocator.Temp)
         {
-            return GetStartupScenes(EntityManager, WorldManager.GetConfigEntity(), allocator);
-        }
-
-        internal static NativeArray<SceneReference> GetStartupScenes(EntityManager entityManager, Entity configEntity, Allocator allocator = Allocator.Temp)
-        {
-            Assert.AreNotEqual(Entity.Null, configEntity);
-            Assert.IsTrue(entityManager.HasComponent<ConfigurationTag>(configEntity));
-            Assert.IsTrue(entityManager.HasComponent<StartupScenes>(configEntity));
-            return entityManager.GetBuffer<StartupScenes>(configEntity).Reinterpret<SceneReference>().ToNativeArray(allocator);
+            return ConfigurationUtility.GetStartupScenes(EntityManager, WorldManager.GetConfigEntity(), allocator);
         }
 
         internal void AddStartupScene(SceneReference sceneReference)
         {
-            AddStartupScene(EntityManager, WorldManager.GetConfigEntity(), sceneReference);
-        }
-
-        internal static void AddStartupScene(EntityManager entityManager, Entity configEntity, SceneReference sceneReference)
-        {
-            Assert.AreNotEqual(Entity.Null, configEntity);
-            Assert.IsTrue(entityManager.HasComponent<ConfigurationTag>(configEntity));
-            Assert.IsTrue(entityManager.HasComponent<StartupScenes>(configEntity));
-            var startupScenes = entityManager.GetBuffer<StartupScenes>(configEntity).Reinterpret<SceneReference>();
-            if (!startupScenes.Contains(sceneReference))
-            {
-                startupScenes.Add(sceneReference);
-            }
+            ConfigurationUtility.AddStartupScene(EntityManager, WorldManager.GetConfigEntity(), sceneReference);
         }
 
         internal void RemoveStartupScene(SceneReference sceneReference)
         {
-            RemoveStartupScene(EntityManager, WorldManager.GetConfigEntity(), sceneReference);
-        }
-
-        internal static void RemoveStartupScene(EntityManager entityManager, Entity configEntity, SceneReference sceneReference)
-        {
-            Assert.AreNotEqual(Entity.Null, configEntity);
-            Assert.IsTrue(entityManager.HasComponent<ConfigurationTag>(configEntity));
-            Assert.IsTrue(entityManager.HasComponent<StartupScenes>(configEntity));
-            entityManager.GetBuffer<StartupScenes>(configEntity).Reinterpret<SceneReference>().Remove(sceneReference);
+            ConfigurationUtility.RemoveStartupScene(EntityManager, WorldManager.GetConfigEntity(), sceneReference);
         }
     }
 }

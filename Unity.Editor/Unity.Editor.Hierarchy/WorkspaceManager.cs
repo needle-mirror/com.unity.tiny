@@ -9,34 +9,36 @@ using Unity.Serialization.Json;
 using Unity.Tiny.Scenes;
 using UnityEditor;
 using Assert = UnityEngine.Assertions.Assert;
+using BuildTarget = Unity.Editor.Build.BuildTarget;
 
 namespace Unity.Editor
 {
     [InitializeOnLoad]
-    internal class WorkspaceManager : SessionManager
+    internal class WorkspaceManager : ISessionManagerInternal
     {
         private EditorSceneManager m_SceneManager;
         private Workspace m_CurrentWorkspace;
         private string m_CurrentWorkspaceKey;
         private bool m_SuspendEvents;
+        private Session m_Session;
 
-        public Platform ActivePlatform
+        public BuildTarget ActiveBuildTarget
         {
             get
             {
                 if (m_CurrentWorkspace == null)
-                    return PlatformSettings.GetDefaultPlatform();
+                    return BuildTargetSettings.GetDefaultBuildTarget();
 
-                return PlatformSettings.GetPlatformFromName(m_CurrentWorkspace.Platform);
+                return BuildTargetSettings.GetBuildTargetFromName(m_CurrentWorkspace.BuildTarget);
             }
             set
             {
                 if (m_CurrentWorkspace != null)
                 {
-                    var platformName = PlatformSettings.GetPlatformName(value);
-                    if (m_CurrentWorkspace.Platform != platformName)
+                    var buildTargetName = BuildTargetSettings.GetBuildTargetName(value);
+                    if (m_CurrentWorkspace.BuildTarget != buildTargetName)
                     {
-                        m_CurrentWorkspace.Platform = platformName;
+                        m_CurrentWorkspace.BuildTarget = buildTargetName;
                         SaveWorkspace();
                     }
                 }
@@ -62,8 +64,6 @@ namespace Unity.Editor
             }
         }
 
-        public WorkspaceManager(Session session) : base(session) { }
-
         static WorkspaceManager()
         {
             Project.ProjectCreated += OnProjectCreated;
@@ -79,18 +79,20 @@ namespace Unity.Editor
             SaveWorkspace(ws, GetWorkspaceKey(project));
         }
 
-        public override void Load()
+        public void Load(Session session)
         {
-            Application.BeginAuthoringProject += OnBeginAuthoringProject;
-            Session.GetManager<IChangeManager>().RegisterChangeCallback(HandleChanges);
+            m_Session = session;
 
-            m_SceneManager = Session.GetManager<EditorSceneManager>();
+            Application.BeginAuthoringProject += OnBeginAuthoringProject;
+            session.GetManager<IChangeManager>().RegisterChangeCallback(HandleChanges);
+
+            m_SceneManager = session.GetManager<EditorSceneManager>();
         }
 
-        public override void Unload()
+        public void Unload(Session session)
         {
             Application.BeginAuthoringProject -= OnBeginAuthoringProject;
-            Session.GetManager<IChangeManager>().UnregisterChangeCallback(HandleChanges);
+            session.GetManager<IChangeManager>().UnregisterChangeCallback(HandleChanges);
         }
 
         private void OnBeginAuthoringProject(Project project)
@@ -146,7 +148,7 @@ namespace Unity.Editor
 
         private void ReopenScenes()
         {
-            var persistenceManager = Session.GetManager<IPersistenceManager>();
+            var persistenceManager = m_Session.GetManager<IPersistenceManager>();
             var activeScene = Scene.Null;
 
             try
@@ -213,8 +215,8 @@ namespace Unity.Editor
             public readonly List<Guid> Scenes = new List<Guid>();
             public Guid ActiveScene;
 
-            public string Platform;
-            public Configuration Configuration;
+            public string BuildTarget;
+            public Configuration Configuration = Configuration.Develop;
 
             public void Initialize()
             {

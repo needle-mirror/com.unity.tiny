@@ -14,7 +14,7 @@ namespace BrowserInterop
     public struct UserName : IComponentData { }
     public struct UserEmail : IComponentData { }
     public struct UserId : IComponentData { }
-    public struct Loading : IComponentData { }
+    public struct LoadingMessage : IComponentData { }
 
 #if UNITY_WEBGL
     public class RandomUserDataSystem : ComponentSystem
@@ -56,8 +56,8 @@ namespace BrowserInterop
 
         private void SetLoadingMessageVisibility(bool isLoading)
         {
-            Entities.WithAll<Loading>()
-                    .ForEach((ref Scale t) => t.Value = isLoading ? 1.0f : 0.0f);
+            Entities.WithAll<LoadingMessage>()
+                    .ForEach((ref NonUniformScale t) => t.Value = isLoading ? 1.0f : 0.0f);
         }
 
         private void SetText<T>(DynamicBuffer<NativeMessageByte> byteBuffer) where T : IComponentData

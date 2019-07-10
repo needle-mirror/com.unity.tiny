@@ -26,8 +26,13 @@ namespace Unity.Editor.Extensions
             }
             else
             {
-                return fileInfo.FullName;
+                return null;
             }
+        }
+
+        public static bool IsRelativeTo(this FileInfo fileInfo, DirectoryInfo relativeTo)
+        {
+            return !string.IsNullOrEmpty(GetRelativePath(fileInfo, relativeTo));
         }
 
         public static FileInfo CopyTo(this FileInfo fileInfo, FileInfo destination)

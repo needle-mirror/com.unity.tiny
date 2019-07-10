@@ -185,6 +185,7 @@ namespace Unity.ZeroPlayer
             GenerateDefinitions(in typeGenInfoList);
 
             m_fieldInfoGen = new FieldInfoGen(typeGenInfoList, m_ArchBits, m_TypeRegAssembly, m_EntityAssembly);
+            m_executeGen = new ExecuteGen(m_AssemblyDefs);
             PatchCalls();
 
             m_TypeRegAssembly.MainModule.Types.Add(m_RegClass);
@@ -196,7 +197,6 @@ namespace Unity.ZeroPlayer
             var deallocatingJobsMap = new Dictionary<string, JobGenInfo>();
             if (m_Profile != Profile.DotNet)
             {
-                var jobsAsmDef = m_AssemblyDefs.FirstOrDefault(a => a.Name.Name == "Unity.ZeroJobs");
                 deallocatingJobsMap = JobsGen.GetDeallocateOnCompletionJobs(in m_AssemblyDefs);
                 JobsGen.GenerateDealllocateOnJobCompletionFn(m_GetTypeFnRef, m_GetTypeFromHandleFnRef, in deallocatingJobsMap);
             }
@@ -488,142 +488,6 @@ namespace Unity.ZeroPlayer
         }
 
 
-        MethodDefinition FindScheduleMethod(MethodDefinition methodDefinition, bool isQuery, out bool usesEntity)
-        {
-            // 2 flavors:
-            //    (T0...)
-            //    (Entity, int, T0...)
-            // Anything else is an error.
-
-            usesEntity = false;
-
-            if (methodDefinition.Parameters.Count == 0)
-            {
-                throw new InvalidOperationException("FindScheduleMethod: Execute doesn't have parameters.");
-            }
-
-            if (methodDefinition.Parameters[0].ParameterType.FullName == "Unity.Entities.Entity")
-            {
-                usesEntity = true;
-                if (methodDefinition.Parameters[1].ParameterType.FullName != "System.Int32")
-                {
-                    throw new InvalidOperationException("FindScheduleMethod: Execute method specifies an Entity, but not an int index");
-                }
-            }
-
-            string append = "";
-
-            const string READ_ONLY_DATA = "rD";
-            const string WRITE_READ_DATA = "wD";
-
-            for (int i = usesEntity ? 2 : 0; i < methodDefinition.Parameters.Count; ++i)
-            {
-                ParameterDefinition param = methodDefinition.Parameters[i];
-                if (param.HasCustomAttributes &&
-                    param.CustomAttributes.FirstOrDefault(p =>
-                        p.AttributeType.FullName == "Unity.Collections.ReadOnlyAttribute") != null)
-                {
-                    append += READ_ONLY_DATA;
-                }
-                else
-                {
-                    append += WRITE_READ_DATA;
-                }
-            }
-
-            string name = "";
-
-            if (isQuery)
-            {
-                name = (usesEntity ? "Schedule_Query_E" : "Schedule_Query_") + append;
-            }
-            else
-            {
-                name = (usesEntity ? "Schedule_E" : "Schedule_") + append;
-            }
-
-            TypeDefinition extension = m_EntityAssembly.MainModule.GetAllTypes()
-                .First(t => t.FullName == "Unity.Entities.JobForEachExtensions");
-            MethodDefinition schedule = extension.Methods.First(m => m.Name == name);
-            return schedule;
-        }
-
-        void PatchScheduleCalls(TypeDefinition type, AssemblyDefinition asm, MethodDefinition method, IEnumerable<Instruction> outerList)
-        {
-            var giList = outerList.Where(i =>
-                (i.Operand is MethodReference)
-                && (i.Operand as MethodReference).ContainsGenericParameter
-                && ((i.Operand as MethodReference).FullName.Contains(
-                        "Unity.Entities.JobForEachExtensions::Schedule<") ||
-                    (i.Operand as MethodReference).FullName.Contains(
-                        "Unity.Entities.JobForEachExtensions::Run<") ||
-                    (i.Operand as MethodReference).FullName.Contains(
-                        "Unity.Entities.JobForEachExtensions::ScheduleSingle<"))
-
-            );
-            foreach (var g in giList)
-            {
-                MethodReference gMethod = g.Operand as MethodReference;
-
-                string name = gMethod.FullName;
-                int start = name.IndexOf('<');
-                int end = name.IndexOf('>');
-                if (end <= (start + 1))
-                {
-                    throw new Exception(
-                        "Could not find the expected Schedule/Run function. This is a bug.");
-                }
-
-                string jobName = name.Substring(start + 1, end - (start + 1));
-
-                try
-                {
-                    TypeDefinition jobClass =
-                        asm.MainModule.GetAllTypes().First(t => t.FullName == jobName);
-
-                    // We have found a call to Schedule. But what types do we use to specialize the
-                    // generic? The Job is required to have an Execute method - with the correct
-                    // parameters. It's a handy place to grab them, so find that method and use it.
-                    MethodDefinition executeMethod = jobClass.Methods.First(f => f.Name == "Execute");
-
-                    // There are (so far) 2 flavors of Schedule.
-                    //     Schedule<T>(this T jobData, ComponentSystemBase system, JobHandle dependsOn = default(JobHandle))
-                    //     Schedule<T>(this T jobData, EntityQuery query, JobHandle dependsOn = default(JobHandle))
-                    // The only difference being the 2nd parameter.
-                    bool isQuery = gMethod.Parameters.Count >= 2 &&
-                                   gMethod.Parameters[1].ParameterType.FullName == "Unity.Entities.EntityQuery";
-
-                    // The "open" method has generic types; the "closed" method has specific types used
-                    // to call the generic.
-                    bool usesEntity;
-                    MethodDefinition openScheduleMethod =
-                        FindScheduleMethod(executeMethod, isQuery, out usesEntity);
-                    openScheduleMethod.IsPublic = true;
-
-                    var closedScheduleMethod = new GenericInstanceMethod(openScheduleMethod);
-
-                    closedScheduleMethod.GenericArguments.Add(jobClass);
-
-                    for (int i = usesEntity ? 2 : 0; i < executeMethod.Parameters.Count; ++i)
-                    {
-                        closedScheduleMethod.GenericArguments.Add(executeMethod.Parameters[i].ParameterType
-                            .GetElementType());
-                    }
-
-                    // Console.WriteLine("Call site Schedule() patch {0} to {1} at {2} in {3}", jobClass.Name, closedScheduleMethod.Name, method.Name, type.FullName);
-                    // Only the operand of the call needs to be changed; parameters and nearby IL code are the same.
-                    g.Operand = asm.MainModule.ImportReference(closedScheduleMethod);
-
-                }
-                catch (Exception)
-                {
-                    string msg = $"Error patching IJobForEach '{jobName}' in method '{method.FullName}'";
-                    throw new InvalidOperationException(msg);
-                }
-            }
-
-        }
-
         void RecursePatchCalls(TypeDefinition type, AssemblyDefinition asm, bool usesEntities)
         {
             foreach (TypeDefinition td in type.NestedTypes)
@@ -640,7 +504,7 @@ namespace Unity.ZeroPlayer
                     if (usesEntities)
                     {
                         var outerGIList = method.Body.Instructions.Where(i => i.OpCode == OpCodes.Call);
-                        PatchScheduleCalls(type, asm, method, outerGIList);
+                        m_executeGen.PatchScheduleCallsAndGenerateIL(type, asm, method, outerGIList);
                         m_fieldInfoGen.PatchFieldInfoCalls(type, asm, method);
                     }
                 }
@@ -657,7 +521,7 @@ namespace Unity.ZeroPlayer
         /// generically the above is:
         ///     Schedule_D<TJob, T0>(TJob job, ComponentSystemBase system);
         /// </summary>
-        internal void PatchCalls()
+        public void PatchCalls()
         {
             foreach (AssemblyDefinition asm in m_AssemblyDefs)
             {
@@ -675,6 +539,7 @@ namespace Unity.ZeroPlayer
                 }
             }
         }
+
 
         /// <summary>
         /// Declares all fields and member functions for the Static Type Registry
@@ -1756,13 +1621,17 @@ namespace Unity.ZeroPlayer
 
                 var writerParams = new WriterParameters() { WriteSymbols = asm.MainModule.HasSymbols };
 
+                // There seems to be an issue with Mono.Cecil https://github.com/jbevain/cecil/issues/523
+                // where some type references can't be resolved on write. In which case we just copy the original file out unchanged.
+                // Note that if we didn't change the file this is fine. But if we did change the file, this will create an invalid
+                // program. Both options are scary; if we track which files we change, we should error if a write
+                // fails on a changed file.
                 try
                 {
                     asm.MainModule.Write(outPath, writerParams);
-                }catch(Exception)
+                }
+                catch(Exception)
                 {
-                    // There seems to be an issue with Mono.Cecil https://github.com/jbevain/cecil/issues/523
-                    // where some type references can't be resolved on write. In which case we just copy the original file out unchanged
                     File.Copy(asm.MainModule.FileName, outPath, true);
                     if (asm.MainModule.HasSymbols)
                     {
@@ -2207,6 +2076,7 @@ namespace Unity.ZeroPlayer
         Profile m_Profile;
         bool m_IsDebug;
         private FieldInfoGen m_fieldInfoGen;
+        private ExecuteGen m_executeGen;
 
         AssemblyDefinition m_TypeRegAssembly;
         AssemblyDefinition m_MscorlibAssembly;

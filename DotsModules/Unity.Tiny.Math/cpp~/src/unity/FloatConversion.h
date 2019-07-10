@@ -782,7 +782,7 @@ using std::log;
 using std::exp;
 
 // On non-C99 platforms log2 is not available, so approximate it.
-#if PLATFORM_WIN || PLATFORM_ANDROID
+#if PLATFORM_WIN || PLATFORM_ANDROID || UNITY_ANDROID
 #define kNaturalLogarithm2 0.693147180559945309417f
 inline float Log2(float x) { return logf(x) / kNaturalLogarithm2; }
 #elif defined(__ARMCC_VERSION)

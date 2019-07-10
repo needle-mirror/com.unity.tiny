@@ -12,8 +12,6 @@ using UnityEngine.Assertions;
 using UnityEngine.Experimental.LowLevel;
 using Unity.Tiny.Debugging;
 
-[assembly: ModuleDescription("Unity.Tiny.TextHTML", "HTML text rendering")]
-[assembly: IncludedPlatform(Platform.Web | Platform.WeChat | Platform.FBInstant)]
 namespace Unity.Tiny.TextHTML
 {
     [HideInInspector]
@@ -212,19 +210,12 @@ namespace Unity.Tiny.TextHTML
                 float minSize = autoFit.minSize;
                 if (newSize < minSize)
                 {
-                    //TODO: Update when float.ToString will not throws an exception anymore
-                    string l = "Text: " + text;
-                    l += " is not renderable, the generated font size " + ((int)newSize).ToString();
-                    l += " is smaller than the minimum allowed " + ((int)minSize).ToString();
-                    Debug.Log(l);
+                    Debug.LogFormat("Text: {0} is not renderable, the resized font {1} is smaller than the minimum allowed {2}", text, newSize, minSize);
+                    return 0.0f;
                 }
             }
 
-            //TODO: Update when float.ToString will not throws an exception anymore
-            string line = "Text with native font, measured with: " + ((int) outWidth).ToString();
-            line += " measured height: ";
-            line += ((int) outHeight).ToString();
-            Debug.Log(line);
+            Debug.LogFormat("Text with native font: {0} , measured with {1} measure height {2} newSize {3}", text, outWidth, outHeight, newSize);
 
             //Adjust text bounds with pivot
             privNative.bounds.x = -(rectTransformSize.x / 2) + (rectTransformSize.x * (tr.pivot.x));

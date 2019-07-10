@@ -19,13 +19,16 @@ namespace Unity.Serialization.Json
         ValueSeparator = 1 << 6, // ','
         String = 1 << 7, // '"'..'".
         Number = 1 << 8, // '0'..'9', 'e', 'E', '-'
-        True = 1 << 9, // 'true'
-        False = 1 << 10, // 'false'
-        Null = 1 << 11, // 'null'
-        EOF = 1 << 12,
+        Negative = 1 << 9,
+        NaN = 1 << 10,
+        Infinity = 1 << 11,
+        True = 1 << 12, // 'true'
+        False = 1 << 13, // 'false'
+        Null = 1 << 14, // 'null'
+        EOF = 1 << 15,
 
         // Any value type
-        Value = BeginObject | BeginArray | String | Number | True | False | Null
+        Value = BeginObject | BeginArray | String | Number | Negative | NaN | Infinity | True | False | Null
     }
 
     internal struct JsonValidationResult
@@ -262,6 +265,52 @@ namespace Unity.Serialization.Json
                         m_PartialTokenState = 0;
                     }
                         break;
+                    
+                    case JsonType.NaN | JsonType.Null:
+                    {
+                        // First try reading the value as `null`
+                        var start = m_CharBufferPosition;
+                        var result = ReadNull(m_PartialTokenState);
+
+                        if (result == k_ResultSuccess)
+                        {
+                            m_PartialTokenType = JsonType.Undefined;
+                            m_PartialTokenState = 0;
+                            break;
+                        }
+
+                        if (result == k_ResultEndOfStream)
+                        {
+                            // Otherwise we know it can only be `null`
+                            m_PartialTokenState += m_CharBufferPosition;
+                            m_PartialTokenType = JsonType.Null;
+                            Break(JsonType.EOF);
+                            return;
+                        }
+
+                        // The value can not be `null` at this point.
+                        // Check for `nan`
+                        m_CharBufferPosition = start;
+                        result = ReadNaN(m_PartialTokenState);
+                            
+                        if (result == k_ResultSuccess)
+                        {
+                            m_PartialTokenType = JsonType.Undefined;
+                            m_PartialTokenState = 0;
+                            break;
+                        }
+                        
+                        if (result == k_ResultEndOfStream)
+                        {
+                            m_PartialTokenState += m_CharBufferPosition;
+                            m_PartialTokenType = JsonType.NaN;
+                            Break(JsonType.EOF);
+                            return;
+                        }
+
+                        Break(JsonType.Undefined);
+                    }
+                        break;
 
                     case JsonType.Null:
                     {
@@ -269,6 +318,38 @@ namespace Unity.Serialization.Json
                         if (result != k_ResultSuccess)
                         {
                             m_PartialTokenType = JsonType.Null;
+                            m_PartialTokenState += m_CharBufferPosition;
+                            Break(result == k_ResultEndOfStream ? JsonType.EOF : JsonType.Undefined);
+                            return;
+                        }
+
+                        m_PartialTokenType = JsonType.Undefined;
+                        m_PartialTokenState = 0;
+                    }
+                        break;
+                    
+                    case JsonType.NaN:
+                    {
+                        var result = ReadNaN(m_PartialTokenState);
+                        if (result != k_ResultSuccess)
+                        {
+                            m_PartialTokenType = JsonType.NaN;
+                            m_PartialTokenState += m_CharBufferPosition;
+                            Break(result == k_ResultEndOfStream ? JsonType.EOF : JsonType.Undefined);
+                            return;
+                        }
+
+                        m_PartialTokenType = JsonType.Undefined;
+                        m_PartialTokenState = 0;
+                    }
+                        break;
+                    
+                    case JsonType.Infinity:
+                    {
+                        var result = ReadInfinity(m_PartialTokenState);
+                        if (result != k_ResultSuccess)
+                        {
+                            m_PartialTokenType = JsonType.Infinity;
                             m_PartialTokenState += m_CharBufferPosition;
                             Break(result == k_ResultEndOfStream ? JsonType.EOF : JsonType.Undefined);
                             return;
@@ -443,6 +524,18 @@ namespace Unity.Serialization.Json
                         }
                             break;
 
+                        case '-':
+                        {
+                            if (!IsExpected(JsonType.Negative))
+                            {
+                                Break(JsonType.Negative);
+                                return;
+                            }
+                            
+                            m_Expected = JsonType.Number | JsonType.Infinity;
+                        }
+                            break;
+
                         case '0':
                         case '1':
                         case '2':
@@ -453,7 +546,6 @@ namespace Unity.Serialization.Json
                         case '7':
                         case '8':
                         case '9':
-                        case '-':
                         {
                             if (!IsExpected(JsonType.Number))
                             {
@@ -476,6 +568,7 @@ namespace Unity.Serialization.Json
                         }
                             break;
 
+                        case 'T':
                         case 't':
                         {
                             if (!IsExpected(JsonType.True))
@@ -499,6 +592,7 @@ namespace Unity.Serialization.Json
                         }
                             break;
 
+                        case 'F':
                         case 'f':
                         {
                             if (!IsExpected(JsonType.False))
@@ -522,20 +616,84 @@ namespace Unity.Serialization.Json
                         }
                             break;
 
+                        case 'N':
                         case 'n':
                         {
-                            if (!IsExpected(JsonType.Null))
+                            if (!IsExpected(JsonType.Null | JsonType.NaN))
                             {
-                                Break(JsonType.Null);
+                                Break(JsonType.Null | JsonType.NaN);
+                                return;
+                            }
+                            
+                            // First try reading the value as `null`
+                            var start = m_CharBufferPosition;
+                            var result = ReadNull(0);
+
+                            if (result == k_ResultSuccess)
+                            {
+                                m_CharBufferPosition--;
+                                break;
+                            }
+
+                            if (result == k_ResultEndOfStream)
+                            {
+                                if (m_CharBufferPosition - start == 1)
+                                {
+                                    // Very special case. We only looked at the first character "n" then hit EndOfStream
+                                    // which means it could still be a `NaN` or `Null`
+                                    m_PartialTokenState = m_CharBufferPosition - start;
+                                    m_PartialTokenType = JsonType.Null | JsonType.NaN;
+                                    Break(JsonType.EOF);
+                                }
+                                else
+                                {
+                                    // Otherwise we know it can only be `null`
+                                    m_PartialTokenState = m_CharBufferPosition - start;
+                                    m_PartialTokenType = JsonType.Null;
+                                    Break(JsonType.EOF);
+                                }
+                                
+                                return;
+                            }
+
+                            // The value can not be `null` at this point.
+                            // Check for `nan`
+                            m_CharBufferPosition = start;
+                            result = ReadNaN(0);
+                            
+                            if (result == k_ResultSuccess)
+                            {
+                                m_CharBufferPosition--;
+                                break;
+                            }
+                            
+                            if (result == k_ResultEndOfStream)
+                            {
+                                m_PartialTokenState = m_CharBufferPosition - start;
+                                m_PartialTokenType = JsonType.NaN;
+                                Break(JsonType.EOF);
+                                return;
+                            }
+
+                            Break(JsonType.Undefined);
+                        }
+                            break;
+
+                        case 'I':
+                        case 'i':
+                        {
+                            if (!IsExpected(JsonType.Infinity))
+                            {
+                                Break(JsonType.Infinity);
                                 return;
                             }
 
                             var start = m_CharBufferPosition;
-                            var result = ReadNull(0);
+                            var result = ReadInfinity(0);
 
                             if (result != k_ResultSuccess)
                             {
-                                m_PartialTokenType = JsonType.Null;
+                                m_PartialTokenType = JsonType.Infinity;
                                 m_PartialTokenState = m_CharBufferPosition - start;
                                 Break(result == k_ResultEndOfStream ? JsonType.EOF : JsonType.Undefined);
                                 return;
@@ -555,6 +713,7 @@ namespace Unity.Serialization.Json
                     m_CharBufferPosition++;
                 }
 
+                m_PartialTokenType = JsonType.Undefined;
                 Break(JsonType.EOF);
             }
 
@@ -746,11 +905,23 @@ namespace Unity.Serialization.Json
                 return ReadPrimitive(expected, start, 4);
             }
 
+            private int ReadNaN(int start)
+            {
+                var expected = stackalloc ushort[3] {'n', 'a', 'n'};
+                return ReadPrimitive(expected, start, 3);
+            }
+            
+            private int ReadInfinity(int start)
+            {
+                var expected = stackalloc ushort[8] {'i', 'n', 'f', 'i', 'n', 'i', 't', 'y'};
+                return ReadPrimitive(expected, start, 8);
+            }
+            
             private int ReadPrimitive(ushort* expected, int start, int length)
             {
                 for (var i = start; i < length && m_CharBufferPosition < CharBufferLength; i++)
                 {
-                    var c = CharBuffer[m_CharBufferPosition];
+                    var c = CharBuffer[m_CharBufferPosition] | 32; // to lowercase
 
                     if (c != expected[i])
                     {

@@ -141,12 +141,6 @@ namespace Unity.Tiny.HTML
             base.OnCreate();
             c = new AudioHTMLSystemLoadFromFile();
         }
-
-        protected override void OnUpdate()
-        {
-            // loading
-            base.OnUpdate();
-        }
     }
 
     [UpdateInGroup(typeof(PresentationSystemGroup))]
@@ -198,18 +192,6 @@ namespace Unity.Tiny.HTML
             {
                 AudioSource audioSource = mgr.GetComponentData<AudioSource>(e);
 
-                if (mgr.HasComponent<AudioHTMLSource>(e))
-                {
-                    // If there is a native source and it is IsPlaying() then
-                    // can't play another, but we are done. (So return true.)
-                    // Note that IsPlaying() is synchronous (which is what we want)
-                    // as opposed to isPlaying which is async.
-                    AudioHTMLSource ans = mgr.GetComponentData<AudioHTMLSource>(e);
-                    if (AudioHTMLNativeCalls.IsPlaying(ans.sourceID))
-                        return true;
-                }
-
-
                 Entity clipEntity = audioSource.clip;
                 if (mgr.HasComponent<AudioHTMLClip>(clipEntity))
                 {
@@ -231,6 +213,14 @@ namespace Unity.Tiny.HTML
 
                         if (unlocked)
                         {
+                            // If there is an existing source, it should re-start.
+                            // Do this with a Stop() and let it play below.
+                            if (mgr.HasComponent<AudioHTMLSource>(e))
+                            {
+                                AudioHTMLSource ans = mgr.GetComponentData<AudioHTMLSource>(e);
+                                AudioHTMLNativeCalls.Stop(ans.sourceID, true);
+                            }
+
                             int sourceID = ++IDPool.sourceID;
                             AudioHTMLNativeCalls.Play(clip.clipID, sourceID, audioSource.volume, audioSource.loop);
                             AudioHTMLSource audioNativeSource = new AudioHTMLSource()

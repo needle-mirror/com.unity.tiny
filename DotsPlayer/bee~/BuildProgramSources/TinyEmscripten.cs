@@ -141,7 +141,11 @@ internal static class TinyEmscripten
             {"ABORTING_MALLOC", "0"},
             // By default the musl C runtime used by Emscripten is POSIX errno aware. We do not care about
             // errno, so opt out from errno management to save a tiny bit of performance and code size.
-            {"SUPPORT_ERRNO", "0"}
+            {"SUPPORT_ERRNO", "0"},
+            // Safari does not support WebAssembly.instantiateStreaming(), so revert to the older
+            // WebAssembly.instantiate() API. This has the drawback that WebAssembly compilation will not
+            // occur while downloading the .wasm file, but enables Safari compatibility.
+            {"STREAMING_WASM_COMPILATION", "0"}
         };
 
         if (e.Toolchain.Architecture is AsmJsArchitecture)

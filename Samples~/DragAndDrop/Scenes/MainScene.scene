@@ -4,7 +4,7 @@
     "SerializedVersion": 1,
     "AssetReferences": [
         { "Guid": "00790670be2f77443abd4537500f4137", "FileId": 21300002, "Type": 3},
-        { "Guid": "4ff4030e0e4e40845abee20a73924bb6", "FileId": 21300000, "Type": 3},
+        { "Guid": "96b6c1a4812008c4c85fc00ead5803ad", "FileId": 21300000, "Type": 3},
         { "Guid": "00790670be2f77443abd4537500f4137", "FileId": 21300006, "Type": 3},
         { "Guid": "6c6feed7d8a10614ba9139e7543ffc23", "FileId": 21300000, "Type": 3},
         { "Guid": "00790670be2f77443abd4537500f4137", "FileId": 21300000, "Type": 3},
@@ -358,7 +358,7 @@
             "Value": "5d99737a3b314a1b91d4e7925ce359df"
         }, {
             "$type": "Unity.Tiny.Core2D.Sprite2DRenderer, Unity.Tiny.Sprite2D",
-            "sprite": "e541445f805a435ca19be795b57840e5",
+            "sprite": "67c138692ecda12c6adf199d8d804366",
             "color": {
                 "a": 0.145098
             },
@@ -1375,7 +1375,7 @@
             "Value": "a74ab2eff5f14920a77fdf894bb10698"
         }, {
             "$type": "Unity.Tiny.Core2D.Sprite2DRenderer, Unity.Tiny.Sprite2D",
-            "sprite": "e541445f805a435ca19be795b57840e5",
+            "sprite": "67c138692ecda12c6adf199d8d804366",
             "color": {
                 "a": 0.145098
             },
@@ -1693,7 +1693,7 @@
             "Value": "cbf8559f91994830a7e2cebb6f129ad6"
         }, {
             "$type": "Unity.Tiny.Core2D.Sprite2DRenderer, Unity.Tiny.Sprite2D",
-            "sprite": "e541445f805a435ca19be795b57840e5",
+            "sprite": "67c138692ecda12c6adf199d8d804366",
             "color": {
                 "a": 0.145098
             },
@@ -3320,7 +3320,7 @@
             "Value": "bb7a41b2cf054657bedd2ccad7bcb2df"
         }, {
             "$type": "Unity.Tiny.Core2D.Sprite2DRenderer, Unity.Tiny.Sprite2D",
-            "sprite": "e541445f805a435ca19be795b57840e5",
+            "sprite": "67c138692ecda12c6adf199d8d804366",
             "color": {
                 "a": 0.145098
             },
@@ -3632,7 +3632,7 @@
             "Value": "fa6f588ab1a5493e969c7afa658bbdb6"
         }, {
             "$type": "Unity.Tiny.Core2D.Sprite2DRenderer, Unity.Tiny.Sprite2D",
-            "sprite": "e541445f805a435ca19be795b57840e5",
+            "sprite": "67c138692ecda12c6adf199d8d804366",
             "color": {
                 "a": 0.145098
             },

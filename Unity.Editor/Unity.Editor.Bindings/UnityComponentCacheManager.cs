@@ -22,7 +22,7 @@ namespace Unity.Editor.Bindings
     }
 
     [InitializeOnLoad]
-    internal class UnityComponentCacheManager : SessionManager, IUnityComponentCacheManager
+    internal class UnityComponentCacheManager : ISessionManagerInternal, IUnityComponentCacheManager
     {
         private const string k_EditorCacheFolderName = "EditorCache";
         private const string k_SceneScratchPadName = "DotsScratchpad-DoNotEdit.unity";
@@ -30,8 +30,8 @@ namespace Unity.Editor.Bindings
         private const string k_ScratchPadPath = k_ScratchPadDirectory + "/" + k_SceneScratchPadName;
         private static bool ReloadingAssemblies;
 
-        private readonly Dictionary<Guid, EntityReference> k_References;
-        private readonly Dictionary<Guid, List<Component>> k_ComponentCache;
+        private readonly Dictionary<Guid, EntityReference> k_References = new Dictionary<Guid, EntityReference>();
+        private readonly Dictionary<Guid, List<Component>> k_ComponentCache = new Dictionary<Guid, List<Component>>();
         private IWorldManager m_WorldManager;
         private EntityManager m_EntityManager;
         private IEditorSceneManagerInternal m_SceneManager;
@@ -45,26 +45,20 @@ namespace Unity.Editor.Bindings
             AssemblyReloadEvents.afterAssemblyReload += HandleAssemblyReloaded;
         }
 
-        public UnityComponentCacheManager(Session session) : base(session)
-        {
-            k_References = new Dictionary<Guid, EntityReference>();
-            k_ComponentCache = new Dictionary<Guid, List<Component>>();
-        }
-
-        public override void Load()
+        public void Load(Session session)
         {
             LoadUnityScratchPadScene();
-            m_WorldManager = Session.GetManager<IWorldManager>();
+            m_WorldManager = session.GetManager<IWorldManager>();
             m_EntityManager = m_WorldManager.EntityManager;
-            m_SceneManager = Session.GetManager<IEditorSceneManagerInternal>();
-            m_ChangeManager = Session.GetManager<IChangeManager>();
+            m_SceneManager = session.GetManager<IEditorSceneManagerInternal>();
+            m_ChangeManager = session.GetManager<IChangeManager>();
             m_ChangeManager.RegisterChangeCallback(HandleChanges, int.MinValue);
-            m_Undo = Session.GetManager<IEditorUndoManager>();
+            m_Undo = session.GetManager<IEditorUndoManager>();
             m_Undo.UndoRedoBatchEnded += HandleUndoEnded;
             UnityEditor.SceneManagement.EditorSceneManager.sceneOpening += HandleUnitySceneOpening;
         }
 
-        public override void Unload()
+        public void Unload(Session session)
         {
             UnityEditor.SceneManagement.EditorSceneManager.sceneOpening -= HandleUnitySceneOpening;
 

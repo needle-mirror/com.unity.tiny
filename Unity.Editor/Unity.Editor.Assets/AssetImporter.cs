@@ -152,7 +152,7 @@ namespace Unity.Editor.Assets
     internal interface IUnityObjectAssetImporter
     {
         bool CanImport(UnityEngine.Object obj);
-        Entity Import(IAssetImporter ctx, UnityEngine.Object obj);
+        Entity Import(IAssetImporter context, UnityEngine.Object obj);
     }
 
     internal abstract class UnityObjectAssetImporter<T> : IUnityObjectAssetImporter
@@ -163,11 +163,11 @@ namespace Unity.Editor.Assets
             return obj is T;
         }
 
-        public Entity Import(IAssetImporter ctx, UnityEngine.Object obj)
+        public Entity Import(IAssetImporter context, UnityEngine.Object obj)
         {
-            return Import(ctx, obj as T);
+            return Import(context, obj as T);
         }
 
-        public abstract Entity Import(IAssetImporter ctx, T obj);
+        public abstract Entity Import(IAssetImporter context, T obj);
     }
 }

@@ -1,15 +1,19 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Resources;
 using Bee;
 using Bee.Core;
 using Bee.CSharpSupport;
 using Bee.DotNet;
 using Bee.Stevedore;
 using Bee.Tools;
+using Bee.TundraBackend;
 using Bee.VisualStudioSolution;
 using NiceIO;
 using Unity.BuildSystem.CSharpSupport;
 using Unity.BuildSystem.NativeProgramSupport;
+using Unity.BuildTools;
 
 public class BuildProgram
 {
@@ -29,10 +33,49 @@ public class BuildProgram
         }
     }
 
+    static bool CanSkipSetupOf(string programName, DotsRuntimeCSharpProgramConfiguration config)
+    {
+        if (IsRequestedTargetExactlyProjectFiles())
+            return true;
+        
+        if (!IsRequestedTargetExactlySingleAppSingleConfig()) 
+            return false;
+        
+        var configIdentifier = (programName.ToLower() + "-" + config.Identifier);
+        var canSkipSetupOf = configIdentifier != StandaloneBeeDriver.GetCommandLineTargets().Single();
+            
+        return canSkipSetupOf;
+    }
+
+    public static bool IsRequestedTargetExactlyProjectFiles()
+    {
+        var commandLineTargets = StandaloneBeeDriver.GetCommandLineTargets();
+        if (commandLineTargets.Count() != 1)
+            return false;
+
+        return commandLineTargets.Single() == "ProjectFiles";
+    }
+    
+    private static bool IsRequestedTargetExactlySingleAppSingleConfig()
+    {
+        var commandLineTargets = StandaloneBeeDriver.GetCommandLineTargets();
+        if (commandLineTargets.Count() != 1)
+            return false;
+
+        var commandLineTarget = commandLineTargets.Single();
+        return DotsConfigs.Configs.Any(c => commandLineTarget.EndsWith(c.Identifier));
+    }
+
     static void Main()
     {
+        if (!(Backend.Current is TundraBackend))
+        {
+            StandaloneBeeDriver.RunBuildProgramInBeeEnvironment("dummy.json", Main);
+            return;
+        }
+        
         BeeRootValue = BuildProgramConfigFile.AsmDefDescriptionFor("Unity.Tiny.Text").Path.Parent.Parent.Parent.Combine("DotsPlayer/bee~");
-
+        
         StevedoreGlobalSettings.Instance = new StevedoreGlobalSettings
         {
             // Manifest entries always override artifact IDs hard-coded in Bee
@@ -54,7 +97,7 @@ public class BuildProgram
             Unsafe = true
         };
 
-        ZeroJobs = new DotsRuntimeCSharpProgram(BeeRoot.Parent.Combine("ZeroJobs"), "Unity.ZeroJobs")
+        ZeroJobs = new DotsRuntimeCSharpProgram($"{LowLevelRoot}/Unity.ZeroJobs")
         {
             References = { UnityLowLevel },
             Unsafe = true
@@ -67,13 +110,17 @@ public class BuildProgram
 
         //any asmdef that sits next to a .project file we will consider a tiny game.
         var asmDefDescriptions = BuildProgramConfigFile.AssemblyDefinitions.ToArray();
-        
-        var gameAsmDefs =asmDefDescriptions.Where(d => d.Path.Parent.Files("*.project").Any());
+
+
+
+        var gameAsmDefs = asmDefDescriptions.Where(d => d.Path.Parent.Files("*.project").Any());
         var gamePrograms = gameAsmDefs.Select(SetupGame).ToArray();
 
         //any asmdef that has .Tests in its name, is going to be our indicator for being a test project for now.
         var testAsmDefs = asmDefDescriptions.Where(ad => ad.Name.EndsWith(".Tests"));
-        var testPrograms = testAsmDefs.Where(asm => asm.PackageSource != "BuiltIn" && asm.PackageSource != "Registry")
+        
+        var testPrograms = testAsmDefs
+            .Where(t=>DotsRuntimeCSharpProgram.DoesPackageSourceIndicateUserHasControlOverSource(t.PackageSource))
             .Select(SetupTest)
             .ExcludeNulls()
             .ToArray();
@@ -99,7 +146,7 @@ public class BuildProgram
             foreach (var p in toolPrograms)
                 vs.Projects.Add(p, unityToolsFolder);
 
-        foreach (var config in DotsConfigs.Configs)
+        foreach (var config in new[] { DotsConfigs.ProjectFileConfig})
         {
             //we want dotnet to be the default, and we cannot have nice things: https://aras-p.info/blog/2017/03/23/How-does-Visual-Studio-pick-default-config/platform/
             var solutionConfigName = config.Identifier == "dotnet" ? "Debug (dotnet)": config.Identifier;
@@ -112,7 +159,9 @@ public class BuildProgram
                     firstOrDefault != null || toolPrograms.Any(t=>t.ProjectFile == file));
             }));
         }
-        Backend.Current.AddAliasDependency("ProjectFiles", vs.Setup());
+        
+        if (!IsRequestedTargetExactlySingleAppSingleConfig())
+            Backend.Current.AddAliasDependency("ProjectFiles", vs.Setup());
         
         EditorToolsBuildProgram.Setup(BeeRoot);
     }
@@ -120,7 +169,7 @@ public class BuildProgram
     private static bool IsTestProgramDotsRuntimeCompatible(DotsRuntimeCSharpProgram arg)
     {
         //We need a better way of knowing which asmdefs are supposed to work on dots-runtime, and which do not.  for now use a simple heuristic of "is it called Editor or is it called Hybrid"
-        var allFileNames = arg.References.ForAny().OfType<CSharpProgram>().Select(r => r.FileName).Append(arg.FileName).ToArray();
+        var allFileNames = Enumerable.Append(arg.References.ForAny().OfType<CSharpProgram>().Select(r => r.FileName), arg.FileName).ToArray();
         if (allFileNames.Any(f=>f.Contains("Editor")))
             return false;
         if (allFileNames.Any(f=>f.Contains("Hybrid")))
@@ -156,30 +205,41 @@ public class BuildProgram
     private static DotsRuntimeCSharpProgram SetupTest(AsmDefDescription test)
     {
         var testProgram = GetOrMakeDotsRuntimeCSharpProgramFor(test);
+
         if (!IsTestProgramDotsRuntimeCompatible(testProgram))
             return null;
 
-        var config = DotsConfigs.HostDotnet;
-        var builtTest = testProgram.SetupSpecificConfiguration(config);
-
-        builtTest = TypeRegistrationTool.SetupInvocation(builtTest, config);
-
-        NPath deployDirectory = $"build/{test.Name}/{test.Name}-{config.Identifier}";
-        var deployed = builtTest.DeployTo(deployDirectory);
-
-        testProgram.ProjectFile.OutputPath.Add(c => c == config, deployDirectory);
-        testProgram.ProjectFile.BuildCommand.Add(c => c == config,
-            new BeeBuildCommand(deployed.Path.ToString(), false, false).ToExecuteArgs());
-
-        Backend.Current.AddAliasDependency(test.Name.Replace(".", "-").ToLower(), deployed.Path);
-        Backend.Current.AddAliasDependency("tests", deployed.Path);
+        var name = test.Name;
+        
+        SetupTestForConfig(name, testProgram, DotsConfigs.HostDotnet);
+        SetupTestForConfig(name, testProgram, DotsConfigs.MultithreadedJobsTestConfig);
 
         return testProgram;
     }
 
+    static void SetupTestForConfig(string name, AsmDefBasedDotsRuntimeCSharpProgram testProgram, DotsRuntimeCSharpProgramConfiguration config)
+    {
+        var builtTest = testProgram.SetupSpecificConfiguration(config);
+
+        builtTest = TypeRegistrationTool.SetupInvocation(builtTest, config);
+
+        NPath deployDirectory = $"build/{name}/{name}-{config.Identifier}";
+        var deployed = builtTest.DeployTo(deployDirectory);
+
+        testProgram.ProjectFile.OutputPath.Add(c => c == config, deployDirectory);
+        testProgram.ProjectFile.BuildCommand.Add(c => c == config, new BeeBuildCommand(deployed.Path.ToString(), false, false).ToExecuteArgs());
+
+        var testAlias = name.Replace(".", "-").ToLower();
+        if (config.MultiThreadedJobs)
+            testAlias += "-mt";
+
+        Backend.Current.AddAliasDependency(testAlias, deployed.Path);
+        Backend.Current.AddAliasDependency("tests", deployed.Path);
+    }
+
     private static DotsRuntimeCSharpProgram SetupGame(AsmDefDescription game)
     {
-        DotsRuntimeCSharpProgram gameProgram = GetOrMakeDotsRuntimeCSharpProgramFor(game);
+        var gameProgram = GetOrMakeDotsRuntimeCSharpProgramFor(game);
 
         var withoutExt = new NPath(gameProgram.FileName).FileNameWithoutExtension;
         NPath exportManifest = new NPath(withoutExt + "/export.manifest");
@@ -190,14 +250,22 @@ public class BuildProgram
             foreach (var dataFile in dataFiles.Select(d=>new NPath(d)))
                 gameProgram.SupportFiles.Add(new DeployableFile(dataFile, "Data/"+dataFile.FileName));
         }
-        
-        var configToSetupGame = DotsConfigs.Configs.ToDictionary(config => config, config =>
+
+        {
+            var config = DotsConfigs.ProjectFileConfig;
+            gameProgram.ProjectFile.StartInfo.Add(c => c == config, StartInfoFor(config, EntryPointExecutableFor(gameProgram,config)));
+            gameProgram.ProjectFile.BuildCommand.Add(c => c == config,new BeeBuildCommand(GameDeployBinaryFor(gameProgram, config).ToString(), false, false).ToExecuteArgs());
+
+        }
+
+        var configToSetupGame = DotsConfigs.Configs.Where(c=>!CanSkipSetupOf(game.Name,c)).ToDictionary(config => config, config =>
         {
             DotNetAssembly setupGame = gameProgram.SetupSpecificConfiguration(config);
             return TypeRegistrationTool.SetupInvocation(setupGame, config);
         });
 
         var il2CppOutputProgram = new Il2Cpp.Il2CppOutputProgram(gameProgram.FileName + "_il2cpp");
+        var configToSetupGameStripped = new Dictionary<DotsRuntimeCSharpProgramConfiguration, DotNetAssembly>();
         foreach (var kvp in configToSetupGame)
         {
             var config = kvp.Key;
@@ -207,17 +275,23 @@ public class BuildProgram
             {
                 setupGame = Il2Cpp.UnityLinker.SetupInvocation(setupGame, $"artifacts/{game.Name}/{config.Identifier}_stripped", config.NativeProgramConfiguration);
                 il2CppOutputProgram.SetupConditionalSourcesAndLibrariesForConfig(config, setupGame);
+                configToSetupGameStripped[kvp.Key] = setupGame;
+            }
+            else
+            {
+                configToSetupGameStripped[kvp.Key] = kvp.Value;
             }
         }
 
-        foreach (var kvp in configToSetupGame)
+        foreach (var kvp in configToSetupGameStripped)
         {
             var config = kvp.Key;
             var setupGame = kvp.Value;
-            NPath deployPath = $"build/{game.Name}/{game.Name}-{config.Identifier}";
+            NPath deployPath = GameDeployDirectoryFor(gameProgram, config);
             
             IDeployable deployedGame;
-
+            NPath entryPointExecutable = null;
+            
             if (config.ScriptingBackend == ScriptingBackend.TinyIl2cpp)
             {
                 var builtNativeProgram = il2CppOutputProgram.SetupSpecificConfiguration(
@@ -228,6 +302,9 @@ public class BuildProgram
                         .ToArray());
 
                 deployedGame = builtNativeProgram.DeployTo(deployPath);
+                entryPointExecutable = deployedGame.Path;
+                if (config.EnableManagedDebugging)
+                    Backend.Current.AddDependency(deployedGame.Path, Il2Cpp.CopyIL2CPPMetadataFile(deployPath, setupGame));
             }
             else
             {
@@ -244,14 +321,27 @@ public class BuildProgram
                     var to = deployPath.Combine(deployedGame.Path.ChangeExtension("exe").FileName);
                     var from = dotNetAssembly.RecursiveRuntimeDependenciesIncludingSelf.Single(a=>a.Path.HasExtension("exe")).Path;
                     Backend.Current.AddDependency(deployedGame.Path, CopyTool.Instance().Setup(to, from));
+                    entryPointExecutable = to;
+                }
+                else
+                {
+                    entryPointExecutable = deployedGame.Path;
                 }
             }
 
-            NPath deployedGamePath = deployedGame.Path;
             
-            gameProgram.ProjectFile.StartInfo.Add(c=>c==config, StartInfoFor(config, deployedGame));
-            gameProgram.ProjectFile.BuildCommand.Add(c=>c == config, new BeeBuildCommand(deployedGamePath.ToString(), false, false).ToExecuteArgs());
-
+            //Because we use multidag, and try to not run all the setupcode when we just want to create projectfiles, we have a bit of a challenge.
+            //Projectfiles require exact start and build commands. So we need to have a cheap way to calculate those. However, it's important that they
+            //exactly match the actual place where the buildprogram is going to place our files. If these don't match things break down. The checks
+            //in this block, they compare the "quick way to determine where the binary will be placed, and what the start executable is",  with the
+            //actual return values returned from .DeployTo(), when we do run the actual buildcode.
+            NPath deployedGamePath = GameDeployBinaryFor(gameProgram, config);
+            if (deployedGame.Path != deployedGamePath)
+                throw new InvalidProgramException($"We expected deployPath to be {deployedGamePath}, but in reality it was {deployedGame.Path}");
+            var expectedEntryPointExecutable = EntryPointExecutableFor(gameProgram, config);
+            if (entryPointExecutable != expectedEntryPointExecutable)
+                throw new InvalidProgramException($"We expected entryPointExecutable to be {expectedEntryPointExecutable}, but in reality it was {entryPointExecutable}");
+            
             Backend.Current.AddAliasDependency($"{game.Name.ToLower()}-{config.Identifier}", deployedGamePath);
             Backend.Current.AddAliasDependency($"{game.Name.ToLower()}-all", deployedGamePath);
         }
@@ -259,24 +349,39 @@ public class BuildProgram
         return gameProgram;
     }
 
-    private static StartInfo StartInfoFor(DotsRuntimeCSharpProgramConfiguration config, IDeployable deployedGame)
+    private static NPath EntryPointExecutableFor(AsmDefBasedDotsRuntimeCSharpProgram gameProgram, DotsRuntimeCSharpProgramConfiguration config)
     {
-        var exe = deployedGame.Path;
-        if (deployedGame is DotNetAssembly dotNetGame)
-            exe = dotNetGame.Path.ChangeExtension("exe");
-        
-        if (config.Platform is WebGLPlatform)
-            return new BrowserStartInfo(new Uri(deployedGame.Path.MakeAbsolute().ToString(SlashMode.Native)).AbsoluteUri);
-        
-        return new ExecutableStartInfo(new Shell.ExecuteArgs() {Executable = exe, WorkingDirectory = exe.Parent }, true);
+        if (gameProgram.FileName.EndsWith(".exe") || config.ScriptingBackend != ScriptingBackend.Dotnet)
+            return GameDeployBinaryFor(gameProgram,config);
+       
+        return GameDeployDirectoryFor(gameProgram, config).Combine(new NPath(gameProgram.FileName).FileNameWithoutExtension+".exe");
     }
 
-    static readonly Cache<DotsRuntimeCSharpProgram, AsmDefDescription> _cache = new Cache<DotsRuntimeCSharpProgram, AsmDefDescription>();
+    private static NPath GameDeployBinaryFor(AsmDefBasedDotsRuntimeCSharpProgram game, DotsRuntimeCSharpProgramConfiguration config)
+    {
+        var fileName = config.ScriptingBackend == ScriptingBackend.Dotnet ? 
+            game.FileName
+            : new NPath(game.FileName).ChangeExtension(config.NativeProgramConfiguration.ExecutableFormat.Extension);
+        
+        return GameDeployDirectoryFor(game, config).Combine(fileName);
+    }
 
-    public static DotsRuntimeCSharpProgram GetOrMakeDotsRuntimeCSharpProgramFor(AsmDefDescription asmDefDescription) => 
+    private static NPath GameDeployDirectoryFor(AsmDefBasedDotsRuntimeCSharpProgram game, DotsRuntimeCSharpProgramConfiguration config)
+    {
+        return $"build/{game.AsmDefDescription.Name}/{game.AsmDefDescription.Name}-{config.Identifier}";
+    }
+
+    private static StartInfo StartInfoFor(DotsRuntimeCSharpProgramConfiguration config, NPath deployedGamePath)
+    {
+        if (config.Platform is WebGLPlatform)
+            return new BrowserStartInfo(new Uri(deployedGamePath.MakeAbsolute().ToString(SlashMode.Native)).AbsoluteUri);
+        
+        return new ExecutableStartInfo(new Shell.ExecuteArgs() {Executable = deployedGamePath, WorkingDirectory = deployedGamePath.Parent }, true);
+    }
+
+    static readonly Cache<AsmDefBasedDotsRuntimeCSharpProgram, AsmDefDescription> _cache = new Cache<AsmDefBasedDotsRuntimeCSharpProgram, AsmDefDescription>();
+
+    public static AsmDefBasedDotsRuntimeCSharpProgram GetOrMakeDotsRuntimeCSharpProgramFor(AsmDefDescription asmDefDescription) => 
         _cache.GetOrMake(asmDefDescription, () => new AsmDefBasedDotsRuntimeCSharpProgram(asmDefDescription));
 
-    public static bool LivesInProject(NPath file) => file.IsChildOf(BuildProgramConfigFile.UnityProjectPath) &&
-                                                     !(file.HasDirectory("PackageCache") &&
-                                                       file.HasDirectory("Library"));
 }

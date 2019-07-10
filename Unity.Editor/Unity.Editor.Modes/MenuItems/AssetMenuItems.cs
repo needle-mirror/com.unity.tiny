@@ -159,17 +159,22 @@ namespace Unity.Editor.MenuItems
             using (var progress = new ProgressBarScope("Generating DOTS C# Project", "Please wait..."))
             {
                 var project = Application.AuthoringProject;
+                var workspaceManager = project.Session.GetManager<WorkspaceManager>();
+                
                 var context = new BuildPipeline.BuildContext(new BuildSettings
                 {
                     Project = project,
-                    Platform = new DesktopDotNetPlatform(),
-                    Configuration = Configuration.Debug,
+                    BuildTarget = workspaceManager.ActiveBuildTarget,
+                    Configuration = workspaceManager.ActiveConfiguration,
                     OutputDirectory = Application.OutputDirectory
                 }, progress);
-
+                
                 try
                 {
-                    BuildProgramDataFileWriter.WriteAll(context.OutputDirectory.FullName);
+                    var selectedConfiguration = workspaceManager.ActiveBuildTarget.GetBeeTargetName() + "-" +
+                                                workspaceManager.ActiveConfiguration;
+                    
+                    BuildProgramDataFileWriter.WriteAll(context.OutputDirectory.FullName,selectedConfiguration);
                     if (BuildStep.GenerateProjectFiles.Run(context))
                     {
                         var dotsSolutionFile = Application.RootDirectory.GetFile($"{new NPath(Application.DataDirectory).Parent.FileName}-Dots.sln");

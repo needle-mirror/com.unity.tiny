@@ -17,7 +17,7 @@ namespace Unity.Editor.Undo
         bool IsUndoRedoing { get; }
     }
 
-    internal class EditorUndoManager : SessionManager, IEditorUndoManager
+    internal class EditorUndoManager : ISessionManagerInternal, IEditorUndoManager
     {
         internal class UndoObject : ScriptableObject
         {
@@ -84,14 +84,10 @@ namespace Unity.Editor.Undo
         public bool IsUndoing => m_IsUndoing;
         public bool IsRedoing => m_IsRedoing;
         public bool IsUndoRedoing => m_IsUndoing || m_IsRedoing;
-        
-        public EditorUndoManager(Session session) : base(session)
-        {
-        }
 
-        public override void Load()
+        public void Load(Session session)
         {
-            m_UndoManager = Session.GetManager<IUndoManager>();
+            m_UndoManager = session.GetManager<IUndoManager>();
 
             m_Undo = ScriptableObject.CreateInstance<UndoObject>();
             m_Undo.hideFlags |= HideFlags.HideAndDontSave;
@@ -101,7 +97,7 @@ namespace Unity.Editor.Undo
             m_UndoManager.ChangeRecorded += HandleChangeRecorded;
         }
 
-        public override void Unload()
+        public void Unload(Session session)
         {
             m_Undo.Undo -= HandleUndo;
             m_Undo.Redo -= HandleRedo;

@@ -16,7 +16,8 @@
       "Unity.Tiny.Image2DIOSTB",
       "Unity.Tiny.Debugging",
       "Unity.Tiny.GLFW",
-      "Unity.Tiny.Text"
+      "Unity.Tiny.Text",
+      "Unity.Tiny.TextNative"
     ],
     "optionalUnityReferences": [],
     "includePlatforms": [],

@@ -216,7 +216,7 @@ namespace Unity.Serialization
                                 getter.VisitProperty<ElementProperty<ulong>, ulong>(new ElementProperty<ulong>(index, p.AsUInt64(), false, m_Attributes), ref container);
                             }
                         }
-                        else if (p.IsDecimal())
+                        else if (p.IsDecimal() || p.IsInfinity() || p.IsNaN())
                         {
                             getter.VisitProperty<ElementProperty<float>, float>(new ElementProperty<float>(index, p.AsFloat(), false, m_Attributes), ref container);
                         }
@@ -283,7 +283,7 @@ namespace Unity.Serialization
                                 visitor.VisitProperty<UInt64Property, SerializedObjectView, ulong>(new UInt64Property(nameView, valueView), ref container, ref changeTracker);
                             }
                         }
-                        else if (p.IsDecimal())
+                        else if (p.IsDecimal() || p.IsInfinity() || p.IsNaN())
                         {
                             visitor.VisitProperty<FloatProperty, SerializedObjectView, float>(new FloatProperty(nameView, valueView), ref container, ref changeTracker);
                         }
@@ -345,7 +345,7 @@ namespace Unity.Serialization
                            action.VisitProperty<UInt64Property, ulong>(new UInt64Property(nameView, valueView), ref container, ref changeTracker);
                        }
                    }
-                   else if (p.IsDecimal())
+                   else if (p.IsDecimal() || p.IsInfinity() || p.IsNaN())
                    {
                        action.VisitProperty<FloatProperty, float>(new FloatProperty(nameView, valueView), ref container, ref changeTracker);
                    }

@@ -135,7 +135,7 @@ namespace Unity.Editor
         private struct ContextInfo
         {
             public bool internal_build;
-            public string platform;
+            public string buildTarget;
             public string configuration;
             public bool run;
 
@@ -167,7 +167,7 @@ namespace Unity.Editor
                     #if UNITY_TINY_INTERNAL
                     internal_build = true,
                     #endif
-                    platform = workspaceManager.ActivePlatform.ToString(),
+                    buildTarget = workspaceManager.ActiveBuildTarget.ToString(),
                     run = true,
                     configuration = workspaceManager.ActiveConfiguration.ToString()
                 };

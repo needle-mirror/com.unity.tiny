@@ -8,9 +8,9 @@ namespace Unity.Editor.Assets
     [EntityWithComponentsBinding(typeof(Sprite2D))]
     internal class SpriteAsset : UnityObjectAsset<UnityEngine.Sprite>
     {
-        public override AssetInfo GetAssetInfo(IAssetEnumerator ctx, UnityEngine.Sprite sprite)
+        public override AssetInfo GetAssetInfo(IAssetEnumerator context, UnityEngine.Sprite sprite)
         {
-            return new AssetInfo(sprite, sprite.name, ctx.GetAssetInfo(GetSpriteTexture(sprite)));
+            return new AssetInfo(sprite, sprite.name, context.GetAssetInfo(GetSpriteTexture(sprite)));
         }
 
         internal static UnityEngine.Texture2D GetSpriteTexture(UnityEngine.Sprite sprite)
@@ -31,9 +31,9 @@ namespace Unity.Editor.Assets
 
     internal class SpriteAssetImporter : UnityObjectAssetImporter<UnityEngine.Sprite>
     {
-        public override Entity Import(IAssetImporter ctx, UnityEngine.Sprite sprite)
+        public override Entity Import(IAssetImporter context, UnityEngine.Sprite sprite)
         {
-            var entity = ctx.CreateEntity(typeof(Sprite2D));
+            var entity = context.CreateEntity(typeof(Sprite2D));
 
             var texture = SpriteAsset.GetSpriteTexture(sprite);
             var rect = SpriteAsset.GetSpriteTextureRect(sprite);
@@ -41,9 +41,9 @@ namespace Unity.Editor.Assets
             var pivot = sprite.pivot;
             var border = sprite.border;
 
-            ctx.SetComponentData(entity, new Sprite2D()
+            context.SetComponentData(entity, new Sprite2D()
             {
-                image = ctx.GetEntity(texture),
+                image = context.GetEntity(texture),
                 imageRegion = new Rect(
                     rect.x / texture.width,
                     rect.y / texture.height,
@@ -57,7 +57,7 @@ namespace Unity.Editor.Assets
 
             if (border != UnityEngine.Vector4.zero)
             {
-                ctx.AddComponentData(entity, new Sprite2DBorder()
+                context.AddComponentData(entity, new Sprite2DBorder()
                 {
                     bottomLeft = new float2(
                         border.x / rect.width,

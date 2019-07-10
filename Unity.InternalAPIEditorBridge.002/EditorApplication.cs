@@ -1,7 +1,10 @@
 using System;
+using System.ComponentModel;
 using System.IO;
+using System.Text;
 using Boo.Lang;
 using UnityEditor;
+using UnityEngine;
 
 namespace Unity.Editor.Bridge
 {
@@ -159,14 +162,32 @@ namespace Unity.Editor.Bridge
 
         internal static void OpenCSharpSolution(FileInfo solutionFile)
         {
+            var slnPath = QuotePath(solutionFile.FullName);
+            bool foundEditor = false;
             var editor = CodeEditor.CodeEditor.CurrentEditorInstallation;
-            if (string.IsNullOrEmpty(editor))
+            try
             {
-                System.Diagnostics.Process.Start(QuotePath(solutionFile.FullName));
+
+                if (string.IsNullOrEmpty(editor))
+                {
+                    System.Diagnostics.Process.Start(slnPath);
+                }
+                else
+                {
+                    foundEditor = true;
+                    System.Diagnostics.Process.Start(editor, slnPath);
+                }
             }
-            else
+            catch (Exception e)
             {
-                System.Diagnostics.Process.Start(editor, QuotePath(solutionFile.FullName));
+                var s = new StringBuilder();
+                s.Append($"Caught exception {e} while trying to open IDE project at {slnPath}. ");
+                if (foundEditor && e is Win32Exception)
+                {
+                    s.Append($"Tried to run editor at {editor}. Often this is caused by a stale External Script " +
+                             $"Editor setting in Preferences.");
+                }
+                Debug.LogError(s.ToString());
             }
         }
 

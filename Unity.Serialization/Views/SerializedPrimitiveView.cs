@@ -30,6 +30,27 @@ namespace Unity.Serialization
             var ptr = m_Stream.GetBufferPtr<byte>(m_Handle);
             return Convert.IsDecimal((char*) (ptr + sizeof(int)), *(int*) ptr);
         }
+        
+        public bool IsInfinity()
+        {
+            var ptr = m_Stream.GetBufferPtr<byte>(m_Handle);
+            var len = *(int*) ptr;
+            var chars = (char*) (ptr + sizeof(int));
+            if (Convert.IsSigned(chars, len))
+            {
+                chars++;
+                len--;
+            }
+            return Convert.MatchesInfinity(chars, len);
+        }
+
+        public bool IsNaN()
+        {
+            var ptr = m_Stream.GetBufferPtr<byte>(m_Handle);
+            var len = *(int*) ptr;
+            var chars = (char*) (ptr + sizeof(int));
+            return Convert.MatchesNaN(chars, len);
+        }
 
         public bool IsSigned()
         {
@@ -42,25 +63,7 @@ namespace Unity.Serialization
             var ptr = m_Stream.GetBufferPtr<byte>(m_Handle);
             var length = *(int*) ptr;
             var chars = (char*) (ptr + sizeof(int));
-
-            if (length == 4 && chars[0] == 't'
-                            && chars[1] == 'r'
-                            && chars[2] == 'u'
-                            && chars[3] == 'e')
-            {
-                return true;
-            }
-
-            if (length == 5 && chars[0] == 'f'
-                            && chars[1] == 'a'
-                            && chars[2] == 'l'
-                            && chars[3] == 's'
-                            && chars[4] == 'e')
-            {
-                return true;
-            }
-
-            return false;
+            return Convert.MatchesTrue(chars, length) || Convert.MatchesFalse(chars, length);
         }
 
         public long AsInt64()
@@ -88,8 +91,6 @@ namespace Unity.Serialization
         public float AsFloat()
         {
             var ptr = m_Stream.GetBufferPtr<byte>(m_Handle);
-
-            // @TODO we need to be able to actually parse float64 here...
             var result = Convert.StrToFloat32((char*) (ptr + sizeof(int)), *(int*) ptr, out var value);
 
             if (result != Convert.ParseError.None)
@@ -111,19 +112,12 @@ namespace Unity.Serialization
             var length = *(int*) ptr;
             var chars = (char*) (ptr + sizeof(int));
 
-            if (length == 4 && chars[0] == 't'
-                            && chars[1] == 'r'
-                            && chars[2] == 'u'
-                            && chars[3] == 'e')
+            if (Convert.MatchesTrue(chars, length))
             {
                 return true;
             }
 
-            if (length == 5 && chars[0] == 'f'
-                            && chars[1] == 'a'
-                            && chars[2] == 'l'
-                            && chars[3] == 's'
-                            && chars[4] == 'e')
+            if (Convert.MatchesFalse(chars, length))
             {
                 return false;
             }

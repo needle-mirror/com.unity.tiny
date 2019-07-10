@@ -104,7 +104,7 @@ namespace Unity.Authoring
     /// <summary>
     /// The world manager handles the `Authoring` world lifecycle.
     /// </summary>
-    internal class WorldManager : SessionManager, IWorldManagerInternal
+    internal class WorldManager : ISessionManagerInternal, IWorldManagerInternal
     {
         [BurstCompile]
         private struct BuildEntityCacheJob : IJobParallelFor
@@ -128,7 +128,7 @@ namespace Unity.Authoring
         public World World { get; private set; }
         public EntityManager EntityManager => World?.EntityManager ?? null;
 
-        public WorldManager(Session session) : base(session)
+        public WorldManager()
         {
             m_LastActiveWorld = World.Active;
             World = new World("DotsSession");
@@ -136,7 +136,7 @@ namespace Unity.Authoring
             m_ConfigEntity = Entity.Null;
         }
 
-        public override void Load()
+        public void Load(Session session)
         {
             m_QueryGuids = EntityManager.CreateEntityQuery(new EntityQueryDesc
             {
@@ -151,7 +151,7 @@ namespace Unity.Authoring
             });
         }
 
-        public override void Unload()
+        public void Unload(Session session)
         {
             m_EntityGuidToEntity.Dispose();
             m_QueryGuids.Dispose();

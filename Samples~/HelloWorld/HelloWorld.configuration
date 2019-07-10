@@ -10,8 +10,8 @@
             "b": 12538626646697826014
         }, {
             "$type": "Unity.Tiny.Core2D.DisplayInfo, Unity.Tiny.Core2D",
-            "width": 400,
-            "height": 400,
+            "width": 600,
+            "height": 600,
             "autoSizeToFrame": true,
             "orientation": 0,
             "renderMode": 0

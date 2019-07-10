@@ -45,7 +45,7 @@ public static class Il2Cpp
         }
         else
         {
-            loc = BuildProgram.BeeRoot.Parent.Parent.Parent.Parent.Parent.Combine("il2cpp");
+            loc = BuildProgram.BeeRoot.Parent.Parent.Parent.Parent.Parent.Parent.Combine("il2cpp");
         }
 
         if (loc.DirectoryExists() && Environment.GetEnvironmentVariable("IL2CPP_FROM_STEVE") == null)
@@ -54,7 +54,7 @@ public static class Il2Cpp
             if (!localDeps.DirectoryExists())
                 throw new ArgumentException(
                     "We found your il2cpp checkout, but not the il2cpp-deps directory next to it.");
-
+            Console.WriteLine("Using il2cpp from local checkout");
             return new DistributionAndDeps()
                 {Distribution = new LocalFileBundle(loc), Deps = new LocalFileBundle(localDeps)};
         }
@@ -75,8 +75,12 @@ public static class Il2Cpp
             Framework = {Framework.FrameworkNone},
             Unsafe = true,
             LanguageVersion = "7.3",
-            Defines = {c => c.CodeGen == CSharpCodeGen.Debug, "DEBUG"},
-            ProjectFile = { RedirectMSBuildBuildTargetToBee = true }
+            Defines =
+            {
+                {c => c.CodeGen == CSharpCodeGen.Debug, "DEBUG"},
+                {c => ((DotsRuntimeCSharpProgramConfiguration)c).EnableManagedDebugging, "IL2CPP_MONO_DEBUGGER" }
+            },
+            ProjectFile = { RedirectMSBuildBuildTargetToBee = true, ExplicitConfigurationsToUse = new[]{DotsConfigs.ProjectFileConfig }}
         };
     });
 
@@ -104,13 +108,14 @@ public static class Il2Cpp
     {
         public Il2CppOutputProgram(string name) : base(name)
         {
-            Libraries.Add(LibIL2Cpp);
+            AddLibIl2CppAsLibraryFor(this);
+
             Libraries.Add(BoehmGCProgram);
             Sources.Add(Distribution.Path.Combine("external").Combine("xxHash/xxhash.c"));
 
             this.DynamicLinkerSettingsForMsvc()
                 .Add(l => l.WithSubSystemType(SubSystemType.Console).WithEntryPoint("wWinMainCRTStartup"));
-        
+
             Libraries.Add(c => c.ToolChain.Platform is WindowsPlatform, new SystemLibrary("kernel32.lib"));
             Defines.Add(c => c.Platform is WebGLPlatform, "IL2CPP_DISABLE_GC=1");
 
@@ -122,26 +127,42 @@ public static class Il2Cpp
 
             this.DynamicLinkerSettingsForEmscripten().Add(c =>
                 c.WithShellFile(BuildProgram.BeeRoot.Combine("shell.html")));
-                    
+
 
             Libraries.Add(c => c.Platform is WebGLPlatform,new PreJsLibrary(BuildProgram.BeeRoot.Combine("tiny_runtime.js")));
+            Defines.Add(ManagedDebuggingIsEnabled, "IL2CPP_MONO_DEBUGGER=1");
+            Defines.Add(ManagedDebuggingIsEnabled, "IL2CPP_DEBUGGER_PORT=56000");
+            CompilerSettings().Add(ManagedDebuggingIsEnabled, c => c.WithExceptions(true));
+            CompilerSettings().Add(ManagedDebuggingIsEnabled, c => c.WithRTTI(true));
+
         }
 
-        
+
 
         public void SetupConditionalSourcesAndLibrariesForConfig(DotsRuntimeCSharpProgramConfiguration config, DotNetAssembly setupGame)
         {
-            NPath[] il2cppGeneratedFiles = SetupInvocation(setupGame);
+            NPath[] il2cppGeneratedFiles = SetupInvocation(setupGame, config);
             //todo: stop comparing identifier.
             Sources.Add(npc => ((DotsRuntimeNativeProgramConfiguration)npc).CSharpConfig == config, il2cppGeneratedFiles);
             Libraries.Add(npc => ((DotsRuntimeNativeProgramConfiguration)npc).CSharpConfig == config, setupGame.RecursiveRuntimeDependenciesIncludingSelf.SelectMany(r=>r.Deployables.OfType<StaticLibrary>()));
         }
     }
+
+    public static void AddLibIl2CppAsLibraryFor(NativeProgram program)
+    {
+        program.Libraries.Add(c => !ManagedDebuggingIsEnabled(c), LibIL2Cpp);
+        program.Libraries.Add(ManagedDebuggingIsEnabled, BigLibIL2Cpp);    
+    }
     
-    public static NPath[] SetupInvocation(DotNetAssembly inputAssembly)
+    public static NPath Il2CppTargetDirForAssembly(DotNetAssembly inputAssembly)
+    {
+        return inputAssembly.Path.Parent.Combine(inputAssembly.Path.FileName + "-il2cpp-sources");
+    }
+
+    public static NPath[] SetupInvocation(DotNetAssembly inputAssembly, DotsRuntimeCSharpProgramConfiguration config)
     {
         var profile = "unitytiny";
-        var il2CppTargetDir = inputAssembly.Path.Parent.Combine(inputAssembly.Path.FileName + "-il2cpp-sources");
+        var il2CppTargetDir = Il2CppTargetDirForAssembly(inputAssembly);
 
         var args = new List<string>()
         {
@@ -163,37 +184,99 @@ public static class Il2Cpp
             //"--enable-stats",
         };
 
+        if (config.EnableManagedDebugging)
+            args.Add("--enable-debugger");
+        
+        if (config.EnableUnityCollectionsChecks)
+            args.Add("--development-mode");
+
         var iarrdis = MoveExeToFront(inputAssembly.RecursiveRuntimeDependenciesIncludingSelf);
         args.AddRange(
             iarrdis.SelectMany(a =>
                 new[] {"--assembly", a.Path.ToString()}));
 
-        var il2cppOutputFiles = new[]
-            {
-                // static files
-                //"Il2CppComCallableWrappers.cpp",
-                //"Il2CppProjectedComCallableWrapperMethods.cpp",
-                "TinyTypes.cpp", "driver.cpp", "StaticConstructors.cpp", "StringLiterals.cpp",
-                "GenericMethods.cpp",
-                "Generics.cpp", "ReversePInvokeWrappers.cpp",
-                "StaticInitialization.cpp"
-            }.Concat(iarrdis.Select(asm => asm.Path.FileNameWithoutExtension + ".cpp"))
-            .Select(il2CppTargetDir.Combine)
-            .ToArray();
+        var sharedFileNames = new List<string>
+        {
+            // static files
+            //"Il2CppComCallableWrappers.cpp",
+            //"Il2CppProjectedComCallableWrapperMethods.cpp",
+            "driver.cpp",
+            "GenericMethods.cpp",
+            "Generics.cpp",
+            "Il2CppGenericComDefinitions.cpp",
+            "ReversePInvokeWrappers.cpp",
+        };
+
+        var nonDebuggerExtraFileNames = new[]
+        {
+            "TinyTypes.cpp",
+            "StaticConstructors.cpp",
+            "StringLiterals.cpp",
+            "StaticInitialization.cpp"
+        };
+
+        var debuggerExtraFileNames = new[]
+        {
+            "Il2CppGenericClassTable.c",
+            "Il2CppGenericInstDefinitions.c",
+            "Il2CppGenericMethodDefinitions.c",
+            "Il2CppGenericMethodTable.c",
+            "Il2CppMetadataRegistration.c",
+            "Il2CppMetadataUsage.c",
+            "Il2CppTypeDefinitions.c",
+            "Il2CppAttributes.cpp",
+            "Il2CppCodeRegistration.cpp",
+            "Il2CppCompilerCalculateTypeValues.cpp",
+            "Il2CppCompilerCalculateTypeValuesTable.cpp",
+            "Il2CppGenericMethodPointerTable.cpp",
+            "Il2CppInteropDataTable.cpp",
+            "Il2CppInvokerTable.cpp",
+            "Il2CppReversePInvokeWrapperTable.cpp",
+            "UnresolvedVirtualCallStubs.cpp",
+        };
+
+        IEnumerable<string> il2cppOutputFileNames = sharedFileNames;
+
+
+        if (config.EnableManagedDebugging)
+        {
+            il2cppOutputFileNames = il2cppOutputFileNames.Concat(debuggerExtraFileNames);
+            il2cppOutputFileNames = il2cppOutputFileNames.Concat(iarrdis.Select(asm => asm.Path.FileNameWithoutExtension + "_Debugger.c"));
+            il2cppOutputFileNames = il2cppOutputFileNames.Concat(iarrdis.Select(asm => asm.Path.FileNameWithoutExtension + "_Codegen.c"));
+        }
+        else
+        {
+            il2cppOutputFileNames = il2cppOutputFileNames.Concat(nonDebuggerExtraFileNames);
+        }
+
+        var il2cppOutputFiles = il2cppOutputFileNames.Concat(iarrdis.Select(asm => asm.Path.FileNameWithoutExtension + ".cpp"))
+            .Select(il2CppTargetDir.Combine).ToArray();
 
         var il2cppInputs = Distribution.GetFileList("build")
             .Concat(iarrdis.SelectMany(a => a.Paths))
             .Concat(new[] {Distribution.Path.Combine("libil2cpptiny", "libil2cpptiny.icalls")})
             .Concat(new[] {Il2CppDependencies.GetFileList().First()});
-                
+
+        var finalOutputFiles = il2cppOutputFiles;
+        if (config.EnableManagedDebugging)
+            finalOutputFiles = finalOutputFiles.Concat(new[] { il2CppTargetDir.Combine("Data/Metadata/global-metadata.dat") }).ToArray();
+
         Backend.Current.AddAction(
             "Il2Cpp",
-            targetFiles: il2cppOutputFiles,
+            targetFiles:finalOutputFiles,
             inputs: il2cppInputs.ToArray(),
             Il2CppRunnableProgram.InvocationString,
             args.ToArray());
 
         return il2cppOutputFiles;
+    }
+
+    public static NPath CopyIL2CPPMetadataFile(NPath destination, DotNetAssembly inputAssembly)
+    {
+        var target = destination.Combine("Data/Metadata/global-metadata.dat");
+        CopyTool.Instance().Setup(target,
+            Il2CppTargetDirForAssembly(inputAssembly).Combine("Data", "Metadata", "global-metadata.dat"));
+        return target;
     }
 
     private static IEnumerable<DotNetAssembly> MoveExeToFront(IEnumerable<DotNetAssembly> assemblies)
@@ -222,13 +305,15 @@ public static class Il2Cpp
     }
 
     public static NativeProgram LibIL2Cpp => _libil2cpp.Value;
-    
-    static Lazy<NativeProgram> _libil2cpp = new Lazy<NativeProgram>(()=>CreateLibIl2CppProgram(false));
+    public static NativeProgram BigLibIL2Cpp => _biglibil2cpp.Value;
+
+    static Lazy<NativeProgram> _libil2cpp = new Lazy<NativeProgram>(()=>CreateLibIl2CppProgram(useExceptions: false));
+    static Lazy<NativeProgram> _biglibil2cpp = new Lazy<NativeProgram>(()=>CreateLibIl2CppProgram(useExceptions: true, libil2cppname:"libil2cpp"));
     
     public static NativeProgram BoehmGCProgram => _boehmGCProgram.Value;
     static Lazy<NativeProgram> _boehmGCProgram = new Lazy<NativeProgram>(()=>CreateBoehmGcProgram(Distribution.Path.Combine("external/bdwgc")));
 
-    
+
     static NativeProgram CreateLibIl2CppProgram(bool useExceptions, NativeProgram boehmGcProgram = null, string libil2cppname = "libil2cpptiny")
     {
         var fileList = Distribution.GetFileList(libil2cppname).ToArray();
@@ -238,7 +323,7 @@ public static class Il2Cpp
         var posixSources = nPaths.Where(p => p.HasDirectory("Posix")).ToArray();
         nPaths = nPaths.Except(win32Sources).Except(posixSources).ToArray();
 
-        var program = new NativeProgram("libil2cpp")
+        var program = new NativeProgram(libil2cppname)
         {
             Sources =
             {
@@ -273,9 +358,9 @@ public static class Il2Cpp
                 {c => c.Platform is LinuxPlatform, new SystemLibrary("dl")}
             }
         };
-        
+
         program.Libraries.Add(BoehmGCProgram);
-    
+
         program.RTTI.Set(c => useExceptions && c.ToolChain.EnablingExceptionsRequiresRTTI);
 
         if (libil2cppname == "libil2cpptiny")
@@ -285,15 +370,161 @@ public static class Il2Cpp
             program.Sources.Add(Distribution.GetFileList("libil2cpp/utils"));
             program.Sources.Add(Distribution.GetFileList("libil2cpp/vm-utils"));
             program.PublicIncludeDirectories.Add(Distribution.Path.Combine("libil2cpp"));
-            program.PublicIncludeDirectories.Add(Distribution.Path.Combine("external").Combine("xxHash"));
-            program.PublicDefines.Add("IL2CPP_TINY");
         }
+        else
+        {
+            program.Defines.Add(ManagedDebuggingIsEnabled,
+                "IL2CPP_MONO_DEBUGGER=1",
+                "PLATFORM_UNITY",
+                "UNITY_USE_PLATFORM_STUBS",
+                "ENABLE_OVERRIDABLE_ALLOCATORS",
+                "IL2CPP_ON_MONO=1",
+                "DISABLE_JIT=1",
+                "DISABLE_REMOTING=1",
+                "HAVE_CONFIG_H",
+                "MONO_DLL_EXPORT=1");
+
+            program.Defines.Add(c => c.ToolChain.Platform is WebGLPlatform && ManagedDebuggingIsEnabled(c),
+                "HOST_WASM=1");
+
+
+            program.IncludeDirectories.Add(ManagedDebuggingIsEnabled,
+            new[]
+            {
+                Distribution.Path.Combine("external/mono/mono/eglib"),
+                Distribution.Path.Combine("external/mono/mono"),
+                Distribution.Path.Combine("external/mono/"),
+                Distribution.Path.Combine("external/mono/mono/sgen"),
+                Distribution.Path.Combine("external/mono/mono/utils"),
+                Distribution.Path.Combine("external/mono/mono/metadata"),
+                Distribution.Path.Combine("external/mono/metadata/private"),
+                Distribution.Path.Combine("libmono/config"),
+                Distribution.Path.Combine("libil2cpp/os/c-api")
+            });
+
+            var MonoSourceDir = Distribution.Path.Combine("external/mono");
+            program.Sources.Add(ManagedDebuggingIsEnabled,
+            new []
+            {
+                "mono/eglib/garray.c",
+                "mono/eglib/gbytearray.c",
+                "mono/eglib/gdate-unity.c",
+                "mono/eglib/gdir-unity.c",
+                "mono/eglib/gerror.c",
+                "mono/eglib/gfile-unity.c",
+                "mono/eglib/gfile.c",
+                "mono/eglib/ghashtable.c",
+                "mono/eglib/giconv.c",
+                "mono/eglib/glist.c",
+                "mono/eglib/gmarkup.c",
+                "mono/eglib/gmem.c",
+                "mono/eglib/gmisc-unity.c",
+                "mono/eglib/goutput.c",
+                "mono/eglib/gpath.c",
+                "mono/eglib/gpattern.c",
+                "mono/eglib/gptrarray.c",
+                "mono/eglib/gqsort.c",
+                "mono/eglib/gqueue.c",
+                "mono/eglib/gshell.c",
+                "mono/eglib/gslist.c",
+                "mono/eglib/gspawn.c",
+                "mono/eglib/gstr.c",
+                "mono/eglib/gstring.c",
+                "mono/eglib/gunicode.c",
+                "mono/eglib/gutf8.c",
+                "mono/metadata/mono-hash.c",
+                "mono/metadata/profiler.c",
+                "mono/mini/debugger-agent.c",
+                "mono/utils/atomic.c",
+                "mono/utils/bsearch.c",
+                "mono/utils/dlmalloc.c",
+                "mono/utils/hazard-pointer.c",
+                "mono/utils/json.c",
+                "mono/utils/lock-free-alloc.c",
+                "mono/utils/lock-free-array-queue.c",
+                "mono/utils/lock-free-queue.c",
+                "mono/utils/memfuncs.c",
+                "mono/utils/mono-codeman.c",
+                "mono/utils/mono-conc-hashtable.c",
+                "mono/utils/mono-context.c",
+                "mono/utils/mono-counters.c",
+                "mono/utils/mono-dl.c",
+                "mono/utils/mono-error.c",
+                "mono/utils/mono-filemap.c",
+                "mono/utils/mono-hwcap.c",
+                "mono/utils/mono-internal-hash.c",
+                "mono/utils/mono-io-portability.c",
+                "mono/utils/mono-linked-list-set.c",
+                "mono/utils/mono-log-common.c",
+                "mono/utils/mono-logger.c",
+                "mono/utils/mono-math.c",
+                "mono/utils/mono-md5.c",
+                "mono/utils/mono-mmap-windows.c",
+                "mono/utils/mono-mmap.c",
+                "mono/utils/mono-networkinterfaces.c",
+                "mono/utils/mono-os-mutex.c",
+                "mono/utils/mono-path.c",
+                "mono/utils/mono-poll.c",
+                "mono/utils/mono-proclib-windows.c",
+                "mono/utils/mono-proclib.c",
+                "mono/utils/mono-property-hash.c",
+                "mono/utils/mono-publib.c",
+                "mono/utils/mono-sha1.c",
+                "mono/utils/mono-stdlib.c",
+                "mono/utils/mono-threads-coop.c",
+                "mono/utils/mono-threads-state-machine.c",
+                "mono/utils/mono-threads.c",
+                "mono/utils/mono-tls.c",
+                "mono/utils/mono-uri.c",
+                "mono/utils/mono-value-hash.c",
+                "mono/utils/monobitset.c",
+                "mono/utils/networking-missing.c",
+                "mono/utils/networking.c",
+                "mono/utils/parse.c",
+                "mono/utils/strenc.c",
+                "mono/utils/unity-rand.c",
+                "mono/utils/unity-time.c",
+                "mono/utils/mono-dl-unity.c",
+                "mono/utils/mono-log-unity.c",
+                "mono/utils/mono-threads-unity.c",
+                "mono/utils/networking-unity.c",
+                "mono/utils/os-event-unity.c",
+                "mono/metadata/console-unity.c",
+                "mono/metadata/file-mmap-unity.c",
+                "mono/metadata/w32error-unity.c",
+                "mono/metadata/w32event-unity.c",
+                "mono/metadata/w32file-unity.c",
+                "mono/metadata/w32mutex-unity.c",
+                "mono/metadata/w32process-unity.c",
+                "mono/metadata/w32semaphore-unity.c",
+                "mono/metadata/w32socket-unity.c"
+            }.Select(path => MonoSourceDir.Combine(path)));
+
+            program.Sources.Add(c=>c.ToolChain.Platform is WindowsPlatform && ManagedDebuggingIsEnabled(c), MonoSourceDir.Combine("mono/eglib/gunicode-win32.c"));
+            program.Sources.Add(c=>c.ToolChain.Platform is WindowsPlatform && ManagedDebuggingIsEnabled(c), MonoSourceDir.Combine("mono/utils/mono-os-wait-win32.c"));
+
+            program.Sources.Add(c=>c.ToolChain.Platform is WebGLPlatform && ManagedDebuggingIsEnabled(c), MonoSourceDir.Combine("mono/utils/mono-hwcap-web.c"));
+
+            program.Sources.Add(c=>c.ToolChain.Architecture is IntelArchitecture && ManagedDebuggingIsEnabled(c), MonoSourceDir.Combine("mono/utils/mono-hwcap-x86.c"));
+            program.Sources.Add(c=>c.ToolChain.Architecture is ARMv7Architecture && ManagedDebuggingIsEnabled(c), MonoSourceDir.Combine("mono/utils/mono-hwcap-arm.c"));
+            program.Sources.Add(c=>c.ToolChain.Architecture is Arm64Architecture && ManagedDebuggingIsEnabled(c), MonoSourceDir.Combine("mono/utils/mono-hwcap-arm64.c"));
+
+            program.IncludeDirectories.Add(ManagedDebuggingIsEnabled, Distribution.Path.Combine("libil2cpp/debugger"));
+        }
+
+        program.PublicDefines.Add("IL2CPP_TINY");
+        program.PublicIncludeDirectories.Add(Distribution.Path.Combine("external").Combine("xxHash"));
 
         //program.CompilerSettingsForMsvc().Add(l => l.WithCompilerRuntimeLibrary(CompilerRuntimeLibrary.None));
 
         return program;
     }
-    
+
+    static bool ManagedDebuggingIsEnabled(NativeProgramConfiguration c)
+    {
+        return ((DotsRuntimeNativeProgramConfiguration)c).CSharpConfig.EnableManagedDebugging;
+    }
+
     public static NativeProgram CreateBoehmGcProgram(NPath boehmGcRoot)
     {
         var program = new NativeProgram("boehm-gc");
@@ -477,11 +708,12 @@ public static DotNetAssembly SetupLinker(DotNetAssembly inputAssembly, NativePro
             return inputGame.ApplyDotNetAssembliesPostProcessor(outputPath,(inputAssemblies, targetDir) => AddActions(inputAssemblies, targetDir, config)
             );
         }
-        
+
         static void AddActions(DotNetAssembly[] inputAssemblies, NPath targetDirectory, NativeProgramConfiguration nativeProgramConfiguration)
         {
             var linkerAssembly = new DotNetAssembly(Distribution.Path.Combine("build/UnityLinker.exe"), Framework.Framework471);
             var linker = new DotNetRunnableProgram(linkerAssembly);
+
             
             var outputDir = targetDirectory;
             var isFrameworkNone = inputAssemblies.First().Framework == Framework.FrameworkNone;
@@ -493,7 +725,6 @@ public static DotNetAssembly SetupLinker(DotNetAssembly inputAssembly, NativePro
                 $"--out={outputDir.InQuotes()}",
                 "--use-dots-options",
                 "--dotnetprofile=" + (isFrameworkNone ? "unitytiny" : "unityaot"),
-                "--rule-set=experimental", // This will enable modification of method bodies to further reduce size.
                 inputAssemblies.Select(a=>$"--include-directory={a.Path.Parent.InQuotes()}")
             };
 
@@ -515,10 +746,20 @@ public static DotNetAssembly SetupLinker(DotNetAssembly inputAssembly, NativePro
             if (!string.IsNullOrEmpty(targetPlatform))
                 linkerArguments.Add($"--architecture={targetArchitecture}");
 
+            if (ManagedDebuggingIsEnabled(nativeProgramConfiguration))
+            {
+                linkerArguments.Add("--rule-set=aggressive"); // Body modification causes debug symbols to be out of sync
+                linkerArguments.Add("--enable-debugger");
+            }
+            else
+            {
+                linkerArguments.Add("--rule-set=experimental"); // This will enable modification of method bodies to further reduce size.
+            }
+
   //          var targetFiles = Unity.BuildTools.EnumerableExtensions.Prepend(nonMainOutputs, mainTargetFile);
   //          targetFiles = targetFiles.Append(bcl);
               var targetFiles = inputAssemblies.SelectMany(a=>a.Paths).Select(i => targetDirectory.Combine(i.FileName)).ToArray();
-            
+
               Backend.Current.AddAction(
                 "UnityLinker",
                 targetFiles: targetFiles,

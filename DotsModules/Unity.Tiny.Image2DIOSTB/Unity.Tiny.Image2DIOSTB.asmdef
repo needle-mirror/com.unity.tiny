@@ -7,7 +7,8 @@
     "Unity.Tiny.Core",
     "Unity.Tiny.Core2D",
     "Unity.Tiny.Image2D",
-    "Unity.Tiny.Debugging"
+    "Unity.Tiny.Debugging",
+    "Unity.Tiny.Thread.Native"
   ],
   "optionalUnityReferences": [],
   "excludePlatforms": [

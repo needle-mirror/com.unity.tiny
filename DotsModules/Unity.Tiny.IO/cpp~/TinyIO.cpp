@@ -1,18 +1,22 @@
 #include "TinyIO.h"
 
-#include <stdio.h>
-#include <string.h>
-#include <vector>
 #include <assert.h>
+#include <array>
+#include <atomic>
+#include <deque>
+#include <mutex>
+#include <string>
 
 #if defined __EMSCRIPTEN__
     #include <emscripten.h>
     #include <emscripten/fetch.h>
 #else
-    #include <iostream>
-    #include <fstream>
-#endif
+    #include <stdio.h>
+    #include <sys/stat.h>
+    #include "ThreadPool.h"
 
+    using namespace ut::ThreadPool;
+#endif
 
 namespace Unity { namespace Tiny { namespace IO
 {
@@ -20,70 +24,74 @@ namespace Unity { namespace Tiny { namespace IO
     {
         Request(int index = -1) : mIndex(index) {}
 
-        int mIndex;
-        void* mpPayload = nullptr; // platform specific
+        uint64_t mJobId; // platform specific
+        void* mpPayload = nullptr;
         size_t mPayloadSize = 0;
+        int mIndex;
         Status mStatus = Status::NotStarted;
         ErrorStatus mErrorStatus = ErrorStatus::None;
     }; 
 
     class RequestPool
     {
-        const int kGrowSize = 64;
+        static const int kGrowSizeExponent = 6; 
+        static const int kGrowSize = 1 << kGrowSizeExponent;
+        static_assert((kGrowSize & 0x1) == 0, "kGrowSize must be a power of 2");
 
     public:
         RequestPool()
         {
-            mRequests.reserve(kGrowSize);
-            mFreeRequests.reserve(kGrowSize);
-
-            // Create Request 0 but don't add it to the free list as that index is reserved as invalid
-            mRequests.push_back({ 0 });
-
-            for (int i = 1; i < kGrowSize; ++i)
+            mRequests.emplace_front();
+            for (int i = 0; i < kGrowSize; ++i)
             {
-                mRequests.push_back({i});
+                mRequests[0][i].mIndex = i;
                 mFreeRequests.push_back(i);
             }
         }
 
         int GetRequestIndex()
         {
+            std::lock_guard<std::mutex> lock(mLock);
             if (mFreeRequests.empty())
             {
-                int origSize = (int) mRequests.capacity();
+                int origSize = (int) mRequests.size() * kGrowSize;
                 int newSize = (int) origSize + kGrowSize;
+                int index = mRequests.size();
 
-                mRequests.reserve(newSize);
-                mFreeRequests.reserve(newSize);
+                mRequests.emplace_back();
 
-                for (int i = origSize; i < newSize; ++i)
+                for (int i = 0; i < kGrowSize; ++i)
                 {
-                    mRequests.push_back({i});
-                    mFreeRequests.push_back(i);
+                    int newRequestIndex = origSize + i;
+                    mRequests[index][i].mIndex = newRequestIndex;
+                    mFreeRequests.push_back(newRequestIndex);
                 }
             }
 
-            int requestIndex = mFreeRequests.back();
-            assert(requestIndex != 0); // 0 is reserved so ensure we never return it
-            mFreeRequests.pop_back();
+            int requestIndex = mFreeRequests.front();
+            assert(requestIndex >= 0);
+            mFreeRequests.pop_front();
 
             return requestIndex;
         }
 
         Request& GetRequest(int index)
         {
-            return mRequests[index];
+            int dequeIndex = index >> kGrowSizeExponent;
+            int arrayIndex = index & (kGrowSize-1);
+            return mRequests[dequeIndex][arrayIndex];
         }
 
         void FreeRequest(int index)
         {
+            std::lock_guard<std::mutex> lock(mLock);
             mFreeRequests.push_back(index);
         }
 
     private:
-        std::vector<Request> mRequests;
-        std::vector<int> mFreeRequests;
+        std::mutex mLock;
+        std::deque<std::array<Request, kGrowSize>> mRequests;
+        std::deque<int> mFreeRequests;
     };
 
     static RequestPool sRequestPool;
@@ -93,7 +101,8 @@ namespace Unity { namespace Tiny { namespace IO
     {
         Request& request = sRequestPool.GetRequest(requestIndex);
 
-        return (int)request.mStatus;
+        Status status = request.mStatus;
+        return (int) status;
     }
 
     ZEROPLAYER_EXPORT
@@ -104,28 +113,44 @@ namespace Unity { namespace Tiny { namespace IO
         return (int)request.mErrorStatus;
     }
 
-#if defined __EMSCRIPTEN__
-    // Fetch Callbacks
-    static void OnSuccess(emscripten_fetch_t* fetch)
+    ZEROPLAYER_EXPORT
+    void ZEROPLAYER_CALL GetData(int requestIndex, const char** data, int* len)
     {
-        int requestIndex = (int)fetch->userData;
         Request& request = sRequestPool.GetRequest(requestIndex);
 
-        request.mpPayload = fetch;
-        request.mPayloadSize = fetch->numBytes;
-        request.mStatus = Status::Success;
+        if (request.mStatus != Status::Success)
+        {
+            *data = nullptr;
+            *len = 0;
+
+            return;
+        }
+
+        *data = (const char*)request.mpPayload;
+        *len = request.mPayloadSize;
     }
 
-    static void OnError(emscripten_fetch_t* fetch)
+#if defined __EMSCRIPTEN__
+    // Fetch Callbacks
+    static void OnSuccess(emscripten_fetch_t* pFetch)
     {
-        int requestIndex = (int)fetch->userData;
+        int requestIndex = (int)pFetch->userData;
+        Request& request = sRequestPool.GetRequest(requestIndex);
+        request.mStatus = Status::Success;
+        request.mpPayload = (void*) pFetch->data;
+        request.mPayloadSize = pFetch->numBytes;
+    }
+
+    static void OnError(emscripten_fetch_t* pFetch)
+    {
+        int requestIndex = (int)pFetch->userData;
         Request& request = sRequestPool.GetRequest(requestIndex);
 
+        request.mStatus = Status::Failure;
         request.mpPayload = nullptr;
         request.mPayloadSize = 0;
-        request.mStatus = Status::Failure;
 
-        switch (fetch->status)
+        switch (pFetch->status)
         {
             case 404:
                 request.mErrorStatus = ErrorStatus::FileNotFound;
@@ -134,10 +159,6 @@ namespace Unity { namespace Tiny { namespace IO
                 request.mErrorStatus = ErrorStatus::Unknown;
                 break;
         }
-    }
-
-    static void OnProgress(emscripten_fetch_t* fetch)
-    {
     }
 
 
@@ -159,10 +180,9 @@ namespace Unity { namespace Tiny { namespace IO
         attr.attributes = EMSCRIPTEN_FETCH_LOAD_TO_MEMORY;
         attr.onsuccess = OnSuccess;
         attr.onerror = OnError;
-        attr.onprogress = OnProgress;
         attr.userData = (void*)requestIndex;
 
-        emscripten_fetch(&attr, path);
+        request.mJobId = (uint64_t) emscripten_fetch(&attr, path);
 
         return requestIndex;
     }
@@ -170,41 +190,28 @@ namespace Unity { namespace Tiny { namespace IO
     ZEROPLAYER_EXPORT
     void Close(int requestIndex)
     {
-        if (requestIndex == 0)
+        if (requestIndex < 0)
             return;
 
         Request& request = sRequestPool.GetRequest(requestIndex);
+        
+        emscripten_fetch_close((emscripten_fetch_t*)request.mJobId);
+
         request.mpPayload = nullptr;
         request.mPayloadSize = 0;
         request.mStatus = Status::NotStarted;
         request.mErrorStatus = ErrorStatus::None;
 
-        emscripten_fetch_close((emscripten_fetch_t*)request.mpPayload);
-
         assert(request.mIndex == requestIndex);
         sRequestPool.FreeRequest(request.mIndex);
     }
 
-    ZEROPLAYER_EXPORT
-    void GetData(int requestIndex, const char** data, int* len)
-    {
-        Request& request = sRequestPool.GetRequest(requestIndex);
-
-        if (request.mStatus != Status::Success)
-        {
-            *data = nullptr;
-            *len = 0;
-
-            return;
-        }
-
-        *data = ((emscripten_fetch_t*) request.mpPayload)->data;
-        *len  = ((emscripten_fetch_t*) request.mpPayload)->numBytes;
-    }
 #else
     // Async API
     /////////////
 
+#if defined UNITY_ANDROID
+    extern "C" void* loadAsset(const char *path, int *size);
     ZEROPLAYER_EXPORT
     int ZEROPLAYER_CALL RequestAsyncRead(const char* path)
     {
@@ -215,22 +222,15 @@ namespace Unity { namespace Tiny { namespace IO
         request.mErrorStatus = ErrorStatus::None;
 
         // Just do syncrounous IO on native for now
-        std::ifstream fs(path, std::ifstream::in | std::ifstream::binary | std::ifstream::ate);
-
-        if (!fs.is_open())
+        int size;
+        void *data = loadAsset(path, &size);
+        if (data == NULL)
         {
             request.mStatus = Status::Failure;
             request.mErrorStatus = ErrorStatus::FileNotFound;
         }
         else
         {
-            int size = (int) fs.tellg();
-            void* data = malloc(size);
-
-            fs.seekg(0, std::ifstream::beg);
-            fs.read ((char*)data, size);
-            fs.close();
-
             request.mpPayload = data;
             request.mPayloadSize = size;
             request.mStatus = Status::Success;
@@ -238,14 +238,98 @@ namespace Unity { namespace Tiny { namespace IO
 
         return requestIndex;
     }
+#else
+
+    class ReadJob : public Job {
+    public:
+    
+        int mRequestIndex;
+        std::string mPath;
+
+        virtual bool Do()
+        {
+            Request& request = sRequestPool.GetRequest(mRequestIndex);
+
+            // Artifically slow down IO
+#if 0
+            for (int i = 0; i < 20; i++) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(20));
+                progress = i;
+            }
+#endif
+
+            if (abort)
+            {
+                return true;
+            }
+
+            struct stat statBuf;
+            int res = stat(mPath.c_str(), &statBuf);
+
+            FILE* pFile = fopen(mPath.c_str(), "rb");
+            if (!pFile || res != 0)
+            {
+                request.mStatus = Status::Failure;
+                request.mErrorStatus = ErrorStatus::FileNotFound;
+            }
+            else
+            {
+                int size = statBuf.st_size;
+                void* data = malloc(size);
+
+                int bytesRead = fread(data, 1, size, pFile);
+
+                if (bytesRead != size)
+                {
+                    request.mStatus = Status::Failure;
+                }
+                else
+                {
+                    request.mStatus = Status::Success;
+                }
+
+                request.mpPayload = data;
+                request.mPayloadSize = size;
+
+                fclose(pFile);
+            }
+
+            return true;
+        }
+    };
+
+    ZEROPLAYER_EXPORT
+    int ZEROPLAYER_CALL RequestAsyncRead(const char* path)
+    {
+        int requestIndex = sRequestPool.GetRequestIndex();
+        Request& request = sRequestPool.GetRequest(requestIndex);
+
+        request.mStatus = Status::InProgress;
+        request.mErrorStatus = ErrorStatus::None;
+
+        std::unique_ptr<ReadJob> readJob(new ReadJob);
+        readJob->mPath = path;
+        readJob->mRequestIndex = requestIndex;
+
+        request.mJobId = Pool::GetInstance()->Enqueue(std::move(readJob));
+
+        return requestIndex;
+    }
+#endif
 
     ZEROPLAYER_EXPORT
     void ZEROPLAYER_CALL Close(int requestIndex)
     {
-        if (requestIndex == 0)
+        if (requestIndex < 0)
             return;
 
         Request& request = sRequestPool.GetRequest(requestIndex);
+
+#if !defined UNITY_ANDROID
+        auto job = Pool::GetInstance()->CheckAndRemove(request.mJobId);
+        if(job && !job->GetReturnValue())
+            Pool::GetInstance()->Abort(request.mJobId);
+#endif
 
         free(request.mpPayload);
         request.mpPayload = nullptr;
@@ -256,15 +340,5 @@ namespace Unity { namespace Tiny { namespace IO
         assert(request.mIndex == requestIndex);
         sRequestPool.FreeRequest(request.mIndex);
     }
-
-    ZEROPLAYER_EXPORT
-    void ZEROPLAYER_CALL GetData(int requestIndex, const char** data, int* len)
-    {
-        Request& request = sRequestPool.GetRequest(requestIndex);
-
-        *data = (const char*) request.mpPayload;
-        *len = (int) request.mPayloadSize;
-    }
 #endif
 }}} // namespace Unity::Tiny::IO
-

@@ -7,7 +7,7 @@ class CustomizerForTinyHtml : DotsRuntimeCSharpProgramCustomizer
     {
         if (program.FileName == "Unity.Tiny.HTML.dll")
         {
-            program.NativeProgram.Libraries.Add(new NativeProgramAsLibrary(Il2Cpp.LibIL2Cpp));
+            Il2Cpp.AddLibIl2CppAsLibraryFor(program.NativeProgram);
         }
     }
 }
