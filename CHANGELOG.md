@@ -4,6 +4,10 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [0.14.5] - 2019-04-23
+* Fixed tools distribution tool to access the public repository instead of testing
+* Must use latest 2018.3 for best stability. Tiny currently only supports TextMeshPro 1.3.0.
+
 ## [0.14.4] - 2019-04-10
 * Fixed bindings of an entity in the editor when an entity is re-enabled from a disabled state
 
