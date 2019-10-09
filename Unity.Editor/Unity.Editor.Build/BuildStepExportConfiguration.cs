@@ -26,16 +26,9 @@ namespace Unity.Editor.Build
                 {
                     var configEntity = CopyEntity(context.WorldManager.GetConfigEntity(), context.World, tmpWorld);
 
-                    // Insert asset scene before all other startup scenes, if there's any asset
-                    if (AssetEnumerator.GetAllReferencedAssets(context.Project).Count > 0)
+                    if (context.Project.GetStartupScenes().Length == 0)
                     {
-                        Assert.IsTrue(tmpWorld.EntityManager.HasComponent<StartupScenes>(configEntity));
-                        var startupScenes = tmpWorld.EntityManager.GetBuffer<StartupScenes>(configEntity).Reinterpret<Guid>();
-                        if (startupScenes.Length == 0)
-                        {
-                            Debug.LogWarning($"Project {context.Project.Name} contains no startup scenes.");
-                        }
-                        startupScenes.Insert(0, AssetsScene.Guid);
+                        Debug.LogWarning($"Project {context.Project.Name} contains no startup scenes.");
                     }
 
                     // Make sure components not owned by the users are removed if their assemblies are missing

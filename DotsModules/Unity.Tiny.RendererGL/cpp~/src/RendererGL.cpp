@@ -290,6 +290,75 @@ const char RendererPrivateGL::shaderSrcFragmentSlicing[] = R"shader(
         }
     )shader";
 
+const char RendererPrivateGL::shaderSrcVertexTilemap[] = R"shader(
+        #version 100
+        precision highp float;
+        //start
+
+        attribute vec2 a_pos;
+        attribute vec2 a_uv;
+        attribute float a_tileidx;
+
+        varying vec4 v_color;
+        varying vec2 v_uv;
+
+        #define sMaxSpritesPerChunk 16
+        uniform vec4 u_spriterects[sMaxSpritesPerChunk];
+        uniform vec4 u_spritecolors[sMaxSpritesPerChunk];
+        uniform vec2 u_spritepivots[sMaxSpritesPerChunk];
+        uniform vec4 u_mapcolor; 
+
+        uniform mat4 u_tilematrix;
+        uniform mat4 u_objtoworld;
+        uniform vec3 u_camera;
+
+        uniform vec3 u_anchor;
+        uniform vec3 u_cellspacing;
+        uniform vec3 u_cellsize;
+
+        void main() {
+            int idx = int(a_tileidx);
+            v_color = u_spritecolors[idx] * u_mapcolor;
+            // tile space
+            vec3 realpivot = vec3(u_spritepivots[idx] + u_anchor.xy, u_anchor.z);
+            vec4 tilespacepos = vec4(vec3(a_uv,0.0) - realpivot, 1.0); // still 0..1 space 
+            tilespacepos = u_tilematrix * tilespacepos;
+            tilespacepos.xyz += realpivot;
+            // to object space
+            vec3 objspacepos = tilespacepos.xyz * u_cellsize + vec3(a_pos.x,a_pos.y,0.0) * u_cellspacing;
+            vec4 worldpos = u_objtoworld * vec4(objspacepos,1.0);
+            worldpos.z = 1.0; 
+            vec3 pos2d = u_camera * worldpos.xyz;
+            gl_Position = vec4(pos2d.xy,0.0,1.0);
+            // texture coordinates
+            vec4 tr = u_spriterects[idx];
+            tr = vec4(tr.x, 1.0-tr.y, tr.z, -tr.w);
+            v_uv = a_uv*tr.zw + tr.xy;
+        }
+    )shader";
+
+/*
+void
+RendererPrivateGL::addTileVertices(const Tilemap2D::TilemapChunkTilePrivate& tile, TilemapVertex* dest)
+{
+    TilemapVertex v;
+    v.tileidx = tile.spriteidx;
+    v.x = tile.position.x;
+    v.y = tile.position.y;
+    v.u = 0.0f;
+    v.v = 0.0f;
+    dest[0] = v;
+    v.u = 1.0f;
+    v.v = 0.0f;
+    dest[1] = v;
+    v.u = 1.0f;
+    v.v = 1.0f;
+    dest[2] = v;
+    v.u = 0.0f;
+    v.v = 1.0f;
+    dest[3] = v;
+}*/
+
 void
 RendererPrivateGL::addQuadVertices(const Color& color, const DisplayListEntry& de, const Sprite2D* s,
                                    Vertex* dest)

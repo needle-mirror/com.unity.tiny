@@ -8,7 +8,6 @@ using Unity.Tiny.Core2D;
 ///  @module
 ///  @name Unity.Tiny
 /// </summary>
-[assembly:ModuleDescription("Unity.Tiny.UILayout", "Anchor-based and RectTransform UI system")]
 namespace Unity.Tiny.UILayout
 {
     /// <summary>

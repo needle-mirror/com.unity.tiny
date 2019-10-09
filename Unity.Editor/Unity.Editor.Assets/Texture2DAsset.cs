@@ -16,23 +16,17 @@ namespace Unity.Editor.Assets
     [EntityWithComponentsBinding(typeof(Image2D))]
     internal class Texture2DAsset : UnityObjectAsset<UnityEngine.Texture2D>
     {
-        public override AssetInfo GetAssetInfo(IAssetEnumerator ctx, UnityEngine.Texture2D texture)
+        public override AssetInfo GetAssetInfo(IAssetEnumerator context, UnityEngine.Texture2D texture)
         {
             var atlas = texture.GetAtlas();
             if (atlas != null)
             {
-                return new AssetInfo(texture, atlas.name, ctx.GetAssetInfo(atlas));
+                return new AssetInfo(texture, atlas.name, context.GetAssetInfo(atlas));
             }
             else
             {
                 return new AssetInfo(texture, texture.name);
             }
-        }
-
-        public static TextureSettings GetSettings(UnityEngine.Texture2D texture)
-        {
-            // TODO: have per texture settings
-            return Application.AuthoringProject.Settings.DefaultTextureSettings;
         }
 
         internal static bool HasColor(UnityEngine.Texture2D texture)
@@ -156,18 +150,18 @@ namespace Unity.Editor.Assets
 
     internal class Texture2DAssetImporter : UnityObjectAssetImporter<UnityEngine.Texture2D>
     {
-        public override Entity Import(IAssetImporter ctx, UnityEngine.Texture2D texture)
+        public override Entity Import(IAssetImporter context, UnityEngine.Texture2D texture)
         {
-            var entity = ctx.CreateEntity(typeof(Image2D), typeof(Image2DLoadFromFile), typeof(Image2DLoadFromFileImageFile));
+            var entity = context.CreateEntity(typeof(Image2D), typeof(Image2DLoadFromFile), typeof(Image2DLoadFromFileImageFile));
 
-            ctx.SetComponentData(entity, new Image2D()
+            context.SetComponentData(entity, new Image2D()
             {
                 disableSmoothing = texture.filterMode == UnityEngine.FilterMode.Point,
                 imagePixelSize = new Mathematics.float2(texture.width, texture.height),
                 hasAlpha = Texture2DAsset.HasAlpha(texture)
             });
 
-            ctx.SetBufferFromString<Image2DLoadFromFileImageFile>(entity, "Data/" + texture.GetGuid().ToString("N"));
+            context.SetBufferFromString<Image2DLoadFromFileImageFile>(entity, "Data/" + texture.GetGuid().ToString("N"));
 
             return entity;
         }
@@ -177,9 +171,9 @@ namespace Unity.Editor.Assets
     {
         public override uint ExportVersion => 1;
 
-        public override IEnumerable<FileInfo> Export(FileInfo outputFile, UnityEngine.Texture2D texture)
+        public override IEnumerable<FileInfo> Export(IAssetExporter context, FileInfo outputFile, UnityEngine.Texture2D texture)
         {
-            var settings = Texture2DAsset.GetSettings(texture);
+            var settings = context.Settings.DefaultTextureSettings;
             var formatType = Texture2DAsset.RealFormatType(texture, settings);
             switch (formatType)
             {
@@ -197,12 +191,12 @@ namespace Unity.Editor.Assets
             }
         }
 
-        public override Guid GetExportHash(UnityEngine.Texture2D texture)
+        public override Guid GetExportHash(IAssetExporter context, UnityEngine.Texture2D texture)
         {
             var bytes = new List<byte>();
 
             // Add tiny texture settings bytes
-            var settings = Texture2DAsset.GetSettings(texture);
+            var settings = context.Settings.DefaultTextureSettings;
             var settingsJson = UnityEditor.EditorJsonUtility.ToJson(settings);
             bytes.AddRange(Encoding.ASCII.GetBytes(settingsJson));
 

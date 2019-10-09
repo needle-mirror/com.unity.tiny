@@ -9,11 +9,16 @@ using UnityEngine.Assertions;
 namespace Unity.Editor
 {
     [UsedImplicitly]
-    internal class CustomInspectorManager : SessionManager
+    internal class CustomInspectorManager : ISessionManagerInternal
     {
-        public CustomInspectorManager(Session session) : base(session)
+        private Session m_Session;
+
+        public void Load(Session session)
         {
+            m_Session = session;
         }
+
+        public void Unload(Session session) { }
 
         internal IComponentDataElement CreateComponentDataElement<TValue>(NativeArray<Entity> targets, ref TValue value)
         {
@@ -21,13 +26,13 @@ namespace Unity.Editor
             {
                 var inspector = GetCodeInspectorForType<TValue>();
                 var type = typeof(ComponentDataElement<>).MakeGenericType(typeof(TValue));
-                return (IComponentDataElement) Activator.CreateInstance(type, Session, targets, inspector);
+                return (IComponentDataElement) Activator.CreateInstance(type, m_Session, targets, inspector);
             }
             if (typeof(ISharedComponentData).IsAssignableFrom(typeof(TValue)))
             {
                 var inspector = GetSharedComponentInspectorForType<TValue>();
                 var type = typeof(SharedComponentDataElement<>).MakeGenericType(typeof(TValue));
-                return (IComponentDataElement) Activator.CreateInstance(type, Session, targets, inspector);
+                return (IComponentDataElement) Activator.CreateInstance(type, m_Session, targets, inspector);
             }
 
             if (typeof(IDynamicBufferContainer).IsAssignableFrom(typeof(TValue)))
@@ -35,7 +40,7 @@ namespace Unity.Editor
                 var elementType = (value as IDynamicBufferContainer).ElementType;
                 var inspector = GetBufferInspectorForType(elementType);
                 var type = typeof(BufferDataElement<>).MakeGenericType(elementType);
-                return (IComponentDataElement) Activator.CreateInstance(type, Session, targets, inspector);
+                return (IComponentDataElement) Activator.CreateInstance(type, m_Session, targets, inspector);
             }
             throw new NotImplementedException();
         }

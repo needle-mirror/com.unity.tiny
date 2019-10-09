@@ -14,4 +14,4 @@ To add a new watcher to a watch group call **watchChanged** to watch a specific 
 
 _Note: Watchers only register changes at the point where the watching system runs. If a component value is changed back to its original value before the watching system runs, the change will not be picked up._
 
-(See this module's API documentation for more information)
+[See this module's API documentation for more information](../api/Unity.Tiny.Watchers.html)

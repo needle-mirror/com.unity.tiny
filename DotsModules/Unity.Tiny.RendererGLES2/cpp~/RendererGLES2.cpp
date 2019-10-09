@@ -10,6 +10,7 @@
 #include "bind-Unity_Tiny_TextHTML.h"
 #include "bind-Unity_Tiny_Shape2D.h"
 #include "bind-Unity_Tiny_RendererGLES2.h"
+//#include "bind-Unity_Tiny_Tilemap.h"
 
 #include "zeroplayer.h"
 #include "EntityWrappers.h"
@@ -32,6 +33,7 @@ using namespace Unity::Tiny::Text;
 using namespace Unity::Tiny::TextHTML;
 using namespace Unity::Tiny::Rendering;
 using namespace Unity::Tiny::Core;
+//using namespace Unity::Tiny::Tilemap2D;
 
 #if 0 // too slow even for debug :/
 #define AssertGL() Assert(glGetError()==GL_NO_ERROR);
@@ -59,6 +61,7 @@ public:
     } vertexBufferSizeClasses[sMaxSizeClasses];
 
     // maxSolidVertices * 4 * 2   -> solid        524288 -> use separate buffer with subData, not optimized 
+    // maxBatchSize * 4 * 5 * 4   -> tilemap       40960
     // maxBatchSize * 4 * 64      -> sprites      131072
     bool useBufferSubData; // run either using bufferSubData (good on webgl2 and desktop) or using full buffer uploads with double buffered size classes (needed for ios, older mobile)
     bool initialized;
@@ -79,6 +82,7 @@ public:
     void renderSpriteTiled(EntityManager& man, DisplayListEntry& de);
     void renderSpriteSliced(EntityManager& man, DisplayListEntry& de);
     void renderShape(EntityManager& man, DisplayListEntry& de);
+    void renderTilemap(EntityManager& man, DisplayListEntry& de);
     void renderSprites(EntityManager& man, int n, DisplayListEntry* list);
     void renderText(EntityManager& man, DisplayListEntry& de);
     void renderTextWithNativeFont(EntityManager& man, DisplayListEntry& de);
@@ -106,9 +110,11 @@ public:
     SolidShapeShader solidShapeShader;
     TilingShader tilingShader;
     SlicingShader slicingShader;
+    TilemapShader tilemapShader;
     ShaderProgram presentShader;
 
     unsigned int vertexBufferGL;
+    unsigned int tilemapVertexBufferGL;
     unsigned int indexBufferGL;
     unsigned int vertexBufferSolidGL;
     unsigned int indexBufferSolidGL;
@@ -422,6 +428,56 @@ ES2RendererPrivate::renderSpriteTiled(EntityManager& man, DisplayListEntry& de)
     }
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, 0); 
     AssertGL();
+}
+
+void
+ES2RendererPrivate::renderTilemap(EntityManager& man, DisplayListEntry& de)
+{
+    /*
+    const TilemapRenderer* tmr = man.getComponentPtrConstUnsafe<TilemapRenderer>(de.e);
+    const Tilemap* tm = man.getComponentPtrConstUnsafe<Tilemap>(tmr->tilemap);
+    const TilemapPrivate* tmp = man.getComponentPtrConstUnsafe<TilemapPrivate>(tmr->tilemap);
+
+    // draw all chunks
+    Matrix4x4f mtile;
+    mtile.SetTRS(tm->position, tm->rotation, tm->scale);
+    Vector3f spacing = tm->cellGap + tm->cellSize;
+    //js_webgl_begin_tilemap(currentCam, de.finalMatrix.GetPtr(), mtile.GetPtr(), spacing.GetPtr(), tm->cellSize.GetPtr(),
+    //                       tm->anchor.GetPtr(), (const float*)&(tmr->color));
+
+    AssertGL();
+    Vector2f camClip = Vector2f(1.0f / currentCam[0], 1.0f / currentCam[1]);
+    for (int i = 0; i < (int)tmp->chunks.size(); i++) {
+        const TilemapChunkPrivate& tc = tmp->chunks[i];
+        if (BoundsAreOutside(tc.bounds, de.finalMatrix, camClip))
+            continue;
+
+        //js_webgl_tilemap_chunkconstants(tc.nSpriteRects, (const float*)tc.spriteRects, (const float*)tc.spritePivots,
+        //                                (const float*)tc.spriteColors);
+        AssertGL();
+        const Image2D* image = man.getComponentPtrConstUnsafe<Image2D>(tc.image);
+        const Image2DHTML* imagehtml = man.getComponentPtrConstUnsafe<Image2DHTML>(tc.image);
+
+        //js_webgl_setupblending((int)tmr->blending, image->hasAlpha || tmr->color.a != 1.0f || tc.hasAlpha);
+        //js_webgl_update_and_bind_texture(imagehtml->imageIndex, image->disableSmoothing);
+
+
+        // draw
+        int ntiles = (int)tc.tiles.size();
+        AssertGL();
+        Assert(tc.tiles.size() <= sMaxBatchSize);
+        for (int j = 0; j < ntiles; j++)
+            addTileVertices(tc.tiles[j], tilemapVertexBuffer + j * 4);
+
+        if (iswebgl2) {
+            //js_webgl_draw_tilemap_webgl2((const float*)&tilemapVertexBuffer, ntiles);
+        } else {
+            const WebGLVertexBufferSizeClass& v = findSizeClassAndFlipBuffer(ntiles*4*5*4);
+            //js_webgl_draw_tilemap_webgl((const float*)&tilemapVertexBuffer, ntiles, v.sizeBytes, v.jsIndex[v.currentIndex] );
+        }
+    }
+    //js_webgl_end_tilemap();
+    */
 }
 
 void
@@ -769,6 +825,10 @@ ES2RendererPrivate::renderSpriteBatch(int n, DisplayListEntry* list, EntityManag
         for (int i = 0; i < n; i++)
             renderSpriteSliced(man, list[i]);
         return;
+    case DisplayListEntryType::Tilemap:
+        for (int i = 0; i < n; i++)
+            renderTilemap(man, list[i]);
+        return;
     case DisplayListEntryType::Text:
         for (int i = 0; i < n; i++)
             renderText(man, list[i]);
@@ -917,6 +977,40 @@ ES2RendererPrivate::SlicingShader::SlicingShader(ShaderProgram const& p)
     u_innertexrect = glGetUniformLocation(pgm_, "u_innertexrect");
 }
 
+ES2RendererPrivate::TilemapShader::TilemapShader(ShaderProgram const& p)
+    : BasicShader(p)
+{
+    u_spriterects = glGetUniformLocation(pgm_, "u_spriterects[0]");
+    u_spritecolors = glGetUniformLocation(pgm_, "u_spritecolors[0]");
+    u_spritepivots = glGetUniformLocation(pgm_, "u_spritepivots[0]");
+    u_mapcolor = glGetUniformLocation(pgm_, "u_mapcolor");
+
+    u_tilematrix = glGetUniformLocation(pgm_, "u_tilematrix");
+    u_objtoworld = glGetUniformLocation(pgm_, "u_objtoworld");
+
+    u_anchor = glGetUniformLocation(pgm_, "u_anchor");
+    u_cellspacing = glGetUniformLocation(pgm_, "u_cellspacing");
+    u_cellsize = glGetUniformLocation(pgm_, "u_cellsize");
+
+    GLint nu = 0;
+    glGetProgramiv(pgm_, GL_ACTIVE_UNIFORMS, &nu);
+    bool verified = true;
+    for (GLint i = 0; verified && i < nu; i++) {
+        GLsizei ulen;
+        GLint usize;
+        GLenum utype;
+        GLchar uname[256];
+
+        glGetActiveUniform(pgm_, i, sizeof(uname) - 1, &ulen, &usize, &utype, uname);
+
+        if ((std::string(uname) == "u_spriterects[0]") || (std::string(uname) == "u_spritecolors[0]") ||
+            (std::string(uname) == "u_spritepivots[0]")) {
+            //verified = (usize >= TilemapChunkPrivate::sMaxSpritesPerChunk);
+            Assert(verified);
+        }
+    }
+}
+
 void
 ES2RendererPrivate::enableArrays(unsigned int mask)
 {
@@ -1001,6 +1095,10 @@ ES2RendererPrivate::allocVertexBuffer(int sizeInBytes) {
 
 bool
 ES2RendererPrivate::initBuffers() {
+    // tilemap vertex buffer 
+    glGenBuffers(1, &tilemapVertexBufferGL);
+    glBindBuffer(GL_ARRAY_BUFFER, tilemapVertexBufferGL);
+    glBufferData(GL_ARRAY_BUFFER, 5 * sMaxBatchSize * 4 * 4, 0, GL_STREAM_DRAW);
     // sprites static index buffer
     glGenBuffers(1, &indexBufferGL);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferGL);
@@ -1112,6 +1210,9 @@ ES2RendererPrivate::init(EntityManager& w)
     if ((slicingShader = createProgram(shaderSrcVertexSlicing, shaderSrcFragmentSlicing)).id() == 0)
         return false;
 
+    if ((tilemapShader = createProgram(shaderSrcVertexTilemap, shaderSrcFragment)).id() == 0)
+        return false;
+
     AssertGL();
     if (!initBuffers()) {
         ut::log( "Buffers init failed.\n");
@@ -1143,6 +1244,9 @@ ES2RendererPrivate::init(EntityManager& w)
     InitComponentId<GlyphPrivateBuffer>();
     InitComponentId<BitmapFont>();
     InitComponentId<Image2DGLES2>();
+    //InitComponentId<Tilemap>();
+    //InitComponentId<TilemapRenderer>();
+    //InitComponentId<TilemapPrivate>();
 
     ut::log( "ES2 OpenGL init ok.\n");
     initialized = true;

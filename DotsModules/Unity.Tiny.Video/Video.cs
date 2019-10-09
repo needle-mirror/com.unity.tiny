@@ -5,8 +5,6 @@ using Unity.Collections;
 using System;
 using Unity.Authoring.Core;
 
-[assembly: ModuleDescription("Unity.Tiny.Video", "HTML5-based Video playback")]
-[assembly: IncludedPlatform(Platform.Web | Platform.WeChat | Platform.FBInstant)]
 namespace Unity.Tiny.Video
 {
 

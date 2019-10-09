@@ -9,6 +9,7 @@
 #include "zeroplayer.h"
 #include "EntityWrappers.h"
 #include "GeminiMath.h"
+#include "FontSTB.h"
 
 #include <glew.h>
 #include <string>
@@ -19,10 +20,14 @@
 using namespace ut;
 //using namespace ut::arch;
 using namespace ut::Core2D;
+//using namespace ut::Tilemap2D;
 using namespace ut::GLFW;
 using namespace Unity::Tiny::Core2D;
 using namespace Unity::Tiny::Text;
+using namespace Unity::Tiny::TextNative;
+using namespace Unity::TextNative;
 using namespace Unity::Tiny::Rendering;
+
 
 #ifdef _DEBUG
 
@@ -206,6 +211,40 @@ RendererPrivateGL::SlicingShader::SlicingShader(ShaderProgram const& p)
     u_innertexrect = glGetUniformLocation(pgm_, "u_innertexrect");
 }
 
+RendererPrivateGL::TilemapShader::TilemapShader(ShaderProgram const& p)
+    : BasicShader(p)
+{
+    u_spriterects = glGetUniformLocation(pgm_, "u_spriterects[0]");
+    u_spritecolors = glGetUniformLocation(pgm_, "u_spritecolors[0]");
+    u_spritepivots = glGetUniformLocation(pgm_, "u_spritepivots[0]");
+    u_mapcolor = glGetUniformLocation(pgm_, "u_mapcolor");
+
+    u_tilematrix = glGetUniformLocation(pgm_, "u_tilematrix");
+    u_objtoworld = glGetUniformLocation(pgm_, "u_objtoworld");
+
+    u_anchor = glGetUniformLocation(pgm_, "u_anchor");
+    u_cellspacing = glGetUniformLocation(pgm_, "u_cellspacing");
+    u_cellsize = glGetUniformLocation(pgm_, "u_cellsize");
+
+    GLint nu = 0;
+    glGetProgramiv(pgm_, GL_ACTIVE_UNIFORMS, &nu);
+    bool verified = true;
+    for (GLint i = 0; verified && i < nu; i++) {
+        GLsizei ulen;
+        GLint usize;
+        GLenum utype;
+        GLchar uname[256];
+
+        glGetActiveUniform(pgm_, i, sizeof(uname) - 1, &ulen, &usize, &utype, uname);
+
+        if ((std::string(uname) == "u_spriterects[0]") || (std::string(uname) == "u_spritecolors[0]") ||
+            (std::string(uname) == "u_spritepivots[0]")) {
+            //verified = (usize >= TilemapChunkPrivate::sMaxSpritesPerChunk);
+            //Assert(verified);
+        }
+    }
+}
+
 void
 GLFWLRendererPrivate::beginScene(EntityManager& w, const Vector2f& targetSize)
 {
@@ -352,6 +391,8 @@ GLFWLRendererPrivate::beginCamera(EntityManager& man, Entity e, const Vector2f& 
     currentCam[2] = 1.0f;
     if (inrtt)
         currentCam[1] = -currentCam[1];
+
+    currentViewScaleX = actualTargetSize.x * .5f * currentCam[0];
 }
 
 void
@@ -488,84 +529,240 @@ GLFWLRendererPrivate::renderSpriteTiled(EntityManager& man, DisplayListEntry& de
 }
 
 void
-GLFWLRendererPrivate::renderText(EntityManager& man, DisplayListEntry& de)
+GLFWLRendererPrivate::renderTilemap(EntityManager& man, DisplayListEntry& de)
 {
     GLErrorChecker checker(__LOCATION__);
 
-    if (man.hasComponent<Text2DStyleNativeFont>(de.e)) {
-        //TODO replace with a log warning
-        ut::log("Native fonts are not supported yet in GL Native");
-    }
-    else if (man.hasComponent<Text2DStyleBitmapFont>(de.e))
-    {
-        const Text2DRenderer* textRenderer = man.getComponentPtrConstUnsafe<Text2DRenderer>(de.e);
-        const Text2DStyle* style = man.getComponentPtrConstUnsafe<Text2DStyle>(de.e);
-
-        const Text2DPrivateBitmap* textPrivate = man.getComponentPtrConstUnsafe<Text2DPrivateBitmap>(de.e);
-        const GlyphPrivate* glyphBuffer = (GlyphPrivate*)man.getBufferElementDataPtrConstUnsafe<GlyphPrivateBuffer>(de.e);
-        int glyphCount = man.getBufferElementDataLength<GlyphPrivateBuffer>(de.e);
-
-        if (glyphCount == 0)
-            return;
-
-        const Text2DStyleBitmapFont* bitmapStyle = man.getComponentPtrConstUnsafe<Text2DStyleBitmapFont>(de.e);
-        const BitmapFont* bitmapFont = man.getComponentPtrConstUnsafe<BitmapFont>(bitmapStyle->font);
-        const TextureGL* tex = man.getComponentPtrConstUnsafe<TextureGL>(bitmapFont->textureAtlas);
-        const Image2D* bitmapFontImage = man.getComponentPtrConstUnsafe<Image2D>(bitmapFont->textureAtlas);
-
-        // setup drawing state
-        setupBlending(textRenderer->blending, bitmapFontImage->hasAlpha || style->color.a != 1.0f);
-        glBindTexture(GL_TEXTURE_2D, tex->glTexId);
-        glUseProgram(basicShader.id());
-        glUniform3fv(basicShader.u_camera, 1, currentCam);
-
-        Matrix4x4f finalMatrix;
-        std::memcpy(static_cast<void*>(&finalMatrix), static_cast<void*>(&de.finalMatrix), 16 * sizeof(float));
-
-        for (int i = 0; i < glyphCount; i++)
-        {
-            GlyphPrivate glyph = *(glyphBuffer + i);
-            //Adjust position and dim per glyph according to pivot position and text origin (originY is baseline)
-            float transX = de.inBounds.width * textRenderer->pivot.x;
-            float transY = de.inBounds.height * textRenderer->pivot.y - std::abs(bitmapFont->descent);
-            Rectf rec;
-            rec.x = (glyph.position.x - glyph.ci.width / 2 - transX) * textPrivate->fontScale.x + de.inBounds.x;
-            rec.y = (glyph.position.y - glyph.ci.height / 2 - transY)* textPrivate->fontScale.y + de.inBounds.y;
-            rec.width = glyph.ci.width * textPrivate->fontScale.x;
-            rec.height = glyph.ci.height * textPrivate->fontScale.y;
-
-            addTextQuadVertices(textRenderer, finalMatrix, rec, &glyph, style->color, vertexBuffer + i * 4);
-        }
-
-        // upload
-        glBindBuffer(GL_ARRAY_BUFFER, vbos[VB_Default]);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(Vertex)*glyphCount * 4, vertexBuffer);
-
-        glBindVertexArray(vaos[VB_Default]);
-
-        // draw
-        glDrawElements(GL_TRIANGLES, glyphCount * 6, GL_UNSIGNED_SHORT, nullptr);
-    }
-
 #if 0
-    Text2DRenderer* textRenderer = e.getComponentPtr<Text2DRenderer>();
-    Text2DGLFW* tex = e.getComponentPtr<Text2DGLFW>();
+    // World *world = e.world();
 
-    Assert(textRenderer && tex);
+    const TilemapRenderer* tmr = man.getComponentPtrConstUnsafe<TilemapRenderer>(de.e);
+    const Tilemap* tm = man.getComponentPtrConstUnsafe<Tilemap>(tmr->tilemap);
+    const TilemapPrivate* tmp = man.getComponentPtrConstUnsafe<TilemapPrivate>(tmr->tilemap);
 
-    //Use basic shader for now
-    bindShader(basicShader);
-    //Setup blending
-    //setupBlending(BlendOp::Alpha, tex->style.color.a != 1.0f);
-    //Bind sf::texture
-    bindTexture(tex->rtex->getTexture());
+    enableVertexBufferTileMaps();
+    glUseProgram(tilemapShader.id());
+    glUniform3fv(tilemapShader.u_camera, 1, currentCam);
+    // draw all chunks (TODO: clip)
+    // obj->world matrix
+    glUniformMatrix4fv(tilemapShader.u_objtoworld, 1, false, de.finalMatrix.GetPtr());
+    // tile space matrix
+    Matrix4x4f mtile;
+    mtile.SetTRS(tm->position, tm->rotation, tm->scale);
+    glUniformMatrix4fv(tilemapShader.u_tilematrix, 1, false, mtile.GetPtr());
+    // bonus transforms
+    glUniform3fv(tilemapShader.u_cellspacing, 1, (tm->cellGap + tm->cellSize).GetPtr());
+    glUniform3fv(tilemapShader.u_cellsize, 1, (tm->cellSize).GetPtr());
+    glUniform3fv(tilemapShader.u_anchor, 1, tm->anchor.GetPtr());
+    glUniform4fv(tilemapShader.u_mapcolor, 1, (const float*)&(tmr->color));
 
-    // Create vertex buffer
-    addQuadVertices(textRenderer, de, vertexBuffer);
-
-    // Draw elements
-    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, indexBuffer);
+    Vector2f camClip = Vector2f(1.0f / currentCam[0], 1.0f / currentCam[1]);
+    for (int i = 0; i < (int)tmp->chunks.size(); i++) {
+        const TilemapChunkPrivate& tc = tmp->chunks[i];
+        if (BoundsAreOutside(tc.bounds, de.finalMatrix, camClip))
+            continue;
+#if 0
+        // debug chunk colors
+        static const float sdbgcolors[8*4] = { 1,1,1,1,  1,0,0,1,  0,1,0,1,  0,0,1,1,
+                                               1,1,0,1,  0,1,1,1,  1,0,1,1,  .5f,.5f,.5f,1 };
+        glUniform4fv(tilemapShader.uniformLocs["u_mapcolor"], 1, sdbgcolors+(i%8)*4 );
 #endif
+        glUniform4fv(tilemapShader.u_spriterects, tc.nSpriteRects, (const float*)tc.spriteRects);
+        glUniform2fv(tilemapShader.u_spritepivots, tc.nSpriteRects,
+                     (const float*)tc.spritePivots); // <- do we need to use those at all?
+        glUniform4fv(tilemapShader.u_spritecolors, tc.nSpriteRects, (const float*)tc.spriteColors);
+
+        const Image2D* image = man.getComponentPtrConstUnsafe<Image2D>(tc.image);
+        const TextureGL* tex = man.getComponentPtrConstUnsafe<TextureGL>(tc.image);
+        setupBlending(tmr->blending, image->hasAlpha || tmr->color.a != 1.0f || tc.hasAlpha);
+        glBindTexture(GL_TEXTURE_2D, tex->glTexId);
+        // draw
+        Assert(tc.tiles.size() <= sMaxBatchSize);
+        for (int j = 0; j < (int)tc.tiles.size(); j++)
+            addTileVertices(tc.tiles[j], tilemapVertexBuffer + j * 4);
+        glDrawElements(GL_TRIANGLES, (int)tc.tiles.size() * 6, GL_UNSIGNED_SHORT, indexBuffer);
+    }
+    enableVertexBuffer();
+#endif
+}
+
+void
+GLFWLRendererPrivate::renderText(EntityManager& man, DisplayListEntry& de)
+{
+    GLErrorChecker checker(__LOCATION__);
+    if (man.hasComponent<Text2DStyleNativeFont>(de.e)) {
+        renderTextWithNativeFont(man, de);
+    } else if (man.hasComponent<Text2DStyleBitmapFont>(de.e)) {
+        renderTextWithBitmapFont(man, de);
+    }
+}
+
+void GLFWLRendererPrivate::uploadTextTexture(int fontHandle, Text2DPrivateCacheNative* textCache, const wchar_t* textBuffer, int textLength, float size, float width, float height)
+{
+    //Create first a new one if undefined
+    if (textCache->glTexId == -1)
+    {
+        unsigned int index = 0;
+        glGenTextures(1, &index);
+        glBindTexture(GL_TEXTURE_2D, index);
+        if (glGetError() != GL_NO_ERROR) {
+            printf("GL texture upload error!");
+        }
+        textCache->glTexId = index;
+    }
+
+    //Create or Update existing texture if needed
+    createOrUpdateTextImage(fontHandle, textCache->glTexId, textBuffer, textLength, size, width, height);
+
+    // Get the bitmap
+    TextImage* t = getTextImage(textCache->glTexId);
+    unsigned char* bitmap = t->get();
+    if (bitmap == 0)
+        return;
+
+    //Convert Alpha8 texture to RGBA texture
+    int textSize = t->width * t->height;
+    std::vector<unsigned char> rgbaBitmap(textSize * 4);
+    for (int i = 0; i < textSize; i++)
+    {
+        rgbaBitmap[i*4] = bitmap[i];
+        rgbaBitmap[i*4 + 1] = bitmap[i];
+        rgbaBitmap[i*4 + 2] = bitmap[i];
+        rgbaBitmap[i*4 + 3] = bitmap[i];
+    }
+
+    // Upload the bitmap
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, (int)width, (int)height, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgbaBitmap.data());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+void
+GLFWLRendererPrivate::renderTextWithNativeFont(EntityManager &man, DisplayListEntry& de)
+{
+    const Text2DRenderer* textRenderer = man.getComponentPtrConstUnsafe<Text2DRenderer>(de.e);
+    const Text2DStyle* style = man.getComponentPtrConstUnsafe<Text2DStyle>(de.e);
+    const Text2DStyleNativeFont* nativeFontStyle = man.getComponentPtrConstUnsafe<Text2DStyleNativeFont>(de.e);
+    Text2DPrivateCacheNative* textCache = man.getComponentPtrUnsafe<Text2DPrivateCacheNative>(de.e);
+    const Text2DPrivateNative* textPrivate = man.getComponentPtrConstUnsafe<Text2DPrivateNative>(de.e);
+
+    //String are UTf16 encoded in c# in 16 bits
+    const wchar_t* textBuffer = (wchar_t*)man.getBufferElementDataPtrConstUnsafe<TextString>(de.e);
+    int textLength = man.getBufferElementDataLength<TextString>(de.e);
+    if (textLength == 0)
+        return;
+
+    Matrix4x4f finalMatrix;
+    std::memcpy(static_cast<void*>(&finalMatrix), static_cast<void*>(&de.finalMatrix), 16 * sizeof(float));
+
+    //Scale font size and text dimension
+    float scale = currentViewScaleX * finalMatrix.MaxAbsScale();
+    float width = textPrivate->bounds.width * scale;
+    float height = textPrivate->bounds.height * scale;
+    static const float maxTextureSize = 2048.f;
+
+    if (width > height && width > maxTextureSize)
+    {
+        scale = scale * (maxTextureSize / width);
+        float ratio = height / width;
+        width = maxTextureSize;
+        height = width * ratio;
+    }
+    else if (height > width && height > maxTextureSize)
+    {
+        scale = scale * (maxTextureSize / height);
+        float ratio = width / height;
+        height = maxTextureSize;
+        width = height * ratio;
+    }
+    float fontSize = textPrivate->size * scale;
+
+    //Create or update text texture if needed
+    const NativeFontPrivate* nfPriv = man.getComponentPtrConstUnsafe<NativeFontPrivate>(nativeFontStyle->font);
+    if (textCache->dirty)
+    {
+        uploadTextTexture(nfPriv->fontHandle, textCache, textBuffer, textLength, fontSize, width, height);
+    }
+
+    Assert(textCache->glTexId != -1);
+
+    setupBlending(textRenderer->blending, true);
+    glBindTexture(GL_TEXTURE_2D, textCache->glTexId);
+    glUseProgram(basicShader.id());
+    glUniform3fv(basicShader.u_camera, 1, currentCam);
+
+    Rectf rec;
+    rec.x = de.inBounds.x - de.inBounds.width * textRenderer->pivot.x;
+    rec.y = de.inBounds.y - de.inBounds.height * textRenderer->pivot.y;
+    rec.width = de.inBounds.width;
+    rec.height = de.inBounds.height;
+
+    addTextQuadVertices(textRenderer, finalMatrix, rec, nullptr, style->color, vertexBuffer);
+
+    // upload
+    glBindBuffer(GL_ARRAY_BUFFER, vbos[VB_Default]);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(Vertex) * 4, vertexBuffer);
+
+    glBindVertexArray(vaos[VB_Default]);
+
+    // draw
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, nullptr);
+}
+
+void
+GLFWLRendererPrivate::renderTextWithBitmapFont(EntityManager& man, DisplayListEntry& de)
+{
+    const Text2DRenderer* textRenderer = man.getComponentPtrConstUnsafe<Text2DRenderer>(de.e);
+    const Text2DStyle* style = man.getComponentPtrConstUnsafe<Text2DStyle>(de.e);
+
+    const Text2DPrivateBitmap* textPrivate = man.getComponentPtrConstUnsafe<Text2DPrivateBitmap>(de.e);
+    const GlyphPrivate* glyphBuffer = (GlyphPrivate*)man.getBufferElementDataPtrConstUnsafe<GlyphPrivateBuffer>(de.e);
+    int glyphCount = man.getBufferElementDataLength<GlyphPrivateBuffer>(de.e);
+
+    if (glyphCount == 0)
+        return;
+
+    const Text2DStyleBitmapFont* bitmapStyle = man.getComponentPtrConstUnsafe<Text2DStyleBitmapFont>(de.e);
+    const BitmapFont* bitmapFont = man.getComponentPtrConstUnsafe<BitmapFont>(bitmapStyle->font);
+    const TextureGL* tex = man.getComponentPtrConstUnsafe<TextureGL>(bitmapFont->textureAtlas);
+    const Image2D* bitmapFontImage = man.getComponentPtrConstUnsafe<Image2D>(bitmapFont->textureAtlas);
+
+    // setup drawing state
+    setupBlending(textRenderer->blending, bitmapFontImage->hasAlpha || style->color.a != 1.0f);
+    glBindTexture(GL_TEXTURE_2D, tex->glTexId);
+    glUseProgram(basicShader.id());
+    glUniform3fv(basicShader.u_camera, 1, currentCam);
+
+    Matrix4x4f finalMatrix;
+    std::memcpy(static_cast<void*>(&finalMatrix), static_cast<void*>(&de.finalMatrix), 16 * sizeof(float));
+
+    for (int i = 0; i < glyphCount; i++)
+    {
+        GlyphPrivate glyph = *(glyphBuffer + i);
+        //Adjust position and dim per glyph according to pivot position and text origin (originY is baseline)
+        float transX = de.inBounds.width * textRenderer->pivot.x;
+        float transY = de.inBounds.height * textRenderer->pivot.y - std::abs(bitmapFont->descent);
+        Rectf rec;
+        rec.x = (glyph.position.x - glyph.ci.width / 2 - transX) * textPrivate->fontScale.x + de.inBounds.x;
+        rec.y = (glyph.position.y - glyph.ci.height / 2 - transY)* textPrivate->fontScale.y + de.inBounds.y;
+        rec.width = glyph.ci.width * textPrivate->fontScale.x;
+        rec.height = glyph.ci.height * textPrivate->fontScale.y;
+
+        addTextQuadVertices(textRenderer, finalMatrix, rec, &glyph, style->color, vertexBuffer + i * 4);
+    }
+
+    // upload
+    glBindBuffer(GL_ARRAY_BUFFER, vbos[VB_Default]);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(Vertex)*glyphCount * 4, vertexBuffer);
+
+    glBindVertexArray(vaos[VB_Default]);
+
+    // draw
+    glDrawElements(GL_TRIANGLES, glyphCount * 6, GL_UNSIGNED_SHORT, nullptr);
 }
 
 void
@@ -622,6 +819,10 @@ GLFWLRendererPrivate::renderSpriteBatch(int n, DisplayListEntry* list, EntityMan
     case DisplayListEntryType::SlicedSprite:
         for (int i = 0; i < n; i++)
             renderSpriteSliced(man, list[i]);
+        return;
+    case DisplayListEntryType::Tilemap:
+        for (int i = 0; i < n; i++)
+            renderTilemap(man, list[i]);
         return;
     case DisplayListEntryType::Text:
         for (int i = 0; i < n; i++)
@@ -681,6 +882,9 @@ GLFWLRendererPrivate::initShaders()
         return false;
 
     if ((slicingShader = createProgram(shaderSrcVertexSlicing, shaderSrcFragmentSlicing)).id() == 0)
+        return false;
+
+    if ((tilemapShader = createProgram(shaderSrcVertexTilemap, shaderSrcFragment)).id() == 0)
         return false;
 
     if ((presentShader = createProgram(
@@ -773,6 +977,20 @@ GLFWLRendererPrivate::initBuffers()
     glEnableVertexAttribArray(3);
     glEnableVertexAttribArray(4);
 
+    // Tilemaps
+    glBindVertexArray(vaos[VB_Tilemaps]);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
+    glBindBuffer(GL_ARRAY_BUFFER, vbos[VB_Tilemaps]);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(tilemapVertexBuffer), tilemapVertexBuffer, GL_DYNAMIC_DRAW);
+
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(TilemapVertex), (void*)offsetof(TilemapVertex, x));
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(TilemapVertex), (void*)offsetof(TilemapVertex, u));
+    glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(TilemapVertex), (void*)offsetof(TilemapVertex, tileidx));
+
+    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+    glEnableVertexAttribArray(2);
+
     // Shape2D
     glBindVertexArray(vaos[VB_Shape2D]);
     glBindBuffer(GL_ARRAY_BUFFER, vbos[VB_Shape2D]);
@@ -812,6 +1030,9 @@ GLFWLRendererPrivate::init(EntityManager& w)
         InitComponentId<Sprite2DRenderer>();
         InitComponentId<Sprite2DBorder>();
         InitComponentId<Sprite2D>();
+        //InitComponentId<Tilemap>();
+        //InitComponentId<TilemapRenderer>();
+        //InitComponentId<TilemapPrivate>();
         InitComponentId<Text2DRenderer>();
         InitComponentId<Text2DStyleNativeFont>();
         InitComponentId<Text2DStyleBitmapFont>();
@@ -822,6 +1043,9 @@ GLFWLRendererPrivate::init(EntityManager& w)
         InitComponentId<Text2DPrivateBitmap>();
         InitComponentId<GlyphPrivateBuffer>();
         InitComponentId<BitmapFont>();
+        InitComponentId<NativeFontLoadFromFileName>();
+        InitComponentId<Text2DPrivateCacheNative>();
+        InitComponentId<NativeFontPrivate>();
         presentXd = 0;
         presentYd = 0;
         presentWd = 0;
@@ -1073,7 +1297,6 @@ RenderTarget::readFromGPU()
 // --------------------------------------------------------- BIND TO C# --------------------------------------------------
 
 static GLFWLRendererPrivate sInst;
-
 
 ZEROPLAYER_EXPORT
 void ZEROPLAYER_CALL init_rendererglfw(void *emHandle) {

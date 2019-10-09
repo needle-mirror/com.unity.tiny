@@ -6,6 +6,7 @@ using Unity.Authoring.ChangeTracking;
 using Unity.Authoring.Core;
 using Unity.Authoring.Hashing;
 using Unity.Editor.Bindings;
+using Unity.Editor.Bridge;
 using Unity.Editor.Extensions;
 using Unity.Editor.MenuItems;
 using Unity.Entities;
@@ -16,12 +17,12 @@ using UnityEditor.IMGUI.Controls;
 using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
-using Object = UnityEngine.Object;
+using GUIUtility = UnityEngine.GUIUtility;
 
 namespace Unity.Editor.Hierarchy
 {
     [InitializeOnLoad]
-    internal class EntityHierarchyWindow : EditorWindow
+    internal class EntityHierarchyWindow : EntityHierarchyWindowInternal
     {
         private const string k_AuthoringRoot = "AuthoringContext";
         private const string k_NonAuthoringRoot = "NonAuthoringContext";
@@ -46,6 +47,7 @@ namespace Unity.Editor.Hierarchy
         private UnityEngine.Rect m_LastHoverRect;
         private VisualElement m_FooterRoot;
         private IMGUIContainer m_ConfigRoot;
+        private ToolbarSearchField m_SearchField;
 
         [SerializeField] private TreeViewState m_ContentState;
         private List<Guid> TransferSelection { get; } = new List<Guid>();
@@ -138,6 +140,8 @@ namespace Unity.Editor.Hierarchy
         {
             wantsMouseMove = true;
             wantsMouseEnterLeaveWindow = true;
+
+            titleContent = EditorGUIUtility.TrIconContent("UnityEditor.SceneHierarchyWindow");
             titleContent.text = "Hierarchy";
             s_ActiveHierarchies.Add(this);
             CreateWindow();
@@ -196,8 +200,8 @@ namespace Unity.Editor.Hierarchy
             m_CreateButton = rootVisualElement.Q<ToolbarMenu>(k_CreateButton);
             m_FooterRoot = rootVisualElement.Q<VisualElement>(k_FooterRoot);
 
-            var search = rootVisualElement.Q<ToolbarSearchField>("SearchField");
-            search.RegisterValueChangedCallback(
+            m_SearchField = rootVisualElement.Q<ToolbarSearchField>("SearchField");
+            m_SearchField.RegisterValueChangedCallback(
                 evt =>
                 {
                     if (null == m_TreeView)
@@ -282,7 +286,6 @@ namespace Unity.Editor.Hierarchy
         private void ExecuteCommands()
         {
             Event evt = Event.current;
-
             var execute = evt.type == EventType.ExecuteCommand;
             if (!execute && evt.type != EventType.ValidateCommand)
                 return;
@@ -315,6 +318,55 @@ namespace Unity.Editor.Hierarchy
 
                 evt.Use();
                 GUIUtility.ExitGUI();
+            }
+
+            if (evt.commandName == "Find")
+            {
+                m_SearchField.GetInput().Focus();
+            }
+
+            //Preventing unpredicted behavior for the selection based actions
+            if (SelectionUtility.IsEntitySelectionEmpty())
+            {
+                return;
+            }
+
+            if (evt.commandName == "Duplicate")
+            {
+                var worldManager = Session.GetManager<IWorldManager>();
+                var entityManager = worldManager.EntityManager;
+                using (var pooled = ListPool<ISceneGraphNode>.GetDisposable())
+                {
+                    var toSelect = pooled.List;
+                    var selection = SelectionUtility.GetEntityGuidSelection();
+
+                    foreach (var group in selection.Select(worldManager.GetEntityFromGuid)
+                        .GroupBy(e => entityManager.GetSharedComponentData<SceneGuid>(e)))
+                    {
+                        var graph = SceneManager.GetGraphForScene(group.Key);
+                        var list = group.Select(graph.FindNode).Cast<ISceneGraphNode>().ToList();
+                        toSelect.AddRange(graph.Duplicate(list));
+                    }
+                    SelectOnNextPaint(toSelect.OfType<EntityNode>().Select(e => e.Guid).ToList());
+                }
+            }
+
+            if (evt.commandName == "Delete")
+            {
+                var session = Application.AuthoringProject?.Session;
+                var worldManager = session.GetManager<IWorldManager>();
+                var m_EntityManager = worldManager.EntityManager;
+                var m_SceneManager = session.GetManager<IEditorSceneManagerInternal>();
+
+                var selection = SelectionUtility.GetEntityGuidSelection();
+                foreach (var group in selection.Select(worldManager.GetEntityFromGuid).GroupBy(e => m_EntityManager.GetSharedComponentData<SceneGuid>(e)))
+                {
+                    var graph = m_SceneManager.GetGraphForScene(group.Key);
+                    foreach (var node in group.Select(graph.FindNode))
+                    {
+                        graph.Delete(node);
+                    }
+                }
             }
         }
 

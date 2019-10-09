@@ -1,9 +1,8 @@
-#Components
+# Components
 
-Components in Tiny Mode act as data containers only.
-To create Components in Tiny Mode, you must create a C# script which implements the `IComponentData` interface.
+Components in DOTS Mode act as data containers only. To create Components in DOTS Mode, you must create a C# script which implements the IComponentData interface.
 
-The example below shows a component which 
+The example below shows a component which contains the data for three float variables.
 
 ```
 using Unity.Entities;

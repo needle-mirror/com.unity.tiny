@@ -20,6 +20,7 @@ namespace Unity.Tiny.Core2D
         SlicedSprite,
         Shape,
         GroupOnly,
+        Tilemap,
         Text
     }
 

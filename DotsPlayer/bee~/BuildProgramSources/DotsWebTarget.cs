@@ -7,6 +7,7 @@ using Unity.BuildSystem.NativeProgramSupport;
 abstract class DotsWebTarget : DotsBuildSystemTarget
 {
 	protected abstract bool UseWasm { get; }
+	protected override bool CanRunMultiThreadedJobs { get; } = false;
 
 	protected override NativeProgramFormat GetExecutableFormatForConfig(DotsConfiguration config)
 	{

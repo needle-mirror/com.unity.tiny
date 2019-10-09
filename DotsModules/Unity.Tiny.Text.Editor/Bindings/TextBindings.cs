@@ -7,6 +7,7 @@ using Unity.Tiny.Core2D;
 using UnityEngine;
 using UnityEngine.UI;
 using Color = UnityEngine.Color;
+using Unity.Editor.Extensions;
 
 namespace Unity.Tiny.Text.Editor
 {
@@ -75,7 +76,15 @@ namespace Unity.Tiny.Text.Editor
         protected override void Transfer(Entity entity, TText text, IBindingContext context)
         {
             var text2DStyleBitmapFont = context.GetComponentData<Text2DStyleBitmapFont>(entity);
-            text.font = context.GetUnityObject<TMP_FontAsset>(text2DStyleBitmapFont.font);
+            try
+            {
+                text.font = context.GetUnityObject<TMP_FontAsset>(text2DStyleBitmapFont.font);
+            }
+            catch(NullReferenceException)
+            {
+                //TMP throws a NullReferenceException if TMP Essentials has not been imported. Catch the exception for now to ask to import it again
+                Debug.LogError("This project contains some TextMeshPro assets and requires TMP Essentials. Make sure to import TMP Essentials: Close the project first, and go to Window->TextMeshPro->Import TMP Essential resources");
+            }
         }
     }
 
@@ -127,6 +136,30 @@ namespace Unity.Tiny.Text.Editor
                 value = Mathf.Clamp(value, 0.0f, 1.0f);
                 mat.SetFloat("_FaceDilate", value);
                 textMesh.fontMaterial = mat;
+            }
+
+            //Add components for native builds if missing
+            if(!context.HasComponent<NativeFontLoadFromFile>(entity))
+                context.AddComponentData(entity, new NativeFontLoadFromFile());
+
+            if (!context.HasComponent<NativeFontLoadFromFileName>(entity))
+                context.AddBuffer<NativeFontLoadFromFileName>(entity);
+
+            bool bold = text2DStyleNativeFont.weight >= 700;
+            var packagePath = Unity.Editor.Application.PackageDirectory.FullName.ToForwardSlash();
+            switch (nativeFont.name)
+            {
+                case FontName.SansSerif:
+                    context.SetBufferFromString<NativeFontLoadFromFileName>(entity, TtfFonts.GetSansTtfFontPath(packagePath, italic, bold));
+                    break;
+                case FontName.Serif:
+                    context.SetBufferFromString<NativeFontLoadFromFileName>(entity, TtfFonts.GetSerifTtfFontPath(packagePath, italic, bold));
+                    break;
+                case FontName.Monospace:
+                    context.SetBufferFromString<NativeFontLoadFromFileName>(entity, TtfFonts.GetMonoTtfFontPath(packagePath, italic, bold));
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException();
             }
         }
     }

@@ -6,6 +6,7 @@
 #include "zeroplayer.h"
 
 #include "RendererGL.h"
+#include "bind-Unity_Tiny_TextNative.h"
 
 using namespace Unity::Entities;
 using namespace ut::Core2D;
@@ -55,6 +56,7 @@ public:
 
     //Image readResultingImage();
 private:
+    void enableVertexBufferTileMaps();
     void enableVertexBuffer();
     void disableVertexBuffer();
     void renderSprites(EntityManager& man, int n, Unity::Tiny::Core2D::DisplayListEntry* list);
@@ -62,7 +64,11 @@ private:
     void renderShape(EntityManager& man, Unity::Tiny::Core2D::DisplayListEntry& de);
     void renderSpriteSliced(EntityManager& man, Unity::Tiny::Core2D::DisplayListEntry& de);
     void renderSpriteTiled(EntityManager& man, Unity::Tiny::Core2D::DisplayListEntry& de);
+    void renderTilemap(EntityManager& man, Unity::Tiny::Core2D::DisplayListEntry& de);
     void renderText(EntityManager& man, Unity::Tiny::Core2D::DisplayListEntry& de);
+    void renderTextWithNativeFont(EntityManager& man, Unity::Tiny::Core2D::DisplayListEntry& de);
+    void renderTextWithBitmapFont(EntityManager& man, Unity::Tiny::Core2D::DisplayListEntry& de);
+    void uploadTextTexture(int fontHandle, Unity::Tiny::TextNative::Text2DPrivateCacheNative* textCache, const wchar_t* textBuffer, int textLength, float size, float width, float height);
 
     void updateRTT(EntityManager& w); // adds components
 
@@ -76,8 +82,9 @@ private:
     bool initialized;
     uint16_t indexBuffer[sMaxBatchSize * 6];
     float currentCam[3];
+    float currentViewScaleX; // for generating the text texture bitmap at the right scale (font size, and bitmap size)
 
-    enum { VB_Quad = 0, VB_Default, VB_Shape2D, VB_Count };
+    enum { VB_Quad = 0, VB_Default, VB_Tilemaps, VB_Shape2D, VB_Count };
     GLuint vaos[VB_Count], vbos[VB_Count], ibo;
 
     RenderTarget renderTarget;
@@ -88,6 +95,7 @@ private:
     TilingShader tilingShader;
 
     SlicingShader slicingShader;
+    TilemapShader tilemapShader;
     ShaderProgram presentShader;
 
     int presentX, presentY, presentW, presentH;

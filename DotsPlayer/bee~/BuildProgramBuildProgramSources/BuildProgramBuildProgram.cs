@@ -47,11 +47,12 @@ class BuildProgramBuildProgram
             Path = path[0],
             Sources = {
                 bee.Parent.Combine("BuildProgramSources"),
-                asmDefFullPaths.SelectMany(a=>HarvestBeeFilesFrom(a.Parent))
+                asmDefFullPaths.SelectMany(a=>HarvestBeeFilesFrom(a.Parent)),
+                HarvestBeeFilesFrom(bee.Parent.Parent.Combine("LowLevelSupport~","Unity.ZeroJobs"))
             },
             Framework = {Framework.Framework471},
             LanguageVersion = "7.2",
-            References = { bee },
+            References = { bee, new SystemReference("System.Xml.Linq")},
             ProjectFile = { Path = NPath.CurrentDirectory.Combine("buildprogram.gen.csproj")}
         };
         

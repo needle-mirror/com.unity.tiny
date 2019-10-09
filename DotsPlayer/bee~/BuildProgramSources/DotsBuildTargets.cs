@@ -25,7 +25,20 @@ namespace DotsBuildTargets
                 nativeToolchain: ToolChain,
                 scriptingBackend: ScriptingBackend,
                 enableUnityCollectionsChecks: true,
+                enableManagedDebugging: false,
                 identifier: $"{Identifier}-debug",
+                multiThreadedJobs: CanRunMultiThreadedJobs,
+                executableFormat: GetExecutableFormatForConfig(DotsConfiguration.Debug));
+
+            yield return new DotsRuntimeCSharpProgramConfiguration(
+                csharpCodegen: CSharpCodeGen.Debug,
+                cppCodegen: CodeGen.Release,
+                nativeToolchain: ToolChain,
+                scriptingBackend: ScriptingBackend,
+                enableUnityCollectionsChecks: true,
+                enableManagedDebugging: true,
+                identifier: $"{Identifier}-mdb",
+                multiThreadedJobs: CanRunMultiThreadedJobs,
                 executableFormat: GetExecutableFormatForConfig(DotsConfiguration.Debug));
 
             yield return new DotsRuntimeCSharpProgramConfiguration(
@@ -34,7 +47,9 @@ namespace DotsBuildTargets
                 nativeToolchain: ToolChain,
                 scriptingBackend: ScriptingBackend,
                 enableUnityCollectionsChecks: true,
+                enableManagedDebugging: false,
                 identifier: $"{Identifier}-develop",
+                multiThreadedJobs: CanRunMultiThreadedJobs,
                 executableFormat: GetExecutableFormatForConfig(DotsConfiguration.Develop));
 
             yield return new DotsRuntimeCSharpProgramConfiguration(
@@ -43,9 +58,13 @@ namespace DotsBuildTargets
                 nativeToolchain: ToolChain,
                 scriptingBackend: ScriptingBackend,
                 enableUnityCollectionsChecks: false,
+                enableManagedDebugging: false,
                 identifier: $"{Identifier}-release",
+                multiThreadedJobs: CanRunMultiThreadedJobs,
                 executableFormat: GetExecutableFormatForConfig(DotsConfiguration.Release));
         }
+
+        protected virtual bool CanRunMultiThreadedJobs => false; // Disabling by default; Eventually: ScriptingBackend == ScriptingBackend.Dotnet;
 
         protected abstract string Identifier { get; }
         protected abstract ToolChain ToolChain { get; }

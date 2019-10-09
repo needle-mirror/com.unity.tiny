@@ -1,11 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
-using System.Linq;
 using Unity.Authoring;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
-using Unity.Editor.Extensions;
 using Unity.Editor.Persistence;
 using Unity.Entities;
 using Unity.Properties;
@@ -158,21 +156,57 @@ namespace Unity.Editor
             {
                 var assembly = Assembly;
                 var assemblyName = assembly.GetName().Name;
-                subRoot.contentContainer.Add(new Label($"Assembly {assemblyName} is not included in the project"));
+
+                var iconMessageContainer = new VisualElement();
+                iconMessageContainer.AddToClassList("unity-ecs-component-type-icon-message__container");
+                var image = new Image
+                {
+                    image = EditorGUIUtility.IconContent("d_console.erroricon.sml").image,
+                    scaleMode = ScaleMode.ScaleToFit
+                };
+                iconMessageContainer.Add(image);
+
+                var iconMessage = new Label($"The {assemblyName} module is not included in your open project.");
+                iconMessage.AddToClassList("unity-ecs-component-type-icon-message__message");
+                iconMessageContainer.Add(iconMessage);
+
+                subRoot.contentContainer.Add(iconMessageContainer);
+
                 var file = Application.AuthoringProject.GetAssemblyDefinitionFile();
                 var relativePath = AssetDatabaseUtility.GetPathRelativeToProjectPath(file.FullName);
                 var projectAssembly = AssetDatabase.LoadAssetAtPath(relativePath, typeof(Object));
                 if (null != projectAssembly)
                 {
+                    var buttonContainer = new VisualElement();
+                    buttonContainer.AddToClassList("unity-ecs-component-type-missing-button__container");
+                    var buttonAdd = new Button(() =>
+                    {
+                        var asmdef = AssemblyDefinition.Deserialize(file);
+                        List<string> references = new List<string>(asmdef.references);
+                        references.Add(assemblyName);
+                        asmdef.references = references.ToArray();
+                        asmdef.Serialize(file);
+                        AssetDatabase.ImportAsset(relativePath);
+                        AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate);
+                    })
+                    {
+                        text = "Add module and recompile"
+                    };
+
+                    buttonAdd.AddToClassList("unity-ecs-component-type-missing__button");
+                    buttonContainer.Add(buttonAdd);
+
                     var button = new Button(() => { Selection.activeInstanceID = projectAssembly.GetInstanceID(); })
                     {
                         text = "Go to project's assembly"
                     };
                     button.AddToClassList("unity-ecs-component-type-missing__button");
-                    subRoot.contentContainer.Add(button);
+                    buttonContainer.Add(button);
+
+                    subRoot.contentContainer.Add(buttonContainer);
                 }
 
-                AddToClassList("unity-ecs--component-type-missing");
+                AddToClassList("unity-background");
             }
 
             context.PopParent(subRoot);

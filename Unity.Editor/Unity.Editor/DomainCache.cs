@@ -43,7 +43,7 @@ namespace Unity.Editor
             {
                 return;
             }
-            var file = project.GetProjectFile();
+
             var set = new HashSet<Assembly>(project.IncludedAssemblies());
             k_IncludedAssembliesPerProject[project.Guid] = set;
         }

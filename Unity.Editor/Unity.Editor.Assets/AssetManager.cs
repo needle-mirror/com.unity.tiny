@@ -27,7 +27,7 @@ namespace Unity.Editor
         void Refresh();
     }
 
-    internal class AssetManager : SessionManager, IAssetManagerInternal
+    internal class AssetManager : ISessionManagerInternal, IAssetManagerInternal
     {
         private class AssetReferenceCache : IDisposable
         {
@@ -56,21 +56,20 @@ namespace Unity.Editor
 
         private AssetReferenceCache m_Cache;
         private NativeHashMap<Entity, Entity> m_PostProcessRemap;
+        private Session m_Session;
 
         private IWorldManager WorldManager { get; set; }
         private AssetImporter AssetImporter { get; set; }
         private EntityManager EntityManager => WorldManager.EntityManager;
 
-        public AssetManager(Session session) : base(session)
+        public void Load(Session session)
         {
-        }
+            m_Session = session;
 
-        public override void Load()
-        {
-            WorldManager = Session.GetManager<IWorldManager>();
+            WorldManager = session.GetManager<IWorldManager>();
             Assert.IsNotNull(WorldManager);
 
-            AssetImporter = new AssetImporter(Session);
+            AssetImporter = new AssetImporter(session);
 
             m_PostProcessRemap = new NativeHashMap<Entity, Entity>(8, Allocator.Persistent);
 
@@ -83,7 +82,7 @@ namespace Unity.Editor
             AssetPostprocessorCallbacks.RegisterToPostProcessEnded(HandleEndPostprocess);
         }
 
-        public override void Unload()
+        public void Unload(Session session)
         {
             m_PostProcessRemap.Dispose();
 
@@ -245,7 +244,7 @@ namespace Unity.Editor
         {
             var assets = new List<Object>();
 
-            AddChildrenRecursive(assets, new AssetEnumerator(Session).GetAssetInfo(asset));
+            AddChildrenRecursive(assets, new AssetEnumerator(m_Session).GetAssetInfo(asset));
 
             var entities = new NativeArray<Entity>(assets.Count, Allocator.Temp);
 
@@ -276,7 +275,7 @@ namespace Unity.Editor
         {
             var assetWithChildren = new List<Object>();
 
-            AddChildrenRecursive(assetWithChildren, new AssetEnumerator(Session).GetAssetInfo(asset));
+            AddChildrenRecursive(assetWithChildren, new AssetEnumerator(m_Session).GetAssetInfo(asset));
 
             foreach (var obj in assetWithChildren)
             {

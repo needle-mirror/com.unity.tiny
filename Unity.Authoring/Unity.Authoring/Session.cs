@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Text;
 #endif
 
 namespace Unity.Authoring
@@ -21,56 +22,33 @@ namespace Unity.Authoring
 #if !NET_DOTS
         private static class Cache
         {
-            private delegate ISessionManager ConstructManagerHandler(Session session);
-            private static readonly List<ConstructManagerHandler> s_ManagerConstructors;
+            private static readonly Type[] s_AllManagerTypes;
 
-            static Cache()
+            private readonly static List<Type> m_UserDefinedManagers = new List<Type>();
+            private readonly static List<Type> m_TooManyCtorManagers = new List<Type>();
+            private readonly static List<Type> m_NoParametersLessCtorManagers = new List<Type>();
+
+            static Cache() 
             {
-                Type[] constructorParameters = { typeof(Session) };
-                var constructMethod = typeof(Cache).GetMethod(nameof(ConstructFromType), BindingFlags.NonPublic | BindingFlags.Static);
-
-                if (null == constructMethod)
-                {
-                    throw new NullReferenceException($"Failed to resolve method {nameof(Cache)}.{nameof(ConstructFromType)}");
-                }
-
-                var managerTypes = GetSessionManagerTypes()
-                    .Where(type => null == type.GetInterface(nameof(IIgnoreSessionManager)))
-                    .ToArray();
-
-                s_ManagerConstructors = new List<ConstructManagerHandler>(managerTypes.Length);
-
-                for (var i = 0; i < managerTypes.Length; ++i)
-                {
-                    var type = managerTypes[i];
-
-                    if (type.IsAbstract || type.IsGenericType)
-                    {
-                        continue;
-                    }
-
-                    if (null == type.GetConstructor(constructorParameters))
-                    {
-                        throw new ArgumentException($"{type.FullName}: A Session manager needs to have a constructor taking an {nameof(Session)} parameter.");
-                    }
-
-                    s_ManagerConstructors.Add((ConstructManagerHandler) Delegate.CreateDelegate(typeof(ConstructManagerHandler), constructMethod.MakeGenericMethod(type)));
-                }
+                s_AllManagerTypes = GetSessionManagerTypes();
             }
 
-            private static IEnumerable<Type> GetSessionManagerTypes()
+            private static Type[] GetSessionManagerTypes()
             {
                 var authoringAssembly = typeof(Session).Assembly;
                 var friendAssemblyNames = authoringAssembly.GetCustomAttributes()
                                                            .OfType<InternalsVisibleToAttribute>()
                                                            .Select(x => x.AssemblyName);
 
-
                 return GetLoadableTypes(authoringAssembly)
-                    .Concat(friendAssemblyNames.Select(TryLoadAssembly)
-                        .Where(a => a != null)
-                        .SelectMany(GetLoadableTypes))
-                    .Where(x => typeof(ISessionManager).IsAssignableFrom(x));
+                            .Concat(friendAssemblyNames.Select(TryLoadAssembly)
+                            .Where(a => a != null)
+                            .SelectMany(GetLoadableTypes))
+                            .Where(x => !x.IsAbstract
+                                        && !x.IsGenericType
+                                        && !typeof(IIgnoreSessionManager).IsAssignableFrom(x)
+                                        && typeof(ISessionManager).IsAssignableFrom(x))
+                            .ToArray();
             }
 
             private static Assembly TryLoadAssembly(string assemblyName)
@@ -97,26 +75,90 @@ namespace Unity.Authoring
                 }
             }
 
-            public static void PopulateFromCache(Session session, out List<ISessionManagerInternal> managers)
+            public static ISessionManagerInternal[] PopulateFromCache(SessionFactoryFilter filter)
             {
-                managers = new List<ISessionManagerInternal>(s_ManagerConstructors.Count);
-                for (var i = 0; i < s_ManagerConstructors.Count; ++i)
-                {
-                    var manager = s_ManagerConstructors[i].Invoke(session);
+                var managerInstances = new List<ISessionManagerInternal>();
 
-                    if (!(manager is ISessionManagerInternal internalManager))
+                m_UserDefinedManagers.Clear();
+                m_TooManyCtorManagers.Clear();
+                m_NoParametersLessCtorManagers.Clear();
+
+                foreach (var type in filter.FilterManagers(s_AllManagerTypes))
+                {
+                    if (IsValidManagerType(type, out var reason))
                     {
-                        throw new Exception($"{manager.GetType()}: A Session manager must implement ISessionManagerInternal");
+                        managerInstances.Add((ISessionManagerInternal)Activator.CreateInstance(type));
+                    }
+                    else
+                    {
+                        switch (reason)
+                        {
+                            case SessionManagerRejectionReason.UserDefined:
+                                m_UserDefinedManagers.Add(type);
+                                break;
+                            case SessionManagerRejectionReason.TooManyConstructors:
+                                m_TooManyCtorManagers.Add(type);
+                                break;
+                            case SessionManagerRejectionReason.NoParameterlessConstructor:
+                                m_NoParametersLessCtorManagers.Add(type);
+                                break;
+                        }
+                    }
+                }
+
+                if (m_UserDefinedManagers.Any())
+                {
+                    Debug.LogWarning($"User-defined session managers are not currently supported. The following session manager(s) have been ignored: [{string.Join(" ,", m_UserDefinedManagers.Select(t => t.Name))}]");
+                }
+
+                if (m_TooManyCtorManagers.Any() || m_NoParametersLessCtorManagers.Any())
+                {
+                    var message = new StringBuilder().AppendLine($"Invalid internal session managers detected:");
+                    if (m_TooManyCtorManagers.Any())
+                    {
+                        message.AppendLine($"    - Session managers must not define multiple constructors. The following session manager(s) have been ignored: [{string.Join(" ,", m_TooManyCtorManagers.Select(t => t.Name))}]");
+                    }
+                    if (m_NoParametersLessCtorManagers.Any())
+                    {
+                        message.AppendLine($"    - Session managers must define 0 or 1 parameterless constructor. The following session manager(s) have been ignored: [{string.Join(" ,", m_NoParametersLessCtorManagers.Select(t => t.Name))}]");
                     }
 
-                    managers.Add(internalManager);
+                    throw new ArgumentException(message.ToString());
                 }
+
+                return managerInstances.ToArray();
             }
 
-            private static ISessionManager ConstructFromType<TManager>(Session session)
-                where TManager : SessionManager
+            private static bool IsValidManagerType(Type type, out SessionManagerRejectionReason reason)
             {
-                return (ISessionManager) Activator.CreateInstance(typeof(TManager), session);
+                if (!typeof(ISessionManagerInternal).IsAssignableFrom(type))
+                {
+                    reason = SessionManagerRejectionReason.UserDefined;
+                    return false;
+                }
+
+                var constructors = type.GetConstructors();
+                if (constructors.Length > 1)
+                {
+                    reason = SessionManagerRejectionReason.TooManyConstructors;
+                    return false;
+                }
+
+                if (constructors.Length == 1 && constructors[0].GetParameters().Length > 0)
+                {
+                    reason = SessionManagerRejectionReason.NoParameterlessConstructor;
+                    return false;
+                }
+
+                reason = default;
+                return true;
+            }
+
+            private enum SessionManagerRejectionReason
+            {
+                UserDefined,
+                TooManyConstructors,
+                NoParameterlessConstructor
             }
         }
 #endif
@@ -125,22 +167,16 @@ namespace Unity.Authoring
 
         internal static IEnumerable<Session> Sessions => s_Sessions;
 
-        private readonly List<ISessionManagerInternal> m_Managers;
+        private readonly ISessionManagerInternal[] m_Managers;
 
-        internal static Session Create()
-        {
-            var session = new Session();
-            s_Sessions.Add(session);
-            SessionCreated(session);
-            return session;
-        }
-
-        private Session()
+        internal Session(SessionFactoryFilter filter)
         {
 #if !NET_DOTS
-            Cache.PopulateFromCache(this, out m_Managers);
+            m_Managers = Cache.PopulateFromCache(filter);
 #endif
             LoadManagers();
+            s_Sessions.Add(this);
+            SessionCreated(this);
         }
 
         public void Dispose()
@@ -158,31 +194,36 @@ namespace Unity.Authoring
         /// <returns>An instance of <see cref="TManager"/> or null</returns>
         public TManager GetManager<TManager>() where TManager : class, ISessionManager
         {
-            for (var i = 0; i < m_Managers.Count; ++i)
+#if !NET_DOTS
+            foreach (var manager in m_Managers)
             {
-                if (m_Managers[i] is TManager manager)
+                if (manager is TManager typedManager)
                 {
-                    return manager;
+                    return typedManager;
                 }
             }
-
+#endif
             return null;
         }
 
         private void LoadManagers()
         {
-            for (var i = 0; i < m_Managers.Count; ++i)
+#if !NET_DOTS
+            foreach (var manager in m_Managers)
             {
-                m_Managers[i].Load();
+                manager.Load(this);
             }
+#endif
         }
 
         private void UnloadManagers()
         {
-            for (var i = m_Managers.Count - 1; i >= 0; --i)
+#if !NET_DOTS
+            for (var i = m_Managers.Length - 1; i >= 0; --i)
             {
-                m_Managers[i].Unload();
+                m_Managers[i].Unload(this);
             }
+#endif
         }
     }
 }

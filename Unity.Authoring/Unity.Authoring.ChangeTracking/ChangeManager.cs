@@ -31,7 +31,7 @@ namespace Unity.Authoring.ChangeTracking
         event Action EndChangeTracking;
     }
 
-    internal class ChangeManager: SessionManager, IChangeManager
+    internal class ChangeManager: ISessionManagerInternal, IChangeManager
     {
         private struct OrderedChangeEventHandler
         {
@@ -58,12 +58,12 @@ namespace Unity.Authoring.ChangeTracking
         /// <summary>
         /// Ordered set of callbacks.
         /// </summary>
-        private readonly List<OrderedChangeEventHandler> m_Callbacks;
+        private readonly List<OrderedChangeEventHandler> m_Callbacks = new List<OrderedChangeEventHandler>();
 
         /// <summary>
         /// Copy of the callback set used to support mutation during iteration.
         /// </summary>
-        private readonly List<OrderedChangeEventHandler> m_CallbacksBuffer;
+        private readonly List<OrderedChangeEventHandler> m_CallbacksBuffer = new List<OrderedChangeEventHandler>();
 
         /// <summary>
         /// Optimization to only re-sort the callbacks when they are added or removed.
@@ -73,15 +73,9 @@ namespace Unity.Authoring.ChangeTracking
         public event Action BeginChangeTracking = delegate { };
         public event Action EndChangeTracking = delegate { };
 
-        public ChangeManager(Session session) : base(session)
+        public void Load(Session session)
         {
-            m_Callbacks = new List<OrderedChangeEventHandler>();
-            m_CallbacksBuffer = new List<OrderedChangeEventHandler>();
-        }
-
-        public override void Load()
-        {
-            m_WorldManager = Session.GetManager<IWorldManagerInternal>();
+            m_WorldManager = session.GetManager<IWorldManagerInternal>();
 
             if (null == m_WorldManager)
             {
@@ -91,7 +85,7 @@ namespace Unity.Authoring.ChangeTracking
             m_WorldChangeTracker = new WorldChangeTracker(m_WorldManager.World, Allocator.Persistent);
         }
 
-        public override void Unload()
+        public void Unload(Session session)
         {
             m_WorldManager = null;
 

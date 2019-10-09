@@ -167,8 +167,10 @@ namespace Unity.Editor.Persistence
             string[] movedAssets,
             string[] movedFromAssetPaths)
         {
-            if (Application.AuthoringProject == null)
+            if (Project.Projects.Count == 0)
+            {
                 return;
+            }
 
             PostProcessStarted();
 

@@ -35,7 +35,7 @@ std::mutex sourceListMutex;
 
 uint32_t clipIDPool = 0;
 std::map<uint32_t, SoundClip*> clipMap;
-uint32_t soundIDPool = 0;
+uint32_t sourceIDPool = 0;
 std::map<uint32_t, SoundSource*> sourceMap;
 
 ma_device_config maConfig;
@@ -168,6 +168,7 @@ uint32_t ZEROPLAYER_CALL startLoad(const char* fname)
     return clipIDPool;
 }
 
+// Testing
 ZEROPLAYER_EXPORT
 int32_t ZEROPLAYER_CALL numSourcesAllocated()
 {
@@ -177,6 +178,7 @@ int32_t ZEROPLAYER_CALL numSourcesAllocated()
     return (int) sourceMap.size();
 }
 
+// Testing
 ZEROPLAYER_EXPORT
 int32_t ZEROPLAYER_CALL numClipsAllocated()
 {
@@ -185,6 +187,17 @@ int32_t ZEROPLAYER_CALL numClipsAllocated()
     LOGE("numClipsAllocated=%d", (int)clipMap.size());
     return (int) clipMap.size();
 }
+
+// Testing
+ZEROPLAYER_EXPORT
+int32_t ZEROPLAYER_CALL sourcePoolID()
+{
+    flushMemory();
+    std::lock_guard<std::mutex> lock(sourceListMutex);
+    LOGE("sourcePoolID=%d", (int)sourcePoolID);
+    return sourceIDPool;
+}
+
 
 ZEROPLAYER_EXPORT
 int ZEROPLAYER_CALL checkLoading(uint32_t id)
@@ -420,9 +433,9 @@ uint32_t ZEROPLAYER_CALL playSource(uint32_t clipID, float volume, bool loop)
     if (source->getStatus() == SoundSource::SoundStatus::Playing) 
     {
         std::lock_guard<std::mutex> lock(sourceListMutex);
-        sourceMap[++soundIDPool] = source;
-        LOGE("SoundSource %d created", soundIDPool);
-        return soundIDPool;
+        sourceMap[++sourceIDPool] = source;
+        LOGE("SoundSource %d created", sourceIDPool);
+        return sourceIDPool;
     }
     source->stop();
     delete source;

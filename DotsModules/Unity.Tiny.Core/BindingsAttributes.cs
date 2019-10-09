@@ -15,18 +15,6 @@ namespace Unity.Tiny
     }
 
     [AttributeUsage(AttributeTargets.Assembly, AllowMultiple = true)]
-    public class ModuleDescriptionAttribute : Attribute
-    {
-        public ModuleDescriptionAttribute(string mod, string desc)
-        {
-            ThisModule = mod;
-            Description = desc;
-        }
-
-        public string ThisModule, Description;
-    }
-
-    [AttributeUsage(AttributeTargets.Assembly, AllowMultiple = true)]
     public class ModuleHideInEditorAttribute : Attribute
     {
         public ModuleHideInEditorAttribute(string mod)
@@ -46,29 +34,6 @@ namespace Unity.Tiny
         iOS = 16,
         Android = 32
     }
-
-    [AttributeUsage(AttributeTargets.All, AllowMultiple = true)]
-    public class IncludedPlatformAttribute : Attribute
-    {
-        public IncludedPlatformAttribute(Platform p)
-        {
-            Platform = p;
-        }
-
-        public Platform Platform;
-    }
-
-    [AttributeUsage(AttributeTargets.All, AllowMultiple = true)]
-    public class ExcludedPlatformAttribute : Attribute
-    {
-        public ExcludedPlatformAttribute(Platform p)
-        {
-            Platform = p;
-        }
-
-        public Platform Platform;
-    }
-
 }
 
 

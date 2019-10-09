@@ -23,11 +23,22 @@ namespace Unity.Editor.Build
             [SerializeField] public string name = null;
         }
 
-        public static void WriteAll(string directory)
+        public static void WriteAll(string directory, string selectedConfig = null)
         {
             WriteAsmdefsJson(directory);
             WriteBeeConfigFile(directory);
             WriteBeeBatchFile(directory);
+            if (selectedConfig != null)
+                WriteSelectedConfigFile(directory, selectedConfig);
+        }
+
+        private static void WriteSelectedConfigFile(NPath directory, string selectedConfig)
+        {
+            var file = directory.Combine("selectedconfig.json").MakeAbsolute();
+            file.UpdateAllText(JsonSerialization.Serialize(new SelectedConfigJson()
+            {
+                Config = selectedConfig
+            }));
         }
 
         private static void WriteBeeBatchFile(NPath directory)
@@ -148,13 +159,20 @@ namespace Unity.Editor.Build
                 BuildProgramBuildProgramFiles = new List<string>
                 {
                     Path.GetFullPath("Packages/com.unity.tiny/DotsPlayer/bee~/BuildProgramBuildProgramSources")
-                }
+                },
+                MultiDag = true
             }));
         }
 
         private struct BeeConfig
         {
             public List<string> BuildProgramBuildProgramFiles;
+            public bool MultiDag;
         }
+    }
+
+    internal class SelectedConfigJson
+    {
+        public string Config;
     }
 }

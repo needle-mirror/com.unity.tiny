@@ -137,6 +137,12 @@ namespace Unity.Serialization
         /// </summary>
         public static unsafe ParseError StrToFloat32(char* c, int len, out float output)
         {
+            if (MatchesNaN(c, len))
+            {
+                output = float.NaN;
+                return ParseError.None;
+            }
+            
             output = 0;
             var value = 0f;
             var sign = 1;
@@ -150,6 +156,12 @@ namespace Unity.Serialization
                 }
 
                 i++;
+            }
+
+            if (MatchesInfinity(c + i, len - i))
+            {
+                output = sign == -1 ? float.NegativeInfinity : float.PositiveInfinity;
+                return ParseError.None;
             }
 
             ulong decimalMantissa = 0;
@@ -352,6 +364,48 @@ namespace Unity.Serialization
         private static bool IsDigit(char c)
         {
             return c >= '0' && c <= '9';
+        }
+        
+        internal static unsafe bool MatchesNaN(char* c, int len)
+        {
+            var expected = stackalloc char[3] {'n', 'a', 'n'};
+            return Matches(c, len, expected, 3);
+        }
+        
+        internal static unsafe bool MatchesInfinity(char* c, int len)
+        {
+            var expected = stackalloc char[8] {'i', 'n', 'f', 'i', 'n', 'i', 't', 'y'};
+            return Matches(c, len, expected, 8);
+        }
+        
+        internal static unsafe bool MatchesTrue(char* c, int len)
+        {
+            var expected = stackalloc char[4] {'t', 'r', 'u', 'e'};
+            return Matches(c, len, expected, 4);
+        }
+
+        internal static unsafe bool MatchesFalse(char* c, int len)
+        {
+            var expected = stackalloc char[5] {'f', 'a', 'l', 's', 'e'};
+            return Matches(c, len, expected, 5);
+        }
+        
+        internal static unsafe bool Matches(char* inputAnyCase, int inputLen, char* expectedLowerCase, int expectedLen)
+        {
+            if (inputLen != expectedLen)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < inputLen; i++)
+            {
+                if ((inputAnyCase[i] | 32) != expectedLowerCase[i])
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
     }
 }

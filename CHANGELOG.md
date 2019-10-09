@@ -5,6 +5,26 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 # Changelog
 
+## [0.16.0] - 2019-06-14
+* Several improvements when generating a DOTS C# project solution
+
+### [Samples]
+* Fixed Browser Interop sample
+* Updated Hello World sample
+  
+### [Editor]
+* Fixed delete shortcuts that were missing in OSX
+* Fixed duplicate disabled entity bug
+* Creating a new empty child Entity by hierarchy drop-down menu will now properly expand the node 
+* Dragging scenes inside the unused portion of the hierarchy will not load it
+* Fixed WebAssembly.instantiateStreaming bug on Safari (iOS or desktop)
+* Text: Fix issue with text and TMP resources not imported
+* TextMesh Pro should be initialized without the user needing to import assets
+
+### [Runtime]
+* Adding the AudioSourceStart component will now restart the clip
+* Volume field of AudioSource is now a slider
+
 ## [0.15.3] - 2019-05-31
 * First Tiny C# preview release. This release is **not backward-compatible** with previous releases.
 * Must use Unity 2019.2.0b3 and above

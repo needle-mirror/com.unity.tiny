@@ -11,7 +11,8 @@
         "Unity.Tiny.UILayout.Editor",
         "Unity.Tiny.Core",
         "Unity.Mathematics",
-        "Unity.ugui"
+        "Unity.ugui",
+        "Unity.TextMeshPro.Editor"
     ],
     "includePlatforms": [
         "Editor"

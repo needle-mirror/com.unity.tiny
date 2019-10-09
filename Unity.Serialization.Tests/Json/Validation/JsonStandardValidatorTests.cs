@@ -72,5 +72,64 @@ namespace Unity.Serialization.Json.Tests
                 }
             }
         }
+        
+        [Test]
+        [TestCase(@"{""test"": NaN}", true)]
+        [TestCase(@"{""test"": nan}", true)]
+        [TestCase(@"{""test"": n}", false)]
+        [TestCase(@"{""test"": na}", false)]
+        [TestCase(@"{""test"": naa}", false)]
+        [TestCase(@"{""test"": naan}", false)]
+        [TestCase(@"{""test"": nann}", false)]
+        public unsafe void JsonStandardValidator_Validate_NaN(string json, bool valid)
+        {
+            using (var validator = new JsonStandardValidator())
+            {
+                fixed (char* ptr = json)
+                {
+                    var result = validator.Validate(new UnsafeBuffer<char> {Buffer = ptr, Length = json.Length}, 0, json.Length);
+                    Debug.Log(result);
+                    Assert.AreEqual(valid, result.IsValid());
+                }
+            }
+        }
+        
+        [Test]
+        [TestCase(@"{""test"": Null}", true)]
+        [TestCase(@"{""test"": null}", true)]
+        [TestCase(@"{""test"": n}", false)]
+        [TestCase(@"{""test"": nu}", false)]
+        [TestCase(@"{""test"": nul}", false)]
+        [TestCase(@"{""test"": nulll}", false)]
+        public unsafe void JsonStandardValidator_Validate_Null(string json, bool valid)
+        {
+            using (var validator = new JsonStandardValidator())
+            {
+                fixed (char* ptr = json)
+                {
+                    var result = validator.Validate(new UnsafeBuffer<char> {Buffer = ptr, Length = json.Length}, 0, json.Length);
+                    Debug.Log(result);
+                    Assert.AreEqual(valid, result.IsValid());
+                }
+            }
+        }
+        
+        [Test]
+        [TestCase(@"{""test"": Infinity}", true)]
+        [TestCase(@"{""test"": -Infinity}", true)]
+        [TestCase(@"{""test"": inf}", false)]
+        [TestCase(@"{""test"": -inf}", false)]
+        public unsafe void JsonStandardValidator_Validate_Infinity(string json, bool valid)
+        {
+            using (var validator = new JsonStandardValidator())
+            {
+                fixed (char* ptr = json)
+                {
+                    var result = validator.Validate(new UnsafeBuffer<char> {Buffer = ptr, Length = json.Length}, 0, json.Length);
+                    Debug.Log(result);
+                    Assert.AreEqual(valid, result.IsValid());
+                }
+            }
+        }
     }
 }

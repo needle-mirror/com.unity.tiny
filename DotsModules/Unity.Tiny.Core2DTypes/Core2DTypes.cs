@@ -9,7 +9,6 @@ using Unity.Authoring.Core;
 /// @module
 /// @name Unity.Tiny
 /// </summary>
-[assembly: ModuleDescription("Unity.Tiny.Core2DTypes", "Core 2D basic shared types")]
 namespace Unity.Tiny.Core2D
 {
     /// <summary>

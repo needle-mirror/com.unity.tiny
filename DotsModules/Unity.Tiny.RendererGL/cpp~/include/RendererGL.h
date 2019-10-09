@@ -58,8 +58,16 @@ protected:
         float x, y;
     };
 
+    struct /*alignas(32)*/ TilemapVertex
+    {
+        float x, y;
+        float u, v;
+        float tileidx;
+    };
+
     Vertex vertexBuffer[sMaxBatchSize * 4];
     SolidVertex solidVertexBuffer[sMaxSolidVertices];
+    TilemapVertex tilemapVertexBuffer[sMaxBatchSize * 4];
 
     struct Slice9Constants
     {
@@ -84,7 +92,11 @@ protected:
     static const char shaderSrcFragmentTiling[];
     static const char shaderSrcFragmentSlicing[];
     static const char shaderSrcVertexSlicing[];
+    static const char shaderSrcVertexTilemap[];
 
+    // TODO: add back in text & tilemap helper functions once modules are ready
+
+    //void addTileVertices(const Unity::Tiny::Tilemap2D::TilemapChunkTilePrivate& tile, TilemapVertex* dest);
     void addTextQuadVertices(const Unity::Tiny::Text::Text2DRenderer* textRenderer, const Matrix4x4f& de, const Rectf rect,
                              const Unity::Tiny::Text::GlyphPrivate* glyph, const Unity::Tiny::Core2D::Color& color, Vertex* dest);
 
@@ -134,6 +146,27 @@ protected:
         {
         }
         SlicingShader(ShaderProgram const& p);
+    };
+
+    struct TilemapShader : public BasicShader
+    {
+        int u_spriterects;
+        int u_spritecolors;
+        int u_spritepivots;
+        int u_mapcolor;
+
+        int u_tilematrix;
+        int u_objtoworld;
+
+        int u_anchor;
+        int u_cellspacing;
+        int u_cellsize;
+
+        TilemapShader()
+            : BasicShader()
+        {
+        }
+        TilemapShader(ShaderProgram const& p);
     };
 };
 

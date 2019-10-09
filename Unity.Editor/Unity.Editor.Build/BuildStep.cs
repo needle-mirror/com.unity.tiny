@@ -35,6 +35,10 @@ namespace Unity.Editor.Build
             // Null out any references to avoid the SerializeUtility from trying to patch asset entities.
             world.GetOrCreateSystem<ClearRemappedEntityReferenceSystem>().Update();
 
+            // Remove non-exported components
+            var nonExportedComponentTypes = UnityEditor.TypeCache.GetTypesWithAttribute<NonExportedAttribute>().Select(t => new ComponentType(t));
+            world.EntityManager.RemoveComponent(world.EntityManager.UniversalQuery, new ComponentTypes(nonExportedComponentTypes.ToArray()));
+
             // Check for missing assembly references
             var unresolvedComponentTypes = GetAllUsedComponentTypes(world).Where(t => !DomainCache.IsIncludedInProject(project, t.GetManagedType())).ToArray();
             if (unresolvedComponentTypes.Length > 0)
@@ -46,10 +50,6 @@ namespace Unity.Editor.Build
                 }
                 return false;
             }
-
-            // Remove non-exported components
-            var nonExportedComponentTypes = UnityEditor.TypeCache.GetTypesWithAttribute<NonExportedAttribute>().Select(t => new ComponentType(t));
-            world.EntityManager.RemoveComponent(world.EntityManager.UniversalQuery, new ComponentTypes(nonExportedComponentTypes.ToArray()));
 
             // Merges the entities and shared component streams, (optionally) compresses them, and finally serializes to disk with a small header in front
             using (var fileStream = new StreamBinaryWriter(outputFile.FullName))

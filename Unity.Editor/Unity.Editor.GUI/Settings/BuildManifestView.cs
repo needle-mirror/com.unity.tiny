@@ -1,73 +1,54 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Unity.Collections;
-using Unity.Editor.Extensions;
 using Unity.Entities;
 using Unity.Tiny.Scenes;
 using UnityEditor;
 using UnityEditor.IMGUI.Controls;
 using UnityEngine;
-
-using Unity.Editor.Hierarchy;
 using Unity.Editor.Persistence;
 using Unity.Authoring.ChangeTracking;
+using Object = UnityEngine.Object;
 
 namespace Unity.Editor
 {
     internal class BuildManifestView : TreeView, IDisposable
     {
-        enum Column
+        private enum Column
         {
             Icon,
-            Scene,
+            SceneName,
+            ScenePath,
             StartupToggle
         }
 
-        internal class BuildManifestViewItem : TreeViewItem
+        private class SceneReferenceItem : TreeViewItem
         {
-
-        }
-
-        internal static class BuildManifestColors
-        {
-            private static bool ProSkin => EditorGUIUtility.isProSkin;
-
-            internal static class Table
-            {
-                public static Color Hover { get; } = ProSkin ? new Color(1.0f, 1.0f, 1.0f, 0.1f) : new Color(0.0f, 0.0f, 0.0f, 0.1f);
-            }
-        }
-
-        private class SceneReferenceItem : BuildManifestViewItem
-        {
-            private readonly IPersistenceManager m_PersistenceManager;
-
             public SceneReferenceItem(IPersistenceManager persistenceManager, Guid sceneGuid, bool isStartup)
             {
-                m_PersistenceManager = persistenceManager;
-
                 IsStartup = isStartup;
                 SceneGuid = sceneGuid;
-                ScenePath = m_PersistenceManager.GetSceneAssetPath(SceneGuid);
+                ScenePath = persistenceManager.GetSceneAssetPath(SceneGuid);
+                SceneName = persistenceManager.GetSceneAssetName(SceneGuid);
+                InstanceID = AssetDatabase.LoadAssetAtPath<Object>(ScenePath).GetInstanceID();
             }
 
             public bool IsStartup { get; set; }
             public Guid SceneGuid { get; }
             public string ScenePath { get; }
+            public string SceneName { get; }
+            public int InstanceID { get; }
 
-            public override string displayName => null;
+            //displayName value will be used by default DoesItemMatchSearch method implementation.
+            public override string displayName => ScenePath;
             public override int id => SceneGuid.GetHashCode();
-            public override int depth => parent?.depth + 1 ?? 0;
         }
 
         private readonly IPersistenceManager m_PersistenceManager;
         private readonly IChangeManager m_ChangeManager;
         private readonly EntityManager m_EntityManager;
+        private readonly IEditorSceneManagerInternal m_SceneManager;
         private readonly MultiColumnHeaderState m_MultiColumnHeaderState;
-        private Rect m_CurrentHoveredRect;
-
-        internal Rect CurrentHoverRect => m_CurrentHoveredRect;
         private bool ShouldReload { get; set; }
 
         public void Invalidate()
@@ -75,18 +56,21 @@ namespace Unity.Editor
             ShouldReload = true;
         }
 
-        public BuildManifestView(TreeViewState state) : base(state, new MultiColumnHeader(CreateMultiColumnHeaderState()))
+        public BuildManifestView(TreeViewState state, Project project) : base(state, new MultiColumnHeader(CreateMultiColumnHeaderState()))
         {
-            var session = Application.AuthoringProject.Session;
-            m_PersistenceManager = session.GetManager<IPersistenceManager>();
-            m_ChangeManager = session.GetManager<IChangeManager>();
+            useScrollView = true;
+            m_PersistenceManager = project.Session.GetManager<IPersistenceManager>();
+            m_SceneManager = project.Session.GetManager<IEditorSceneManagerInternal>();
+            m_ChangeManager = project.Session.GetManager<IChangeManager>();
             m_ChangeManager.RegisterChangeCallback(HandleChanges);
             AssetPostprocessorCallbacks.RegisterAssetMovedHandlerForType<SceneAsset>(HandleMovedAsset);
             
             multiColumnHeader.sortingChanged += OnSortingChanged;
+            multiColumnHeader.sortedColumnIndex = 1;
             showAlternatingRowBackgrounds = true;
 
             Reload();
+            SortIfNeeded();
         }
 
         private void HandleChanges(Changes changes)
@@ -97,24 +81,23 @@ namespace Unity.Editor
                 changes.EntitiesWereDeleted)
             {
                 Invalidate();
-                Repaint();
             }
         }
 
         private void HandleMovedAsset(SceneAsset scene, PostprocessEventArgs args)
         {
             Invalidate();
-            Repaint();
         }
 
-        void OnSortingChanged(MultiColumnHeader multiColumnHeader)
+        private void OnSortingChanged(MultiColumnHeader columnHeader)
         {
-            SortIfNeeded(rootItem, GetRows());
+            SortIfNeeded();
         }
 
-        void SortIfNeeded(TreeViewItem root, IList<TreeViewItem> rows)
+        void SortIfNeeded()
         {
-            if (rows.Count <= 1)
+            var rows = GetRows();
+            if (rows == null || rows.Count <= 1)
                 return;
 
             if (multiColumnHeader.sortedColumnIndex == -1)
@@ -123,7 +106,7 @@ namespace Unity.Editor
             }
 
             SortColumn();
-            TreeToList(root, rows);
+            TreeToList(rootItem, rows);
             Repaint();
         }
 
@@ -135,9 +118,9 @@ namespace Unity.Editor
                 return;
 
             var items = rootItem.children.Cast<SceneReferenceItem>();
-            int columnIndex = multiColumnHeader.sortedColumnIndex;
-            Column column = (Column)columnIndex;
-            bool ascending = multiColumnHeader.IsSortedAscending(columnIndex);
+            var columnIndex = multiColumnHeader.sortedColumnIndex;
+            var column = (Column)columnIndex;
+            var ascending = multiColumnHeader.IsSortedAscending(columnIndex);
             switch (column)
             {
                 case Column.StartupToggle:
@@ -151,7 +134,6 @@ namespace Unity.Editor
                     }
                     break;
                 default:
-                case Column.Scene:
                     if (ascending)
                     {
                         items = items.OrderBy(item => item.ScenePath);
@@ -178,18 +160,18 @@ namespace Unity.Editor
             if (root.children == null)
                 return;
 
-            Stack<TreeViewItem> stack = new Stack<TreeViewItem>();
-            for (int i = root.children.Count - 1; i >= 0; i--)
+            var stack = new Stack<TreeViewItem>();
+            for (var i = root.children.Count - 1; i >= 0; i--)
                 stack.Push(root.children[i]);
 
             while (stack.Count > 0)
             {
-                TreeViewItem current = stack.Pop();
+                var current = stack.Pop();
                 result.Add(current);
 
                 if (current.hasChildren && current.children[0] != null)
                 {
-                    for (int i = current.children.Count - 1; i >= 0; i--)
+                    for (var i = current.children.Count - 1; i >= 0; i--)
                     {
                         stack.Push(current.children[i]);
                     }
@@ -210,8 +192,7 @@ namespace Unity.Editor
                     width = 30,
                     minWidth = 30,
                     maxWidth = 30,
-                    autoResize = false,
-                    allowToggleVisibility = false
+                    autoResize = false
                 },
                 new MultiColumnHeaderState.Column
                 {
@@ -219,8 +200,18 @@ namespace Unity.Editor
                     headerTextAlignment = TextAlignment.Center,
                     sortedAscending = true,
                     sortingArrowAlignment = TextAlignment.Right,
+                    width = 120,
+                    minWidth = 100,
+                    autoResize = true
+                },
+                new MultiColumnHeaderState.Column
+                {
+                    headerContent = new GUIContent("Asset Path", $"Scenes belonging to project '{Application.AuthoringProject.Name}'"),
+                    headerTextAlignment = TextAlignment.Center,
+                    sortedAscending = true,
+                    sortingArrowAlignment = TextAlignment.Right,
                     width = 350,
-                    minWidth = 60,
+                    minWidth = 100,
                     autoResize = true
                 },
                 new MultiColumnHeaderState.Column
@@ -231,7 +222,8 @@ namespace Unity.Editor
                     sortingArrowAlignment = TextAlignment.Right,
                     width = 100,
                     minWidth = 100,
-                    autoResize = true
+                    maxWidth = 100,
+                    autoResize = false
                 }
             };
 
@@ -247,7 +239,19 @@ namespace Unity.Editor
             if (ShouldReload)
             {
                 Reload();
+                SortIfNeeded();
                 ShouldReload = false;
+            }
+
+            multiColumnHeader.ResizeToFit();
+
+            if (hasSearch && GetRows().Count == 0)
+            {
+                EditorGUILayout.BeginHorizontal();
+                GUILayout.FlexibleSpace();
+                EditorGUILayout.LabelField("No match for : " + searchString);
+                GUILayout.FlexibleSpace();
+                EditorGUILayout.EndHorizontal();
             }
 
             base.OnGUI(rect);
@@ -255,62 +259,32 @@ namespace Unity.Editor
 
         protected override float GetCustomRowHeight(int row, TreeViewItem item)
         {
-            if (item is SceneItem)
-            {
-                return 22.0f;
-            }
             return 18.0f;
         }
 
         protected override void RowGUI(RowGUIArgs args)
-        {
-            // Draw background
-            if (!args.selected)
+        {            
+            if (null == args.item)
             {
-                var headerRect = args.rowRect;
-                if (headerRect.Contains(Event.current.mousePosition))
-                {
-                    HierarchyGui.BackgroundColor(headerRect, BuildManifestColors.Table.Hover);
-                    m_CurrentHoveredRect = headerRect;
-                }
+                return;
             }
 
             switch (args.item)
             {
                 case SceneReferenceItem sceneRefItem:
-                    for (int i = 0; i < args.GetNumVisibleColumns(); ++i)
+                    for (var i = 0; i < args.GetNumVisibleColumns(); ++i)
                     {
                         DrawRowCell(args.GetCellRect(i), (Column)args.GetColumn(i), sceneRefItem, args);
                     }
-                    break;
-                case TreeViewItem treeItem:
-                    for (int i = 0; i < args.GetNumVisibleColumns(); ++i)
-                        DrawRowCell(args.GetCellRect(i), (Column)args.GetColumn(i), treeItem, args);
-                    break;
+                    return;
             }
 
             base.RowGUI(args);
         }
 
-        private void DrawRowCell(UnityEngine.Rect rect, Column column, TreeViewItem item, RowGUIArgs args)
+        private void DrawRowCell(Rect rect, Column column, SceneReferenceItem item, RowGUIArgs args)
         {
-            if (null == item)
-            {
-                return;
-            }
-
             CenterRectUsingSingleLineHeight(ref rect);
-        }
-
-        private void DrawRowCell(UnityEngine.Rect rect, Column column, SceneReferenceItem item, RowGUIArgs args)
-        {
-            if (null == item)
-            {
-                return;
-            }
-
-            CenterRectUsingSingleLineHeight(ref rect);
-
             switch (column)
             {
                 case Column.Icon:
@@ -318,7 +292,13 @@ namespace Unity.Editor
                     GUI.DrawTexture(rect, Icons.Scene, ScaleMode.ScaleToFit);
                     break;
                 }
-                case Column.Scene:
+                case Column.SceneName:
+                {
+                    DefaultGUI.Label(rect, item.SceneName, args.selected, args.focused);
+                    break;
+                }
+                
+                case Column.ScenePath:
                 {
                     DefaultGUI.Label(rect, item.ScenePath, args.selected, args.focused);
                     break;
@@ -326,10 +306,10 @@ namespace Unity.Editor
                 case Column.StartupToggle:
                 {
                     var toggleRect = rect;
-                    int toggleWidth = 20;
-                    toggleRect.x += rect.width * 0.5f - toggleWidth * 0.5f;
+                    toggleRect.width = 20;
+                    toggleRect.x += rect.width * 0.5f - toggleRect.width * 0.5f;
 
-                    bool toggleVal = EditorGUI.Toggle(toggleRect, item.IsStartup);
+                    var toggleVal = EditorGUI.Toggle(toggleRect, item.IsStartup);
                     if (toggleVal != item.IsStartup)
                     {
                         item.IsStartup = toggleVal;
@@ -351,40 +331,32 @@ namespace Unity.Editor
             }
         }
 
-        public TreeViewItem FindItem(int id)
-        {
-            return Bridge.TreeView.FindItem(id, rootItem);
-        }
-
         protected override TreeViewItem BuildRoot()
         {
             var project = Application.AuthoringProject;
             var scenesArray = project.GetScenes();
             var startupScenes = project.GetStartupScenes();
 
-            var root = new BuildManifestViewItem { id = int.MaxValue, depth = -1, displayName = "Root" };
+            var root = new TreeViewItem { id = int.MaxValue, depth = -1, displayName = "Root" };
             var persistenceManager = project.PersistenceManager;
 
-            if (scenesArray.Length > 0)
+            foreach (var sceneReference in scenesArray)
             {
-                for (int i = 0; i < scenesArray.Length; ++i)
+                var sceneGuid = sceneReference.SceneGuid;
+                var scenePath = persistenceManager.GetSceneAssetPath(sceneGuid);
+                if (scenePath == null)
                 {
-                    var sceneReference = scenesArray[i];
-                    var sceneGuid = sceneReference.SceneGuid;
-                    var scenePath = persistenceManager.GetSceneAssetPath(sceneGuid);
-                    if (scenePath == null)
-                    {
-                        Debug.LogWarning($"Cannot find scene path for guid '{sceneGuid}' found in configuration.");
-                        continue;
-                    }
-
-                    root.AddChild(new SceneReferenceItem(m_PersistenceManager, sceneGuid, startupScenes.Contains(sceneReference)));
+                    Debug.LogWarning($"Cannot find scene path for guid '{sceneGuid}' found in configuration.");
+                    continue;
                 }
+
+                root.AddChild(new SceneReferenceItem(m_PersistenceManager, sceneGuid, startupScenes.Contains(sceneReference)));
             }
 
             if (!root.hasChildren)
             {
-                root.AddChild(new TreeViewItem(0, 0, "Project has no scenes. Drag scenes here to add them to the project"));
+                const string emptyTreeMessage = "Project has no scenes. Drag scenes here to add them to the project";
+                root.AddChild(new TreeViewItem(0, 0, emptyTreeMessage));
             }
 
             return root;
@@ -395,21 +367,41 @@ namespace Unity.Editor
             m_ChangeManager.UnregisterChangeCallback(HandleChanges);
             AssetPostprocessorCallbacks.UnregisterAssetMovedHandlerForType<SceneAsset>(HandleMovedAsset);
         }
+        
+        protected override void SelectionChanged(IList<int> selectedIds)
+        {
+            var selectedInstanceIDs = selectedIds.Select(id => FindItem(id, rootItem))
+                .OfType<SceneReferenceItem>()
+                .Select(item => item.InstanceID)
+                .ToArray();
+           
+            Selection.instanceIDs = selectedInstanceIDs;
+            base.SelectionChanged(selectedIds);
+        }
+
+        protected override void DoubleClickedItem(int id)
+        {
+            if (FindItem(id, rootItem) is SceneReferenceItem sceneReferenceItem)
+            {
+                m_SceneManager.LoadScene(sceneReferenceItem.ScenePath);
+            }
+            
+            base.DoubleClickedItem(id);
+        }
 
         protected override void KeyEvent()
         {
             base.KeyEvent();
-            if (UnityEngine.Event.current.type == UnityEngine.EventType.KeyDown && UnityEngine.Event.current.keyCode == UnityEngine.KeyCode.Delete)
+            if (Event.current.type == EventType.KeyDown && Event.current.keyCode == KeyCode.Delete)
             {
                 DeleteSelection();
-                UnityEngine.Event.current.Use();
+                Event.current.Use();
             }
         }
 
         public void DeleteSelection()
         {
             var selection = GetSceneSelection();
-
             Selection.instanceIDs = new int[0];
 
             var project = Application.AuthoringProject;
@@ -426,24 +418,8 @@ namespace Unity.Editor
             return new List<Guid>(GetSelection()
                     .Select(id => FindItem(id, rootItem))
                     .OfType<SceneReferenceItem>()
+                    .Where(item => item.SceneGuid != SceneReference.Null.SceneGuid)
                     .Select(i => i.SceneGuid));
-        }
-
-        protected override bool CanStartDrag(CanStartDragArgs args)
-        {
-            return args.draggedItem is EntityItem;
-        }
-
-        protected override void SetupDragAndDrop(SetupDragAndDropArgs args)
-        {
-            DragAndDrop.PrepareStartDrag();
-            var sortedDraggedIDs = SortItemIDsInRowOrder(args.draggedItemIDs);
-            var objList = new List<UnityEngine.GameObject>(sortedDraggedIDs.Count);
-
-
-            DragAndDrop.paths = new string[0];
-            DragAndDrop.objectReferences = objList.Cast<UnityEngine.Object>().ToArray();
-            DragAndDrop.StartDrag("Multiple");
         }
 
         protected override DragAndDropVisualMode HandleDragAndDrop(DragAndDropArgs args)
@@ -471,25 +447,20 @@ namespace Unity.Editor
             var item = FindItem(id, rootItem);
             switch (item)
             {
-                case SceneReferenceItem sceneItem:
-                    ShowSceneReferenceContextMenu(sceneItem);
+                case SceneReferenceItem _:
+                    ShowSceneReferenceContextMenu();
                     break;
             }
         }
 
-        private void ShowSceneReferenceContextMenu(SceneReferenceItem item)
+        private void ShowSceneReferenceContextMenu()
         {
-            if (item.SceneGuid == SceneReference.Null.SceneGuid)
-            {
-                return;
-            }
 
             var project = Application.AuthoringProject;
             var menu = new GenericMenu();
             menu.AddItem(new GUIContent($"Remove Scene from {project.Name}"), false, () =>
             {
-                project.RemoveScene(new SceneReference { SceneGuid = item.SceneGuid });
-                Invalidate();
+                DeleteSelection();
             });
 
             menu.ShowAsContext();

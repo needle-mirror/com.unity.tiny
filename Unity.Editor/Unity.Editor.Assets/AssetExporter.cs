@@ -11,54 +11,56 @@ using Assert = UnityEngine.Assertions.Assert;
 
 namespace Unity.Editor.Assets
 {
-    internal class AssetExporter
+    internal interface IAssetExporter
+    {
+        ProjectSettings Settings { get; }
+    }
+
+    internal class AssetExporter : IAssetExporter
     {
         private readonly Dictionary<Type, IUnityObjectAssetExporter> m_AssetExporters = new Dictionary<Type, IUnityObjectAssetExporter>();
 
-        private IWorldManager WorldManager { get; }
-        private IAssetManagerInternal AssetManager { get; }
-        private EntityManager EntityManager => WorldManager.EntityManager;
-
-        public AssetExporter(Session session)
+        private class ExportManifest
         {
-            WorldManager = session.GetManager<IWorldManager>();
+            public Guid AssetGuid;
+            public string AssetPath;
+            public uint ExportVersion;
+            public Guid ExportHash;
+            public List<string> ExportedFiles = new List<string>();
+        }
+
+        private IWorldManager WorldManager { get; }
+        private EntityManager EntityManager => WorldManager.EntityManager;
+        private IAssetManagerInternal AssetManager { get; }
+
+        public AssetExporter(Project project)
+        {
+            WorldManager = project.Session.GetManager<IWorldManager>();
             Assert.IsNotNull(WorldManager);
 
-            AssetManager = session.GetManager<IAssetManagerInternal>();
+            AssetManager = project.Session.GetManager<IAssetManagerInternal>();
             Assert.IsNotNull(AssetManager);
 
             foreach (var pair in DomainCache.AssetExporterTypes)
             {
                 m_AssetExporters[pair.Key] = (IUnityObjectAssetExporter)Activator.CreateInstance(pair.Value);
             }
+
+            Settings = project.Settings;
         }
 
-        internal static IReadOnlyDictionary<AssetInfo, Entity> Export(BuildPipeline.BuildContext context)
-        {
-            var project = context.Project;
-            var assetExporter = new AssetExporter(project.Session);
-
-            var assets = assetExporter.AssetManager.EnumerateAssets(project);
-            foreach (var pair in assets)
-            {
-                assetExporter.Export(pair.Key, pair.Value, context);
-            }
-
-            return assets;
-        }
-
-        private void Export(AssetInfo asset, Entity entity, BuildPipeline.BuildContext context)
+        internal IEnumerable<FileInfo> Export(DirectoryInfo outputDir, AssetInfo asset, Entity entity)
         {
             // Get asset exporter
             var assetExporter = m_AssetExporters.Values.FirstOrDefault(x => x.CanExport(asset.Object));
             if (assetExporter == null)
             {
-                return; // Assets without asset exporter do not need to export anything
+                return Enumerable.Empty<FileInfo>(); // Assets without asset exporter do not need to export anything
             }
 
             // Get asset path
             var assetPath = UnityEditor.AssetDatabase.GetAssetPath(asset.Object);
-            if (string.IsNullOrEmpty(assetPath))
+            if (assetPath == null)
             {
                 assetPath = string.Empty;
             }
@@ -66,10 +68,10 @@ namespace Unity.Editor.Assets
             // Compute asset export file path
             Assert.IsTrue(EntityManager.HasComponent<EntityGuid>(entity));
             var assetGuid = WorldManager.GetEntityGuid(entity);
-            var outputFile = context.DataDirectory.GetFile(assetGuid.ToString("N"));
+            var outputFile = outputDir.GetFile(assetGuid.ToString("N"));
 
             // Compute asset export hash
-            var exportHash = assetExporter.GetExportHash(asset.Object);
+            var exportHash = assetExporter.GetExportHash(this, asset.Object);
             if (exportHash == Guid.Empty)
             {
                 throw new InvalidOperationException($"{assetExporter.GetType().FullName} did not provide a valid asset export hash.");
@@ -82,7 +84,7 @@ namespace Unity.Editor.Assets
             {
                 try
                 {
-                    var manifest = JsonSerialization.Deserialize<BuildManifest.Entry>(manifestFile.FullName);
+                    var manifest = JsonSerialization.Deserialize<ExportManifest>(manifestFile.FullName);
                     if (manifest != null &&
                         manifest.AssetPath == assetPath &&
                         manifest.AssetGuid == assetGuid &&
@@ -104,19 +106,22 @@ namespace Unity.Editor.Assets
             }
 
             // Export asset if export files are not found
-            var didExport = false;
             if (exportedFiles == null)
             {
-                exportedFiles = assetExporter.Export(outputFile, asset.Object);
-                didExport = exportedFiles != null && exportedFiles.Count() > 0;
+                exportedFiles = assetExporter.Export(this, outputFile, asset.Object);
+
+                // Update export manifest
+                manifestFile.WriteAllText(JsonSerialization.Serialize(new ExportManifest
+                {
+                    AssetGuid = assetGuid,
+                    AssetPath = assetPath,
+                    ExportVersion = assetExporter.ExportVersion,
+                    ExportHash = exportHash,
+                    ExportedFiles = exportedFiles.Select(f => f.FullName).ToList()
+                }));
             }
 
-            // Update manifest
-            var entry = context.Manifest.Add(assetGuid, assetPath, exportedFiles, assetExporter.ExportVersion, exportHash);
-            if (entry != null && didExport)
-            {
-                manifestFile.WriteAllText(JsonSerialization.Serialize(entry));
-            }
+            return exportedFiles;
         }
 
         internal static IEnumerable<FileInfo> ExportSource(FileInfo outputFile, UnityEngine.Object obj)
@@ -136,14 +141,20 @@ namespace Unity.Editor.Assets
             outputFile.Directory.Create();
             return srcFile.CopyTo(outputFile.FullName, true).AsEnumerable();
         }
+
+        #region IAssetExporter
+
+        public ProjectSettings Settings { get; }
+
+        #endregion
     }
 
     internal interface IUnityObjectAssetExporter
     {
         uint ExportVersion { get; }
         bool CanExport(UnityEngine.Object obj);
-        IEnumerable<FileInfo> Export(FileInfo outputFile, UnityEngine.Object obj);
-        Guid GetExportHash(UnityEngine.Object obj);
+        IEnumerable<FileInfo> Export(IAssetExporter context, FileInfo outputFile, UnityEngine.Object obj);
+        Guid GetExportHash(IAssetExporter context, UnityEngine.Object obj);
     }
 
     internal abstract class UnityObjectAssetExporter<T> : IUnityObjectAssetExporter
@@ -154,18 +165,18 @@ namespace Unity.Editor.Assets
             return obj is T;
         }
 
-        public IEnumerable<FileInfo> Export(FileInfo outputFile, UnityEngine.Object obj)
+        public IEnumerable<FileInfo> Export(IAssetExporter context, FileInfo outputFile, UnityEngine.Object obj)
         {
-            return Export(outputFile, obj as T);
+            return Export(context, outputFile, obj as T);
         }
 
-        public Guid GetExportHash(UnityEngine.Object obj)
+        public Guid GetExportHash(IAssetExporter context, UnityEngine.Object obj)
         {
-            return GetExportHash(obj as T);
+            return GetExportHash(context, obj as T);
         }
 
         public abstract uint ExportVersion { get; }
-        public abstract IEnumerable<FileInfo> Export(FileInfo outputFile, T obj);
-        public abstract Guid GetExportHash(T obj);
+        public abstract IEnumerable<FileInfo> Export(IAssetExporter context, FileInfo outputFile, T obj);
+        public abstract Guid GetExportHash(IAssetExporter context, T obj);
     }
 }

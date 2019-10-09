@@ -4,7 +4,6 @@ using Unity.Mathematics;
 /// <summary>
 ///  Core2Dmodule that provides essential functionality for 2D rendering
 /// </summary>
-[assembly: ModuleDescription("Unity.Tiny.Core2D", "Core 2D functionality")]
 namespace Unity.Tiny.Core2D
 {
     /// <summary>

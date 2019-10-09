@@ -8,7 +8,7 @@ mergeInto(LibraryManager.library, {
   js_texImage2D_from_html_text__proxy: 'sync',
   js_texImage2D_from_html_text: function(text, family, fontSize, weight, italic, labelWidth, labelHeight) {
 
-    var font = fontSize.toString() + 'pt ' + utf16_to_js_string(family);
+    var font = fontSize.toString() + 'px ' + utf16_to_js_string(family);
     var newFont = weight.toString() + ' ' + (italic ? 'italic ' : '') + font;
 
     // Update the canvas and texture

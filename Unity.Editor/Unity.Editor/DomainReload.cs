@@ -2,8 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using Unity.Authoring;
-using Unity.Authoring.ChangeTracking;
-using Unity.Authoring.Undo;
 using Unity.Collections;
 using Unity.Editor.Extensions;
 using Unity.Editor.Persistence;
@@ -14,7 +12,6 @@ using Unity.Serialization;
 using Unity.Serialization.Json;
 using Unity.Tiny.Scenes;
 using UnityEditor;
-using UnityEngine;
 
 namespace Unity.Editor
 {
@@ -22,6 +19,7 @@ namespace Unity.Editor
     internal static class DomainReload
     {
         private const int k_TempVersion = 2;
+        private static bool m_ProgressBarDisplayed;
 
         /// <summary>
         /// Serializable temp data.
@@ -141,25 +139,25 @@ namespace Unity.Editor
 
         private static void HandleUpdate()
         {
-            var projectToReOpen = UnityEditor.SessionState.GetString(Project.OpenNewlyCreatedProjectSessionKey, string.Empty);
-
-            if (EditorApplication.isPlayingOrWillChangePlaymode || EditorApplication.isCompiling)
-            {
-                if (!string.IsNullOrEmpty(projectToReOpen))
-                {
-                    EditorUtility.DisplayProgressBar("Creating new DOTS project", "First time script compilation", 0.9f );
-                }
-
-                return;
-            }
-
-            
+            var projectToReOpen = UnityEditor.SessionState.GetString(Project.k_OpenNewlyCreatedProjectSessionKey, string.Empty);
             if (!string.IsNullOrEmpty(projectToReOpen))
             {
-                EditorUtility.ClearProgressBar();
-                UnityEditor.SessionState.EraseString(Project.OpenNewlyCreatedProjectSessionKey);
+                if (!m_ProgressBarDisplayed)
+                {
+                    EditorUtility.DisplayProgressBar("Opening Project", "First-time script compilation, please wait!", 0f);
+                    m_ProgressBarDisplayed = true;
+                }
 
-                var project = Project.Open(new FileInfo( projectToReOpen));
+                if (EditorApplication.isPlayingOrWillChangePlaymode || EditorApplication.isCompiling)
+                {
+                    return;
+                }
+
+                EditorUtility.ClearProgressBar();
+                m_ProgressBarDisplayed = false;
+                UnityEditor.SessionState.EraseString(Project.k_OpenNewlyCreatedProjectSessionKey);
+
+                var project = Project.Open(new FileInfo(projectToReOpen));
                 Application.SetAuthoringProject(project);
                 return;
             }
@@ -207,8 +205,6 @@ namespace Unity.Editor
 
         private static Project RestoreState(FileInfo file)
         {
-            var world = new World(nameof(DomainReload));
-
             var config = new SerializedObjectReaderConfiguration
             {
                 UseReadAsync = false,
@@ -266,10 +262,10 @@ namespace Unity.Editor
 
                 project = Project.Open(new FileInfo(projectPath));
 
+                var world = new World(nameof(DomainReload));
                 try
                 {
                     JsonFrontEnd.Accept(world.EntityManager, reader);
-                    
                     project.Session.GetManager<WorldManager>().EntityManager.MoveEntitiesFrom(world.EntityManager);
                 }
                 finally
@@ -278,11 +274,10 @@ namespace Unity.Editor
                 }
 
                 var worldManager = project.Session.GetManager<IWorldManager>();
-
                 worldManager.EntityManager.World.GetOrCreateSystem<EntityReferenceRemapSystem>().Update();
                 worldManager.EntityManager.World.GetOrCreateSystem<RemoveRemapInformationSystem>().Update();
             }
-            
+
             return project;
         }
     }

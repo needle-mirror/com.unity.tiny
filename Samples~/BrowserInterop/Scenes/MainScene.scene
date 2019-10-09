@@ -3,11 +3,11 @@
     "Guid": "a5cd92ccce974d1ba2b335d440dcabbd",
     "SerializedVersion": 1,
     "AssetReferences": [
-        { "Guid": "dbac6eb6137a7e2428cd96fdbd9df7fe", "FileId": 11400000, "Type": 2}],
+        { "Guid": "10672ddbb34334944bac76f45a7d3b32", "FileId": 11400000, "Type": 2}],
     "Entities": [{
         "Components": [{
             "$type": "Unity.Tiny.Text.Text2DStyleBitmapFont, Unity.Tiny.Text",
-            "font": "b1e7874f60f71d364bddce785dd6da92"
+            "font": "883a943aa38f21d7986f857a644100ae"
         }, {
             "$type": "Unity.Tiny.Text.Text2DRenderer, Unity.Tiny.Text",
             "style": "2ae1643443a748cd84dd778a346b4ecd",
@@ -117,7 +117,7 @@
     }, {
         "Components": [{
             "$type": "Unity.Tiny.Text.Text2DStyleBitmapFont, Unity.Tiny.Text",
-            "font": "b1e7874f60f71d364bddce785dd6da92"
+            "font": "883a943aa38f21d7986f857a644100ae"
         }, {
             "$type": "Unity.Tiny.Text.Text2DRenderer, Unity.Tiny.Text",
             "style": "6ffa7f1c7c4d4262be288e04d50b36fd",
@@ -301,7 +301,7 @@
     }, {
         "Components": [{
             "$type": "Unity.Tiny.Text.Text2DStyleBitmapFont, Unity.Tiny.Text",
-            "font": "b1e7874f60f71d364bddce785dd6da92"
+            "font": "883a943aa38f21d7986f857a644100ae"
         }, {
             "$type": "Unity.Tiny.Text.Text2DRenderer, Unity.Tiny.Text",
             "style": "732bad512dc9476b9065d65582dfd3d5",
@@ -391,7 +391,7 @@
     }, {
         "Components": [{
             "$type": "Unity.Tiny.Text.Text2DStyleBitmapFont, Unity.Tiny.Text",
-            "font": "b1e7874f60f71d364bddce785dd6da92"
+            "font": "883a943aa38f21d7986f857a644100ae"
         }, {
             "$type": "Unity.Tiny.Text.Text2DRenderer, Unity.Tiny.Text",
             "style": "79bc66e09b994036a0e49c7e9d1a7be2",
@@ -555,7 +555,7 @@
     }, {
         "Components": [{
             "$type": "Unity.Tiny.Text.Text2DStyleBitmapFont, Unity.Tiny.Text",
-            "font": "b1e7874f60f71d364bddce785dd6da92"
+            "font": "883a943aa38f21d7986f857a644100ae"
         }, {
             "$type": "Unity.Tiny.Text.Text2DRenderer, Unity.Tiny.Text",
             "style": "97130285752047c6adefba2b2413b47f",
@@ -691,7 +691,7 @@
     }, {
         "Components": [{
             "$type": "Unity.Tiny.Text.Text2DStyleBitmapFont, Unity.Tiny.Text",
-            "font": "b1e7874f60f71d364bddce785dd6da92"
+            "font": "883a943aa38f21d7986f857a644100ae"
         }, {
             "$type": "Unity.Tiny.Text.Text2DRenderer, Unity.Tiny.Text",
             "style": "ea70bccbef824e6bbd476569551dfd44",

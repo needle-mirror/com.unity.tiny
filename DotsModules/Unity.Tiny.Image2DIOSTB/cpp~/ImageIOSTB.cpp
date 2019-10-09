@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include <stdint.h>
 
 #include "libstb/stb_image.h"
@@ -15,8 +16,7 @@
 using namespace Unity::Entities;
 using namespace Unity::Tiny::Core2D;
 using namespace ut;
-
-static std::unique_ptr<ThreadPool::Pool> threadPool;
+using namespace ut::ThreadPool;
 
 class ImageSTB {
 public:
@@ -77,6 +77,10 @@ public:
 
 static std::vector<ImageSTB*> allImages(1); // by handle, reserve handle 0
 
+#if defined UNITY_ANDROID
+extern "C" void* loadAsset(const char *path, int *size);
+#endif
+
 static bool
 LoadImageFromFile(const char* fn, size_t fnlen, ImageSTB& colorImg)
 {
@@ -88,6 +92,12 @@ LoadImageFromFile(const char* fn, size_t fnlen, ImageSTB& colorImg)
     std::vector<uint8_t> dataurimem;
     if (DecodeDataURIBase64(dataurimem, mediatype, fn, fnlen)) // try loading as data uri (ignore media type)
         pixels = (uint32_t*)stbi_load_from_memory(dataurimem.data(), (int)dataurimem.size(), &w, &h, &bpp, 4);
+#if defined UNITY_ANDROID
+    int size;
+    void *data = loadAsset(fn, &size);
+    pixels = (uint32_t*)stbi_load_from_memory((uint8_t*)data, size, &w, &h, &bpp, 4);
+    free(data);
+#endif
     if (!pixels) // try loading as file
         pixels = (uint32_t*)stbi_load(fn, &w, &h, &bpp, 4);
     if (!pixels)
@@ -216,25 +226,23 @@ void ZEROPLAYER_CALL freeimage_stb(int imageHandle)
 ZEROPLAYER_EXPORT
 int64_t ZEROPLAYER_CALL startload_stb(const char *imageFile, const char *maskFile)
 {
-    if ( !threadPool )
-        threadPool.reset(new ThreadPool::Pool());
     std::unique_ptr<AsyncGLFWImageLoader> loader(new AsyncGLFWImageLoader);
     loader->imageFile = imageFile;
     loader->maskFile = maskFile;
-    return threadPool->Enqueue(std::move(loader));
+    return Pool::GetInstance()->Enqueue(std::move(loader));
 }
 
 ZEROPLAYER_EXPORT
 void ZEROPLAYER_CALL abortload_stb(int64_t loadId)
 {
-    threadPool->Abort(loadId);
+    Pool::GetInstance()->Abort(loadId);
 }
 
 ZEROPLAYER_EXPORT
 int ZEROPLAYER_CALL checkload_stb(int64_t loadId, int *imageHandle)
 {
     *imageHandle = -1;
-    std::unique_ptr<ThreadPool::Job> resultTemp = threadPool->CheckAndRemove(loadId);
+    std::unique_ptr<ThreadPool::Job> resultTemp = Pool::GetInstance()->CheckAndRemove(loadId);
     if (!resultTemp)
         return 0; // still loading
     if (!resultTemp->GetReturnValue()) {

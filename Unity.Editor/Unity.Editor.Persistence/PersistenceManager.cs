@@ -37,19 +37,18 @@ namespace Unity.Editor.Persistence
     }
 
     [UsedImplicitly]
-    internal class PersistenceManager : SessionManager, IPersistenceManager
+    internal class PersistenceManager : ISessionManagerInternal, IPersistenceManager
     {
         private const string AssetReferencesPropertyName = "AssetReferences";
 
         private readonly Dictionary<string, SceneGuid> m_AssetGuidToSceneGuid = new Dictionary<string, SceneGuid>();
         private readonly Dictionary<SceneGuid, string> m_SceneGuidToAssetGuid = new Dictionary<SceneGuid, string>();
+        private Session m_Session;
 
-        public PersistenceManager(Session session) : base(session)
+        public void Load(Session session)
         {
-        }
+            m_Session = session;
 
-        public override void Load()
-        {
             foreach (var guid in FindAllAssetGuid<SceneAsset>())
             {
                 var asset = AssetDatabase.LoadAssetAtPath<SceneAsset>(AssetDatabase.GUIDToAssetPath(guid));
@@ -62,7 +61,7 @@ namespace Unity.Editor.Persistence
             AssetPostprocessorCallbacks.RegisterAssetDeletedHandler(HandleDeleteAsset);
         }
 
-        public override void Unload()
+        public void Unload(Session session)
         {
             AssetPostprocessorCallbacks.UnregisterAssetImportedHandlerForType<SceneAsset>(HandleImportSceneAsset);
             AssetPostprocessorCallbacks.UnregisterAssetDeletedHandler(HandleDeleteAsset);
@@ -88,12 +87,12 @@ namespace Unity.Editor.Persistence
                 m_SceneGuidToAssetGuid.Remove(sceneGuid);
 
                 // Remove scene from project
-                var wm = Session.GetManager<IWorldManager>();
-                Project.RemoveScene(wm.EntityManager, wm.GetConfigEntity(), new SceneReference { SceneGuid = sceneGuid.Guid });
+                var wm = m_Session.GetManager<IWorldManager>();
+                ConfigurationUtility.RemoveScene(wm.EntityManager, wm.GetConfigEntity(), new SceneReference { SceneGuid = sceneGuid.Guid });
 
                 // Called last as this will invoke OnScene unload listeners so we need to ensure 
                 // we've updated all state before they are called
-                Session.GetManager<IEditorSceneManagerInternal>().UnloadAllScenesByGuid(sceneGuid);
+                m_Session.GetManager<IEditorSceneManagerInternal>().UnloadAllScenesByGuid(sceneGuid);
             }
 
             // Handle deleting project
@@ -115,7 +114,7 @@ namespace Unity.Editor.Persistence
         {
             SaveToFile(entityManager, scene, path);
 
-            using (Session.GetManager<IEditorSceneManagerInternal>().IgnoreSceneImport())
+            using (m_Session.GetManager<IEditorSceneManagerInternal>().IgnoreSceneImport())
             {
                 AssetDatabase.ImportAsset(AssetDatabaseUtility.GetPathRelativeToProjectPath(path), ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUncompressedImport);
             }
@@ -134,7 +133,7 @@ namespace Unity.Editor.Persistence
             var world = new World(assetGuid);
             try
             {
-                var scene = LoadFromFile(world.EntityManager, path, Session.GetManager<IAssetManager>());
+                var scene = LoadFromFile(world.EntityManager, path, m_Session.GetManager<IAssetManager>());
 
                 entityManager.MoveEntitiesFrom(world.EntityManager);
                 entityManager.World.GetOrCreateSystem<EntityReferenceRemapSystem>().Update();
@@ -168,7 +167,7 @@ namespace Unity.Editor.Persistence
                 if (!sceneHeader.TryGetValue(AssetReferencesPropertyName, out var assetReferences))
                     return;
 
-                LoadAssetReferences(assetReferences.AsArrayView(), Session.GetManager<IAssetManager>());
+                LoadAssetReferences(assetReferences.AsArrayView(), m_Session.GetManager<IAssetManager>());
             }
         }
 

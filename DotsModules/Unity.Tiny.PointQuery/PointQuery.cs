@@ -7,7 +7,6 @@ using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Tiny;
 
-[assembly:ModuleDescription("Unity.Tiny.PointQuery", "Point query utilities")]
 namespace Unity.Tiny.PointQuery
 {
     // Component used to mark an entity created by CreatePointQueryStruct.

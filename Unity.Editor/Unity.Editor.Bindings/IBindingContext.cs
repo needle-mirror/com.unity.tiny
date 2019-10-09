@@ -139,5 +139,9 @@ namespace Unity.Editor.Bindings
         /// <returns>The asset.</returns>
         TObject GetUnityObject<TObject>(Entity entity)
             where TObject : UnityEngine.Object;
+
+        void AddBufferFromString<T>(Entity entity, string value) where T : struct, IBufferElementData;
+        string GetBufferAsString<T>(Entity entity) where T : struct, IBufferElementData;
+        void SetBufferFromString<T>(Entity entity, string value) where T : struct, IBufferElementData;
     }
 }

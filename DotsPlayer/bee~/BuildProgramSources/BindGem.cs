@@ -103,6 +103,7 @@ internal class BindGem
             case "Unity.Tiny.RendererCanvas.dll":
             case "Unity.Tiny.TextHTML.dll":
             case "Unity.Tiny.HTML.dll":
+            case "Unity.Tiny.TextNative.dll":
                 return true;
             default:
                 return false;

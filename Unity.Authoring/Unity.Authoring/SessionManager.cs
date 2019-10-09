@@ -9,24 +9,15 @@ namespace Unity.Authoring
 
     internal interface ISessionManagerInternal : ISessionManager
     {
-        void Load();
-        void Unload();
-    }
-
-    internal abstract class SessionManager : ISessionManagerInternal
-    {
-        public Session Session { get; }
-
-        protected SessionManager(Session session)
-        {
-            Session = session;
-        }
-
-        public virtual void Load() {}
-        public virtual void Unload() {}
+        void Load(Session session);
+        void Unload(Session session);
     }
 
     internal interface IIgnoreSessionManager
+    {
+    }
+
+    internal interface ITestSessionManager
     {
     }
 }

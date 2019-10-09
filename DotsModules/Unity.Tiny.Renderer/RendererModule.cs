@@ -63,6 +63,7 @@ namespace Unity.Tiny.Rendering
                 case DisplayListEntryType.Shape:
                 case DisplayListEntryType.GroupOnly:
                 case DisplayListEntryType.HitBoxOnly:
+                case DisplayListEntryType.Tilemap:
                 case DisplayListEntryType.Text:
                     return false;
                 case DisplayListEntryType.Sprite: {

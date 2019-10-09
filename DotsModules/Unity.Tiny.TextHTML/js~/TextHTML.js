@@ -14,7 +14,7 @@ mergeInto(LibraryManager.library, {
           }
 
           var context = ut._HTML.canvasTextMeasureContext;
-          context.font = weight + ' ' + (italic ? 'italic ' : '') + size + "pt" + ' ' + family;
+          context.font = weight + ' ' + (italic ? 'italic ' : '') + size + "px" + ' ' + family;
           context.fillStyle = "black";
           context.textAlign = "left";
           context.textBaseline = "bottom";
@@ -35,7 +35,7 @@ mergeInto(LibraryManager.library, {
           var mult = 1;
           if (size < 5)
             mult = 20;
-          div.style.fontSize = size * mult + "pt";
+          div.style.fontSize = size * mult + "px";
           div.style.fontStyle = italic ? "italic" : "normal";
           div.style.textAlign = "left";
           div.style.verticalAlign = "bottom";
@@ -50,7 +50,7 @@ mergeInto(LibraryManager.library, {
           //Previous bbox computed reduces consecutive white spaces to one white space. So we need here to compute the width of all white spaces separately
           var newCanvas = document.createElement("canvas");
           var ct = newCanvas.getContext("2d");
-          ct.font = weight + ' ' + (italic ? 'italic ' : '') + size * mult + "pt" + ' ' + family;
+          ct.font = weight + ' ' + (italic ? 'italic ' : '') + size * mult + "px" + ' ' + family;
           ct.textAlign = "left";
           ct.textBaseline = "bottom";
           var wsWidth = ct.measureText(" ").width;

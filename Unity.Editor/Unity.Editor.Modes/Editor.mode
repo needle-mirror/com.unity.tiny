@@ -22,11 +22,11 @@ dots = {
             { name = "Copy" }
             { name = "Paste" }
             null
-            { name = "Duplicate", command_id = "DOTS/DuplicateSelection" shortcut = "%d" validate_command_id = "DOTS/SelectionBasedValidation" }
-            { name = "Delete", platform = "osx", command_id = "DOTS/DeleteSelection" validate_command_id = "DOTS/SelectionBasedValidation", shortcut = "%DEL" }
-            { name = "Delete", platform = "windows", command_id = "DOTS/DeleteSelection" validate_command_id = "DOTS/SelectionBasedValidation" }
+            { name = "Duplicate" }
+            { name = "Delete" }
             null
             { name = "Frame Selected" }
+            { name = "Find" }
             null
             { name = "Project Settings..." }
             { name = "Preferences..." }
@@ -82,8 +82,6 @@ dots = {
             null
             { name = "Save Project", command_id = "DOTS/SaveProject" shortcut = "%s" }
             { name = "Close Project", command_id = "DOTS/CloseProject" }
-            null
-            { name = "Import Sample Projects", command_id = "DOTS/ImportSamples" }
             null
             { name = "Build", command_id = "DOTS/BuildProject" shortcut = "%b" }
             { name = "Build And Run", command_id = "DOTS/BuildAndRun" shortcut = "%p" }
@@ -173,7 +171,7 @@ dots = {
         "SceneView"
         "Game"
         "InspectorWindow"
-        "TinyHierarchyWindow"
+        "EntityHierarchyWindow"
         "ProjectBrowser"
         "ProfilerWindow"
     ]

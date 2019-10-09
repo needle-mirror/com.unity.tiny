@@ -3,11 +3,6 @@
     border-color: #222222;
 }
 
-.unity-ecs--component-type-missing
-{
-    background-color : #880000;
-}
-
 .unity-ecs-component-menu
 {
     background-image:resource("d__Popup");

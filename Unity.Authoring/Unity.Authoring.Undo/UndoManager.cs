@@ -59,7 +59,7 @@ namespace Unity.Authoring.Undo
         event Action ChangeRecorded;
     }
 
-    internal class UndoManager : SessionManager, IUndoManager
+    internal class UndoManager : ISessionManagerInternal, IUndoManager
     {
         /// <summary>
         /// A single atomic undo/redo-able operation.
@@ -106,14 +106,10 @@ namespace Unity.Authoring.Undo
 
         public event Action ChangeRecorded = delegate { };
 
-        public UndoManager(Session session) : base(session)
+        public void Load(Session session)
         {
-        }
-
-        public override void Load()
-        {
-            m_WorldManager = Session.GetManager<IWorldManager>();
-            m_ChangeManager = Session.GetManager<IChangeManager>();
+            m_WorldManager = session.GetManager<IWorldManager>();
+            m_ChangeManager = session.GetManager<IChangeManager>();
 
             if (null == m_WorldManager)
             {
@@ -123,7 +119,7 @@ namespace Unity.Authoring.Undo
             m_ChangeManager.RegisterChangeCallback(HandleChanges);
         }
 
-        public override void Unload()
+        public void Unload(Session session)
         {
             m_ChangeManager.UnregisterChangeCallback(HandleChanges);
             Flush();

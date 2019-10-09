@@ -2,6 +2,9 @@
 
 Tiny supports a lightweight intersection and overlap checking module that does not require physics. This module is referred to as HitBox2D. This document provides common use cases, examples, and a reference of HitBox2D components.
 
+[See this module's API documentation for more information](../api/Unity.Tiny.HitBox2D.html)
+
+
 ## Use Cases and Examples
 
 This section demonstrates how to use the HitBox2D module through common use cases and usage examples. If a use case or an example is similar to a topic in the Unity User Manual, a link is provided to the appropriate topic.

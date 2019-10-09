@@ -1,13 +1,14 @@
 using System.Linq;
 using Bee.DotNet;
+using NiceIO;
 using Unity.BuildSystem.CSharpSupport;
 
-class AsmDefBasedDotsRuntimeCSharpProgram : DotsRuntimeCSharpProgram
+public class AsmDefBasedDotsRuntimeCSharpProgram : DotsRuntimeCSharpProgram
 {
     public DotsRuntimeCSharpProgram[] ReferencedPrograms { get; }
     public AsmDefDescription AsmDefDescription { get; }
 
-    public AsmDefBasedDotsRuntimeCSharpProgram(AsmDefDescription asmDefDescription) 
+    public AsmDefBasedDotsRuntimeCSharpProgram(AsmDefDescription asmDefDescription)
         : base(asmDefDescription.Directory,
             deferConstruction:true
             )
@@ -17,7 +18,7 @@ class AsmDefBasedDotsRuntimeCSharpProgram : DotsRuntimeCSharpProgram
 
         var referencesEntryPoint = ReferencedPrograms.Any(r => r.FileName.EndsWith(".exe"));
 
-        var isExe = asmDefDescription.DefineConstraints.Contains("UNITY_DOTS_ENTRYPOINT") 
+        var isExe = asmDefDescription.DefineConstraints.Contains("UNITY_DOTS_ENTRYPOINT")
                     || (asmDefDescription.Path.Parent.Files("*.project").Any() && !referencesEntryPoint)
                     || asmDefDescription.OptionalUnityReferences.Contains("TestAssemblies");
         Construct(asmDefDescription.Name, isExe);
@@ -55,6 +56,11 @@ class AsmDefBasedDotsRuntimeCSharpProgram : DotsRuntimeCSharpProgram
         BindGem.ConfigureNativeProgramFor(this);
 
     }
+
+    protected override NPath DeterminePathForProjectFile() =>
+        DoesPackageSourceIndicateUserHasControlOverSource(AsmDefDescription.PackageSource) 
+            ? AsmDefDescription.Path.Parent.Combine(AsmDefDescription.Name + ".gen.csproj") 
+            : base.DeterminePathForProjectFile();
 
     public bool IsTestAssembly => AsmDefDescription.OptionalUnityReferences.Contains("TestAssemblies");
 

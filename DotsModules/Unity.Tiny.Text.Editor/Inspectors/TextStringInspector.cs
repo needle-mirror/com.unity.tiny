@@ -1,9 +1,9 @@
+using Unity.Editor;
 using Unity.Entities;
 using Unity.Tiny.Core;
-using Unity.Tiny.Text;
 using UnityEngine.UIElements;
 
-namespace Unity.Editor
+namespace Unity.Tiny.Text.Editor
 {
     public class TextStringInspector : IDynamicBufferInspector<TextString>
     {

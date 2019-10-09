@@ -6,8 +6,6 @@ using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using Unity.Collections;
 
-//[assembly: ModuleDescription("Unity.Tiny.AudioNative", "Audio module")]
-//[assembly: IncludedPlatform(Platform.Web | Platform.WeChat | Platform.FBInstant)]
 [assembly: InternalsVisibleTo("Unity.Tiny.Audio.Tests")]
 namespace Unity.Tiny.Audio
 {
@@ -70,12 +68,14 @@ namespace Unity.Tiny.Audio
         [DllImport(DLL, EntryPoint = "pauseAudio")]
         public static extern void PauseAudio(bool doPause);    // returns success (or failure)
 
-       [DllImport(DLL, EntryPoint = "numSourcesAllocated")]
+        [DllImport(DLL, EntryPoint = "numSourcesAllocated")]
         public static extern int NumSourcesAllocated();          // Testing: number of SoundSources allocated.
 
         [DllImport(DLL, EntryPoint = "numClipsAllocated")]
         public static extern int NumClipsAllocated();            // Testing: number of SoundClips allocated.
 
+        [DllImport(DLL, EntryPoint = "sourcePoolID")]
+        public static extern int SourcePoolID();                 // Testing: the next ID that will be assigned to a source. (Useful to tell if a source changed.)
     }
 
     class AudioNativeSystemLoadFromFile : IGenericAssetLoader< AudioClip, AudioNativeClip, AudioClipLoadFromFile, AudioNativeLoading >
@@ -139,12 +139,6 @@ namespace Unity.Tiny.Audio
             base.OnCreate();
             c = new AudioNativeSystemLoadFromFile();
         }
-
-        protected override void OnUpdate()
-        {
-            // loading
-            base.OnUpdate();
-        }
     }
 
     [UpdateInGroup(typeof(PresentationSystemGroup))]
@@ -174,24 +168,22 @@ namespace Unity.Tiny.Audio
             {
                 AudioSource audioSource = mgr.GetComponentData<AudioSource>(e);
 
-                if (mgr.HasComponent<AudioNativeSource>(e))
-                {
-                    // If there is a native source and it is IsPlaying() then
-                    // can't play another, but we are done. (So return true.)
-                    // Note that IsPlaying() is synchronous (which is what we want)
-                    // as opposed to isPlaying which is async.
-                    AudioNativeSource ans = mgr.GetComponentData<AudioNativeSource>(e);
-                    if (AudioNativeCalls.IsPlaying(ans.sourceID))
-                        return true;
-                }
-
                 Entity clipEntity = audioSource.clip;
                 if (mgr.HasComponent<AudioNativeClip>(clipEntity))
                 {
                     AudioNativeClip clip = mgr.GetComponentData<AudioNativeClip>(clipEntity);
                     if (clip.clipID > 0)
                     {
+                        // If there is an existing source, it should re-start.
+                        // Do this with a Stop() and let it play below.
+                        if (mgr.HasComponent<AudioNativeSource>(e))
+                        {
+                            AudioNativeSource ans = mgr.GetComponentData<AudioNativeSource>(e);
+                            AudioNativeCalls.Stop(ans.sourceID);
+                        }
+
                         uint sourceID = AudioNativeCalls.Play(clip.clipID, audioSource.volume, audioSource.loop);
+
                         AudioNativeSource audioNativeSource = new AudioNativeSource()
                         {
                             sourceID = sourceID

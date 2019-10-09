@@ -2,6 +2,7 @@ using System;
 using UnityEditor;
 using UnityEngine;
 using TMPro;
+using Unity.Editor.Extensions;
 
 namespace Unity.Tiny.Text.Editor
 {
@@ -124,5 +125,64 @@ namespace Unity.Tiny.Text.Editor
             }
             throw new ArgumentOutOfRangeException(nameof(pivot), pivot, null);
         }
+    }
+
+    internal static class TtfFonts
+    {
+        private const string SansfontFolderPath = "/Editor Default Resources/fonts/liberation-sans/";
+        private const string SeriffontFolderPath = "/Editor Default Resources/fonts/liberation-serif/";
+        private const string MonofontFolderPath = "/Editor Default Resources/fonts/liberation-mono/";
+        
+        public static string GetSansTtfFontPath(string packagePath, bool italic, bool bold)
+        {
+             if(bold && italic)
+             {
+                 return packagePath + SansfontFolderPath + "LiberationSans-BoldItalic.ttf";
+             }
+             if(bold)
+             {
+                 return packagePath + SansfontFolderPath + "LiberationSans-Bold.ttf";
+             }
+             if (italic)
+             {
+                 return packagePath + SansfontFolderPath + "LiberationSans-Italic.ttf";
+             }
+            return packagePath + SansfontFolderPath +  "LiberationSans-Regular.ttf";
+        }
+
+        public static string GetSerifTtfFontPath(string packagePath, bool italic, bool bold)
+        {
+            if (bold && italic)
+            {
+                return packagePath + SeriffontFolderPath + "LiberationSerif-BoldItalic.ttf";
+            }
+            if (bold)
+            {
+                return packagePath + SeriffontFolderPath + "LiberationSerif-Bold.ttf";
+            }
+            if (italic)
+            {
+                return packagePath + SeriffontFolderPath + "LiberationSerif-Italic.ttf";
+            }
+            return packagePath + SeriffontFolderPath + "LiberationSerif-Regular.ttf";
+        }
+
+        public static string GetMonoTtfFontPath(string packagePath, bool italic, bool bold)
+        {
+            if (bold && italic)
+            {
+                return packagePath + MonofontFolderPath + "LiberationMono-BoldItalic.ttf";
+            }
+            if (bold)
+            {
+                return packagePath + MonofontFolderPath + "LiberationMono-Bold.ttf";
+            }
+            if (italic)
+            {
+                return packagePath + MonofontFolderPath + "LiberationMono-Italic.ttf";
+            }
+            return packagePath + MonofontFolderPath + "LiberationMono-Regular.ttf";
+        }
+
     }
 }

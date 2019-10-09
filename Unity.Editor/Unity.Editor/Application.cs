@@ -22,14 +22,16 @@ namespace Unity.Editor
         public static event Action<Project> BeginAuthoringProject = delegate { };
         public static event Action<Project> EndAuthoringProject = delegate { };
 
+        public const string PackageId = "com.unity.tiny";
+
         public static Project AuthoringProject { get; private set; }
         public static DirectoryInfo RootDirectory => new DirectoryInfo(".");
         public static DirectoryInfo LibraryDirectory => RootDirectory.Combine("Library");
-        public const string PackageId = "com.unity.tiny";
         public static DirectoryInfo PackageDirectory => new DirectoryInfo(Path.GetFullPath("Packages/" + PackageId));
         public static DirectoryInfo ToolsDirectory => LibraryDirectory.Combine("DotsEditorTools");
         public static DirectoryInfo MonoDirectory => new DirectoryInfo(Path.Combine(EditorApplication.applicationContentsPath, "MonoBleedingEdge", "bin"));
         public static DirectoryInfo DataDirectory => new DirectoryInfo(UnityEngine.Application.dataPath);
+        public static DirectoryInfo TestDirectory => DataDirectory.Combine("Tests");
         public static DirectoryInfo OutputDirectory { get; set; } = LibraryDirectory.Combine("DotsRuntimeBuild");
         public static BuildSettings LastBuildSettings { get; internal set; }
         public static BuildResult LastBuildResult { get; internal set; }
@@ -123,7 +125,7 @@ namespace Unity.Editor
             LastBuildSettings = new BuildSettings
             {
                 Project = AuthoringProject,
-                Platform = workspaceManager.ActivePlatform,
+                BuildTarget = workspaceManager.ActiveBuildTarget,
                 Configuration = workspaceManager.ActiveConfiguration,
                 OutputDirectory = OutputDirectory
             };
@@ -144,7 +146,7 @@ namespace Unity.Editor
                 return false;
             }
 
-            return LastBuildSettings.Platform.Run(LastBuildResult.Target);
+            return LastBuildSettings.BuildTarget.Run(LastBuildResult.Target);
         }
     }
 }

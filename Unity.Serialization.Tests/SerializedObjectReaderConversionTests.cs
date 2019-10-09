@@ -149,5 +149,21 @@ namespace Unity.Serialization.Tests
                 Assert.AreEqual(expected, value.AsDouble());
             }
         }
+
+        [Test]
+        [TestCase(@"{x:Infinity}", float.PositiveInfinity)]
+        [TestCase(@"{x:-Infinity}", float.NegativeInfinity)]
+        [TestCase(@"{x:NaN}", float.NaN)]
+        public void SerializedObjectReader_Convert_SpecialValues(string json, float expected)
+        {
+            SetJson(json);
+
+            using (var reader = new SerializedObjectReader(m_Stream, m_ConfigWithNoValidation))
+            {
+                var obj = reader.ReadObject();
+                var value = obj["x"];
+                Assert.AreEqual(expected, value.AsFloat());
+            }
+        }
     }
 }

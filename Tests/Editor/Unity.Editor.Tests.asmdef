@@ -1,7 +1,18 @@
 {
     "name": "Unity.Editor.Tests",
     "references": [
-        "Unity.Editor"
+        "Unity.Authoring",
+        "Unity.Editor",
+        "Unity.Entities",
+        "Unity.TextMeshPro",
+        "Unity.Tiny.Audio",
+        "Unity.Tiny.Core",
+        "Unity.Tiny.Core2D",
+        "Unity.Tiny.Image2D",
+        "Unity.Tiny.Scenes",
+        "Unity.Tiny.Sprite2D",
+        "Unity.Tiny.Text",
+        "Unity.Tiny.Video"
     ],
     "optionalUnityReferences": [
         "TestAssemblies"
@@ -12,7 +23,9 @@
     "excludePlatforms": [],
     "allowUnsafeCode": true,
     "overrideReferences": false,
-    "precompiledReferences": [],
+    "precompiledReferences": [
+        "Moq.dll"
+    ],
     "autoReferenced": false,
     "defineConstraints": [],
     "versionDefines": []

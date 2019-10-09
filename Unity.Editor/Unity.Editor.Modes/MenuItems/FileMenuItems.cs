@@ -2,6 +2,7 @@
 using System;
 using System.IO;
 using Unity.Editor.Modes;
+using Unity.Editor.Utilities;
 using UnityEditor;
 
 namespace Unity.Editor.MenuItems
@@ -13,7 +14,7 @@ namespace Unity.Editor.MenuItems
         {
             NewProject();
         }
-        
+
         [MenuItem(CommandIds.File.OpenProject)]
         private static void OpenProjectMenu()
         {
@@ -44,12 +45,6 @@ namespace Unity.Editor.MenuItems
             BuildAndRun();
         }
 
-        [UsedImplicitly, CommandHandler(CommandIds.File.ImportSamples, CommandHint.Menu)]
-        public static void ImportSampleProjects(CommandExecuteContext context)
-        {
-            ImportSampleProjects();
-        }
-
         internal static void NewProject()
         {
             var defaultProjectSettings = ProjectSettings.Default;
@@ -65,7 +60,9 @@ namespace Unity.Editor.MenuItems
             }
 
             var file = new FileInfo(path);
-            Project.Create(file.Directory, file.Name);
+            var project = Project.Create(file.Directory, file.Name);
+            SessionState.SetString(Project.k_OpenNewlyCreatedProjectSessionKey, project.GetProjectFile().FullName);
+
             EditorModes.SetDotsMode();
         }
 
@@ -104,11 +101,6 @@ namespace Unity.Editor.MenuItems
         internal static void BuildAndRun()
         {
             Application.BuildAndRun();
-        }
-
-        internal static void ImportSampleProjects()
-        {
-            throw new NotImplementedException();
         }
     }
 }

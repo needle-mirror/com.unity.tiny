@@ -9,7 +9,7 @@ using Unity.Entities;
 
 namespace Unity.Editor
 {
-    internal class MandatoryEditorComponentsManager : SessionManager
+    internal class MandatoryEditorComponentsManager : ISessionManagerInternal
     {
         private IChangeManager m_ChangeManager;
         private IEditorUndoManager m_Undo;
@@ -19,23 +19,19 @@ namespace Unity.Editor
 
         private readonly ulong ComponentOrderHash =
             TypeManager.GetTypeInfo(TypeManager.GetTypeIndex(typeof(ComponentOrder))).StableTypeHash;
-        
-        public MandatoryEditorComponentsManager(Session session) : base(session)
-        {
-        }
 
-        public override void Load()
+        public void Load(Session session)
         {
-            m_WorldManager = Session.GetManager<IWorldManager>();
-            m_ChangeManager = Session.GetManager<IChangeManager>();
+            m_WorldManager = session.GetManager<IWorldManager>();
+            m_ChangeManager = session.GetManager<IChangeManager>();
             m_ChangeManager.RegisterChangeCallback(HandleChanges, int.MinValue);
 
-            m_Undo = Session.GetManager<IEditorUndoManager>();
+            m_Undo = session.GetManager<IEditorUndoManager>();
             m_Undo.UndoRedoBatchStarted += HandleUndoRedoStarted;
             m_Undo.UndoRedoBatchEnded += HandleUndoRedoEnded;
         }
 
-        public override void Unload()
+        public void Unload(Session session)
         {
             m_ChangeManager.UnregisterChangeCallback(HandleChanges);
             m_Undo.UndoRedoBatchStarted -= HandleUndoRedoStarted;

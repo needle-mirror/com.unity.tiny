@@ -58,7 +58,7 @@ namespace Unity.Editor
         Scene GetFirstInstanceOfSceneLoaded(Guid sceneGuid);
     }
 
-    internal class EditorSceneManager : SessionManager, IEditorSceneManagerInternal
+    internal class EditorSceneManager : ISessionManagerInternal, IEditorSceneManagerInternal
     {
         public readonly struct SceneSaveScope : IDisposable
         {
@@ -78,13 +78,14 @@ namespace Unity.Editor
 
         private readonly HashSet<Scene> m_ChangedScenes = new HashSet<Scene>();
         private readonly HashSet<Scene> m_RebuildScenes = new HashSet<Scene>();
+        private readonly Dictionary<Guid, SceneGraph> m_Graphs = new Dictionary<Guid, SceneGraph>();
 
         private IPersistenceManager m_Persistence;
         private IWorldManager m_WorldManager;
         private IEditorUndoManager m_EditorUndoManager;
         private int m_SceneSaveScope;
-        private readonly Dictionary<Guid, SceneGraph> m_Graphs;
-        
+        private Session m_Session;
+
         /// <summary>
         /// Workaround since we need to rely on the existence of the ConfigEntity
         /// </summary>
@@ -134,31 +135,28 @@ namespace Unity.Editor
             entityManager.SetComponentData(entity, new ActiveScene { Scene = scene });
             Bridge.EditorApplication.UpdateMainWindowTitle();
         }
-        
-        public EditorSceneManager(Session session) : base(session)
-        {
-            m_Graphs = new Dictionary<Guid, SceneGraph>();
-        }
 
-        void ISessionManagerInternal.Load()
+        public void Load(Session session)
         {
+            m_Session = session;
+
             AssetPostprocessorCallbacks.RegisterAssetImportedHandlerForType<SceneAsset>(HandleSceneImported);
 
-            m_Persistence = Session.GetManager<IPersistenceManager>();
-            m_WorldManager = Session.GetManager<IWorldManager>();
-            m_EditorUndoManager = Session.GetManager<IEditorUndoManager>();
-            Session.GetManager<IChangeManager>().BeginChangeTracking += HandleBeginChangeTracking;
-            Session.GetManager<IChangeManager>().EndChangeTracking += HandleEndChangeTracking;
-            Session.GetManager<IChangeManager>().RegisterChangeCallback(HandleChanges);
+            m_Persistence = session.GetManager<IPersistenceManager>();
+            m_WorldManager = session.GetManager<IWorldManager>();
+            m_EditorUndoManager = session.GetManager<IEditorUndoManager>();
+            session.GetManager<IChangeManager>().BeginChangeTracking += HandleBeginChangeTracking;
+            session.GetManager<IChangeManager>().EndChangeTracking += HandleEndChangeTracking;
+            session.GetManager<IChangeManager>().RegisterChangeCallback(HandleChanges);
             m_EditorUndoManager.UndoRedoBatchEnded += HandleUndo;
         }
 
-        public override void Unload()
+        public void Unload(Session session)
         {
             AssetPostprocessorCallbacks.UnregisterAssetImportedHandlerForType<SceneAsset>(HandleSceneImported);
-            Session.GetManager<IChangeManager>().UnregisterChangeCallback(HandleChanges);
-            Session.GetManager<IChangeManager>().BeginChangeTracking -= HandleBeginChangeTracking;
-            Session.GetManager<IChangeManager>().EndChangeTracking -= HandleEndChangeTracking;
+            session.GetManager<IChangeManager>().UnregisterChangeCallback(HandleChanges);
+            session.GetManager<IChangeManager>().BeginChangeTracking -= HandleBeginChangeTracking;
+            session.GetManager<IChangeManager>().EndChangeTracking -= HandleEndChangeTracking;
             m_EditorUndoManager.UndoRedoBatchEnded -= HandleUndo;
         }
 
@@ -200,7 +198,7 @@ namespace Unity.Editor
             var guid = scene.SceneGuid.Guid;
             if (!m_Graphs.TryGetValue(guid, out var graph) || null == graph)
             {
-                m_Graphs[guid] = graph = new SceneGraph(Session, scene);
+                m_Graphs[guid] = graph = new SceneGraph(m_Session, scene);
             }
             return graph;
         }
@@ -624,7 +622,7 @@ namespace Unity.Editor
             for (var i = 0; i < workspaceScenes.Length; ++i)
             {
                 var workspaceScene = workspaceScenes[i];
-                m_Graphs[workspaceScene.Scene.SceneGuid.Guid] = new SceneGraph(Session, workspaceScene.Scene);
+                m_Graphs[workspaceScene.Scene.SceneGuid.Guid] = new SceneGraph(m_Session, workspaceScene.Scene);
             }
         }
 

@@ -37,7 +37,7 @@ namespace Unity.Editor.MenuItems
                 var buildContext = new BuildPipeline.BuildContext(new BuildSettings
                 {
                     Project = Application.AuthoringProject,
-                    Platform = new DesktopDotNetPlatform(),
+                    BuildTarget = new DesktopDotNetBuildTarget(),
                     Configuration = Configuration.Debug,
                     OutputDirectory = Application.OutputDirectory
                 }, progressBar);

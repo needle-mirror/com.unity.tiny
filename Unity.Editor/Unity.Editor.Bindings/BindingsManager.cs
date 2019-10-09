@@ -16,7 +16,7 @@ using UnityEngine.SceneManagement;
 
 namespace Unity.Editor.Bindings
 {
-    internal class BindingsManager : SessionManager
+    internal class BindingsManager : ISessionManagerInternal
     {
         private static class Cache
         {
@@ -200,33 +200,30 @@ namespace Unity.Editor.Bindings
         private bool m_UndoRedoing;
         //private bool m_IncludeTestTypes;
 
-        public BindingsManager(Session session) : base(session)
-        {
-        }
 
-        public override void Load()
+        public void Load(Session session)
         {
-            m_BindingsContext = new BindingContext(Session);
-            m_Undo = Session.GetManager<IEditorUndoManager>();
+            m_BindingsContext = new BindingContext(session);
+            m_Undo = session.GetManager<IEditorUndoManager>();
             m_Undo.UndoRedoBatchStarted += HandleUndoRedoBatchStarted;
             m_Undo.UndoRedoBatchEnded += HandleUndoRedoBatchEnded;
 
-            m_WorldManager = Session.GetManager<IWorldManagerInternal>();
-            m_ArchetypeManager = Session.GetManager<IArchetypeManager>();
-            m_SceneManager = Session.GetManager<IEditorSceneManagerInternal>();
-            m_ComponentCache = Session.GetManager<UnityComponentCacheManager>();
-            Session.GetManager<IChangeManager>().RegisterChangeCallback(HandleChanges, int.MaxValue);
+            m_WorldManager = session.GetManager<IWorldManagerInternal>();
+            m_ArchetypeManager = session.GetManager<IArchetypeManager>();
+            m_SceneManager = session.GetManager<IEditorSceneManagerInternal>();
+            m_ComponentCache = session.GetManager<UnityComponentCacheManager>();
+            session.GetManager<IChangeManager>().RegisterChangeCallback(HandleChanges, int.MaxValue);
             UnityEditor.Undo.postprocessModifications += HandleInvertedChanges;
             EditorApplication.hierarchyChanged += HandleHierarchyChanges;
             m_TransferMap = new NativeHashMap<EntityGuid, EntityGuid>(1024, Allocator.Persistent);
         }
 
-        public override void Unload()
+        public void Unload(Session session)
         {
             m_Undo.UndoRedoBatchStarted -= HandleUndoRedoBatchStarted;
             m_Undo.UndoRedoBatchEnded -= HandleUndoRedoBatchEnded;
             m_TransferMap.Dispose();
-            Session.GetManager<IChangeManager>().UnregisterChangeCallback(HandleChanges);
+            session.GetManager<IChangeManager>().UnregisterChangeCallback(HandleChanges);
 
             m_WorldManager = null;
             UnityEditor.Undo.postprocessModifications -= HandleInvertedChanges;

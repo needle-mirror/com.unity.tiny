@@ -3,7 +3,6 @@ using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Tiny;
 
-[assembly: ModuleDescription("Unity.Tiny.Shape2D", "2D shapes")]
 namespace Unity.Tiny.Core2D
 {
 

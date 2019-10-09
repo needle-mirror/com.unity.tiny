@@ -66,7 +66,8 @@ namespace Unity.Editor.Modes
             EditorGUILayout.BeginVertical();
 
             var workspaceManager = Application.AuthoringProject.Session.GetManager<WorkspaceManager>();
-            workspaceManager.ActivePlatform = PlatformSettings.DrawPlatformPopup(workspaceManager.ActivePlatform, style: PlayBarStyles.DropdownStyle);
+            workspaceManager.ActiveBuildTarget = BuildTargetSettings.DrawBuildTargetPopup(workspaceManager.ActiveBuildTarget, style: PlayBarStyles.DropdownStyle);
+            GUILayout.FlexibleSpace();
             EditorGUILayout.EndVertical();
             
             EditorGUILayout.BeginVertical();

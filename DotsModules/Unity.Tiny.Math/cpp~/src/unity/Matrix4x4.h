@@ -89,7 +89,12 @@ public:
     // Returns whether a matrix is a perspective projection transform (i.e. doesn't have 0,0,0,1 in the last column).
     bool IsPerspective() const { return (m_Data[3] != 0.0f || m_Data[7] != 0.0f || m_Data[11] != 0.0f || m_Data[15] != 1.0f); }
     // return maximum absolute scale, ~1 for no scale
-    float MaxAbsScale() const;
+    float MaxAbsScale() const {
+        float a = SqrMagnitude(GetAxisX());
+        a = std::max(a, SqrMagnitude(GetAxisY()));
+        a = std::max(a, SqrMagnitude(GetAxisZ()));
+        return sqrtf(a);
+    }
     void RemoveScale();
 
     float GetDeterminant() const;

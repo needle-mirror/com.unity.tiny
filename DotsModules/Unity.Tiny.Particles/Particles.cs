@@ -22,7 +22,6 @@ using Unity.Tiny.Core2D;
 ///  velocity, rotation, tint, scale, and so on, both initially and over the lifetime
 ///  of the particles.
 /// </summary>
-[assembly: ModuleDescription("Unity.Tiny.Particles", "Basic particle system functionality")]
 namespace Unity.Tiny.Particles
 {
     [IdAlias("0617b7f4431866888bfdb077d683c2ce")]

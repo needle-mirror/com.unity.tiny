@@ -9,7 +9,6 @@ using Unity.Tiny.Core2D;
 ///  @module
 ///  @name Unity.Tiny
 /// </summary>
-[assembly: ModuleDescription("Unity.Tiny.Interpolation", "Interpolation curve primitives")]
 namespace Unity.Tiny.Interpolation
 {
     #region Key components

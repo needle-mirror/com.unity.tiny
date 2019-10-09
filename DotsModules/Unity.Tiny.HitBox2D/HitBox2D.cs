@@ -9,7 +9,6 @@ using Unity.Tiny.Core2D;
 using Unity.Tiny.Debugging;
 using Unity.Collections.LowLevel.Unsafe;
 
-[assembly:ModuleDescription("Unity.Tiny.HitBox2D", "Rectangular and pixel-accurate overlap detection")]
 namespace Unity.Tiny.HitBox2D
 {
     /// <summary>

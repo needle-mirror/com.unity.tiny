@@ -18,11 +18,7 @@ namespace Unity.Editor.MenuItems
 
         public static class Edit
         {
-            public const string SelectionBasedValidation = Prefix + "SelectionBasedValidation";
-            public const string DuplicateSelection = Prefix + "DuplicateSelection";
-            public const string DeleteSelection = Prefix + "DeleteSelection";
             public const string Play = Prefix + "Play";
-            public const string Pause = Prefix + "Pause";
         }
 
         public static class Assets

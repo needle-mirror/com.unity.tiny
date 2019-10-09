@@ -1,6 +1,8 @@
 # UILayout Module
 
-Tiny supports a subset of [Unity UI Basic Layout](https://docs.unity3d.com/2018.2/Documentation/Manual/UIBasicLayout.html) referred to as the UILayout module. This document provides common use cases, an example, and a reference of UILayout components.
+Tiny supports a subset of [Unity UI Basic Layout](https://docs.unity3d.com/Manual/UIBasicLayout.html) referred to as the UILayout module. This document provides common use cases, an example, and a reference of UILayout components.
+
+[See this module's API documentation for more information](../api/Unity.Tiny.UILayout.html)
 
 ## Use Cases and Examples
 
@@ -60,9 +62,9 @@ Tiny is built around small, lightweight components. This way you only pay for wh
 ### RectTransform
 
 * Requires: [ut.Core2D.Transform](./manual-module-core2d.md#transform), [UICanvas](#uicanvas) on the root entity
-* Unity Reference: [Rect Transform](https://docs.unity3d.com/2018.2/Documentation/Manual/UIBasicLayout.html)
+* Unity Reference: [Rect Transform](https://docs.unity3d.com/Manual/UIBasicLayout.html)
 
-The RectTransform component is the 2D layout counterpart of the [ut.Core2D.Transform](./manual-module-core2d.md#transform) component. Where [ut.Core2D.Transform](./manual-module-core2d.md#transform) represents a single coordinate, RectTransform represents a rectangle with UI elements inside. RectTransform can be nested in order to specify how a child RectTransform should be positioned and sized relative to the parent rectangle. Please refer to the [Unity Basic Layout Documentation](https://docs.unity3d.com/2018.2/Documentation/Manual/UIBasicLayout.html) to learn how to use the Rect Tool, the Pivot and the Anchors.
+The RectTransform component is the 2D layout counterpart of the [ut.Core2D.Transform](./manual-module-core2d.md#transform) component. Where [ut.Core2D.Transform](./manual-module-core2d.md#transform) represents a single coordinate, RectTransform represents a rectangle with UI elements inside. RectTransform can be nested in order to specify how a child RectTransform should be positioned and sized relative to the parent rectangle. Please refer to the [Unity Basic Layout Documentation](https://docs.unity3d.com/Manual/UIBasicLayout.html) to learn how to use the Rect Tool, the Pivot and the Anchors.
 
 > A [ut.Core2D.Sprite2DRendererOptions](./manual-module-core2d.md#sprite2drendereroptions) component is needed with a [Sprite2DRenderer](./manual-module-core2d.md#sprite2drenderer) component when using a RectTransform. Properties value from a RectTransform on a root entity will be driven by a UICanvas (RectTransform GUI is disable in this case).
 
@@ -78,13 +80,13 @@ The RectTransform component is the 2D layout counterpart of the [ut.Core2D.Trans
 
 ### UICanvas
 
-* Unity References: [Canvas](https://docs.unity3d.com/2018.2/Documentation/Manual/UICanvas.html), [Canvas Scaler](https://docs.unity3d.com/Manual/script-CanvasScaler.html)
+* Unity References: [Canvas](https://docs.unity3d.com/Manual/UICanvas.html), [Canvas Scaler](https://docs.unity3d.com/Manual/script-CanvasScaler.html)
 
 The UICanvas is the area that all UI elements should be inside as child entities. It is an abstract space in which the UI is laid out and rendered. This component is also used to control the overall elements scale.
 
 From a root entity containing a UICanvas, creating a new child entity automatically creates an entity with a [RectTransform](#recttransform) component.
 
-> At the moment, UICanvas can only be a component of a root entity. Nested UICanvas is not supported. Creating multiple UICanvases, using separated entities, is possible. Note that the UI is rendered to the screen as if it was drawn on a placed object some distance in front of a given camera (see `Screen Space - Camera` [render mode](https://docs.unity3d.com/2018.2/Documentation/Manual/class-Canvas.html)).
+> At the moment, UICanvas can only be a component of a root entity. Nested UICanvas is not supported. Creating multiple UICanvases, using separated entities, is possible. Note that the UI is rendered to the screen as if it was drawn on a placed object some distance in front of a given camera (see `Screen Space - Camera` [render mode](https://docs.unity3d.com/Manual/class-Canvas.html)).
 
 |Property|Description|
 |--------|-----------|
