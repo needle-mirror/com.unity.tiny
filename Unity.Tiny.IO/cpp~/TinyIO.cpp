@@ -1,10 +1,12 @@
 #include "TinyIO.h"
 
+#include <allocators.h>
+#include <baselibext.h>
+
 #include <assert.h>
 #include <array>
 #include <atomic>
 #include <deque>
-#include <mutex>
 #include <string>
 
 #if defined __EMSCRIPTEN__
@@ -18,6 +20,8 @@
 
     using namespace ut::ThreadPool;
 #endif
+
+using namespace Unity::LowLevel;
 
 namespace Unity { namespace Tiny { namespace IO
 {
@@ -52,7 +56,7 @@ namespace Unity { namespace Tiny { namespace IO
 
         int GetRequestIndex()
         {
-            std::lock_guard<std::mutex> lock(mLock);
+			BaselibLock lock(mLock);
             if (mFreeRequests.empty())
             {
                 int origSize = (int) mRequests.size() * kGrowSize;
@@ -85,12 +89,12 @@ namespace Unity { namespace Tiny { namespace IO
 
         void FreeRequest(int index)
         {
-            std::lock_guard<std::mutex> lock(mLock);
+			BaselibLock lock(mLock);
             mFreeRequests.push_back(index);
         }
 
     private:
-        std::mutex mLock;
+		baselib::Lock mLock;
         std::deque<std::array<Request, kGrowSize>> mRequests;
         std::deque<int> mFreeRequests;
     };
@@ -212,7 +216,7 @@ namespace Unity { namespace Tiny { namespace IO
     /////////////
 
 #if defined(UNITY_ANDROID)
-    extern "C" void* loadAsset(const char *path, int *size);
+    extern "C" void* loadAsset(const char *path, int *size, void* (*alloc)(size_t));
     DOTS_EXPORT(int)
     RequestAsyncRead(const char* path)
     {
@@ -224,7 +228,7 @@ namespace Unity { namespace Tiny { namespace IO
 
         // Just do syncrounous IO on native for now
         int size;
-        void *data = loadAsset(path, &size);
+        void* data = loadAsset(path, &size, [](size_t bytes) -> void* { return unsafeutility_malloc(bytes, 16, Allocator::Persistent); });
         if (data == NULL)
         {
             request.mStatus = Status::Failure;
@@ -276,7 +280,7 @@ namespace Unity { namespace Tiny { namespace IO
             else
             {
                 int size = statBuf.st_size;
-                void* data = malloc(size);
+                void* data = unsafeutility_malloc(size, 16, Allocator::Persistent);
 
                 int bytesRead = (int) fread(data, 1, size, pFile);
 
@@ -332,7 +336,7 @@ namespace Unity { namespace Tiny { namespace IO
             Pool::GetInstance()->Abort(request.mJobId);
 #endif
 
-        free(request.mpPayload);
+        unsafeutility_free(request.mpPayload, Allocator::Persistent);
         request.mpPayload = nullptr;
         request.mPayloadSize = 0;
         request.mStatus = Status::NotStarted;

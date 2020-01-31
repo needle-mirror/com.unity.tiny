@@ -88,6 +88,8 @@ namespace Unity.Tiny.Audio
         protected abstract bool PlaySource(Entity e);
         protected abstract void StopSource(Entity e);
         protected abstract bool IsPlaying(Entity e);
+        protected abstract bool SetVolume(Entity e, float volume);
+        protected abstract bool SetPan(Entity e, float pan);
 
         protected override void OnCreate()
         {
@@ -138,6 +140,8 @@ namespace Unity.Tiny.Audio
                     .ForEach((Entity e, ref AudioSource tag) =>
                     {
                         tag.isPlaying = IsPlaying(e);
+                        SetVolume(e, tag.volume);
+                        SetPan(e, tag.pan);
                     });
                 ecb.Playback(EntityManager);
                 ecb.Dispose();
@@ -228,9 +232,9 @@ namespace Unity.Tiny.Audio
     ///  To start playback use the AudioSourceStart component.
     ///  To stop playback use the AudioSourceStop component.
     ///
-    ///  `clip`, `volume`, and `loop` are read when the audio source
-    ///  starts as a result of AudioSourceStart being added. They will
-    ///  not change audio that is already playing.
+    ///  `clip`, `volume`, `pan`, and `loop` are read when the audio source
+    ///  starts as a result of AudioSourceStart being added. `clip` and `loop`
+    ///  will not change audio that is already playing.
     ///
     ///  `isPlaying` is updated with every tick of the world.
     /// </remarks>
@@ -246,6 +250,11 @@ namespace Unity.Tiny.Audio
         ///  Specifies the audio clip's playback volume. Values can range from 0..1.
         /// </summary>
         public float volume;
+
+        /// <summary>
+        ///  Specifies the audio clip's playback stereo pan. Values can range from -1..1.
+        /// </summary>
+        public float pan;
 
         /// <summary>
         ///  If true, replays the audio clip when it reaches end.

@@ -16,7 +16,8 @@ namespace Unity.TinyConversion
                 string textPath = AssetDatabase.GetAssetPath(texture);
                 TextureImporter importer = (TextureImporter)TextureImporter.GetAtPath(textPath);
                 TextureImporterSettings textureImporterSettings = new TextureImporterSettings();
-                importer.ReadTextureSettings(textureImporterSettings);
+                if (null != importer)
+                    importer.ReadTextureSettings(textureImporterSettings);
                 DstEntityManager.AddComponentData(entity, new Image2D()
                 {
                     imagePixelWidth = texture.width,

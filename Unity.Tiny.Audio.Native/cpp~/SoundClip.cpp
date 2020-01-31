@@ -3,7 +3,9 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+#include <allocators.h>
 
+using namespace Unity::LowLevel;
 
 SoundClip::SoundClipStatus SoundClip::checkLoad()
 {
@@ -56,7 +58,7 @@ SoundClip::~SoundClip()
         ma_free(m_frames);
     }
     if (m_memory) {
-        free(m_memory);
+        unsafeutility_free(m_memory, Allocator::Persistent);
     }
 }
 
@@ -115,7 +117,7 @@ void* SoundClip::constructWAV(int nFrames, int nChannels, int bitsPerSample, int
     wav.bitsPerSample = bitsPerSample;
     wav.subChunk2Size = fileSize - sizeof(WAV);
 
-    void* mem = malloc(fileSize);
+    void* mem = unsafeutility_malloc(fileSize, 16, Allocator::Persistent);
     memset(mem, 0, fileSize);
     memcpy(mem, &wav, sizeof(WAV));
     *nBytes = fileSize;

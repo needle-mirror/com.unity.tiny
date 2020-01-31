@@ -5,6 +5,7 @@ using Unity.Tiny.GenericAssetLoading;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using Unity.Collections;
+using Unity.Platforms;
 
 [assembly: InternalsVisibleTo("Unity.Tiny.Audio.Tests")]
 namespace Unity.Tiny.Audio
@@ -52,7 +53,7 @@ namespace Unity.Tiny.Audio
 
         // Source
         [DllImport(DLL, EntryPoint = "playSource")]
-        public static extern uint Play(uint clipID, float volume, bool loop);    // returns sourceID (>0) or 0 or failure.
+        public static extern uint Play(uint clipID, float volume, float pan, bool loop);    // returns sourceID (>0) or 0 or failure.
 
         [DllImport(DLL, EntryPoint = "isPlaying")]
         [return: MarshalAs(UnmanagedType.I1)]
@@ -64,6 +65,12 @@ namespace Unity.Tiny.Audio
 
         [DllImport(DLL, EntryPoint = "pauseAudio")]
         public static extern void PauseAudio(bool doPause);    // returns success (or failure)
+
+        [DllImport(DLL, EntryPoint = "setVolume")]
+        public static extern bool SetVolume(uint sourceId, float volume);    // returns success (or failure)
+
+        [DllImport(DLL, EntryPoint = "setPan")]
+        public static extern bool SetPan(uint sourceId, float pan);    // returns success (or failure)
 
         [DllImport(DLL, EntryPoint = "numSourcesAllocated")]
         public static extern int NumSourcesAllocated();          // Testing: number of SoundSources allocated.
@@ -141,6 +148,16 @@ namespace Unity.Tiny.Audio
     [UpdateInGroup(typeof(PresentationSystemGroup))]
     class AudioNativeSystem : AudioSystem
     {
+        protected override void OnStartRunning()
+        {
+            PlatformEvents.OnSuspendResume += OnSuspendResume;
+        }
+
+        protected override void OnStopRunning()
+        {
+            PlatformEvents.OnSuspendResume -= OnSuspendResume;
+        }
+
         protected override void InitAudioSystem()
         {
             AudioNativeCalls.InitAudio();
@@ -179,7 +196,7 @@ namespace Unity.Tiny.Audio
                             AudioNativeCalls.Stop(ans.sourceID);
                         }
 
-                        uint sourceID = AudioNativeCalls.Play(clip.clipID, audioSource.volume, audioSource.loop);
+                        uint sourceID = AudioNativeCalls.Play(clip.clipID, audioSource.volume, audioSource.pan, audioSource.loop);
 
                         AudioNativeSource audioNativeSource = new AudioNativeSource()
                         {
@@ -227,6 +244,34 @@ namespace Unity.Tiny.Audio
             return false;
         }
 
+        protected override bool SetVolume(Entity e, float volume)
+        {
+            if (EntityManager.HasComponent<AudioNativeSource>(e))
+            {
+                AudioNativeSource audioNativeSource = EntityManager.GetComponentData<AudioNativeSource>(e);
+                if (audioNativeSource.sourceID > 0)
+                {
+                    return AudioNativeCalls.SetVolume(audioNativeSource.sourceID, volume);
+                }
+            }
+
+            return false;
+        }
+
+        protected override bool SetPan(Entity e, float pan)
+        {
+            if (EntityManager.HasComponent<AudioNativeSource>(e))
+            {
+                AudioNativeSource audioNativeSource = EntityManager.GetComponentData<AudioNativeSource>(e);
+                if (audioNativeSource.sourceID > 0)
+                {
+                    return AudioNativeCalls.SetPan(audioNativeSource.sourceID, pan);
+                }
+            }
+
+            return false;
+        }
+
         protected override void OnUpdate()
         {
             base.OnUpdate();
@@ -245,6 +290,11 @@ namespace Unity.Tiny.Audio
                 });
             ecb.Playback(EntityManager);
             ecb.Dispose();
+        }
+
+        public void OnSuspendResume(object sender, SuspendResumeEvent evt)
+        {
+            AudioNativeCalls.PauseAudio(evt.Suspend);
         }
 
     }

@@ -26,6 +26,8 @@ public:
 
     void setVolume(float v) { m_volume = v; }
     float volume() const { return m_volume; }
+    void setPan(float p) { m_pan = p; }
+    float pan() const { return m_pan; }
     void setLoop(bool enable) { m_loop = enable; }
     bool loop() const { return m_loop; }
 
@@ -42,6 +44,7 @@ private:
     SoundClip* m_clip;
 
     float m_volume = 1.0f;
+    float m_pan = 0.0f;   // -1 left, 0 center, 1 right
     bool m_loop = false;
     SoundStatus m_status = NotYetStarted;
     uint64_t m_framePos = 0;

@@ -1,0 +1,16 @@
+{
+    "name": "Unity.Tiny.Image2D.Authoring.Tests",
+    "references": [
+        "Unity.Entities.Hybrid",
+        "Unity.Tiny.Authoring",
+        "Unity.Tiny.Image2D.Authoring"
+    ],
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true
+}

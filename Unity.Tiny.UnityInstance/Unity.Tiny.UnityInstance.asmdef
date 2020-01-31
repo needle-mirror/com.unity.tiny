@@ -6,7 +6,8 @@
         "Unity.Tiny.Core",
         "Unity.Tiny.Scenes",
         "Unity.Platforms.RunLoop",
-        "Unity.ZeroJobs"
+        "Unity.ZeroJobs",
+        "Unity.Entities.Runtime"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

@@ -6,6 +6,7 @@ using Unity.Entities;
 using Unity.Tiny;
 using Unity.Tiny.Scenes;
 using Unity.Platforms;
+using Unity.Entities.Runtime;
 
 namespace Unity.Tiny
 {
@@ -32,6 +33,7 @@ namespace Unity.Tiny
 
         public static UnityInstance Initialize()
         {
+            BurstInit();
             NativeLeakDetection.Mode = NativeLeakDetectionMode.Enabled;
             TypeManager.Initialize();
             return new UnityInstance();
@@ -50,9 +52,11 @@ namespace Unity.Tiny
 
         private UnityInstance()
         {
-            BurstInit();
             m_World = DefaultTinyWorldInitialization.InitializeWorld("main");
             DefaultTinyWorldInitialization.InitializeSystems(m_World);
+#if UNITY_DOTSPLAYER_EXPERIMENTAL_FIXED_SIM
+            TinyInternals.SetSimFixedRate(m_World, 1.0f / 60.0f);
+#endif
             m_BootPhase = BootPhase.Booting;
             m_Environment = m_World.GetOrCreateSystem<TinyEnvironment>();
             m_EntityManager = m_World.EntityManager;

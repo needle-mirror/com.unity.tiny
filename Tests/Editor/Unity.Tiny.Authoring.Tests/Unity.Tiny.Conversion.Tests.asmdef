@@ -1,0 +1,17 @@
+{
+    "name": "Unity.Tiny.Authoring.Tests",
+    "references": [
+        "Unity.Entities",
+        "Unity.Entities.Hybrid",
+        "Unity.Tiny.Authoring",
+        "Unity.Tiny.Core"
+    ],
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true
+}

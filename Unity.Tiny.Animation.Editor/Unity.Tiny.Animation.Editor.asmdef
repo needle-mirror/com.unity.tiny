@@ -1,0 +1,36 @@
+{
+    "name": "Unity.Tiny.Animation.Editor",
+    "references": [
+        "Unity.Tiny.Animation",
+        "Unity.Burst",
+        "Unity.Collections",
+        "Unity.Entities",
+        "Unity.Entities.Hybrid",
+        "Unity.Entities.Properties",
+        "Unity.Jobs",
+        "Unity.Mathematics",
+        "Unity.Properties",
+        "Unity.Tiny.Animation.Authoring",
+        "Unity.Tiny.Rendering",
+        "Unity.Transforms",
+        "Unity.Transforms.Hybrid",
+        "Unity.InternalAPIEditorBridge.008"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [
+        {
+            "name": "com.unity.tiny.rendering",
+            "expression": "0.0.1",
+            "define": "TINY_RENDERING_DEP"
+        }
+    ],
+    "noEngineReferences": false
+}

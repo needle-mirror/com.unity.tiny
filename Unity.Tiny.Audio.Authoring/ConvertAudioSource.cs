@@ -26,6 +26,7 @@ namespace Unity.TinyConversion
                 {
                     clip = GetPrimaryEntity(audioSource.clip),
                     volume = audioSource.volume,
+                    pan = audioSource.panStereo,
                     loop =  audioSource.loop
                 });
                 if (audioSource.playOnAwake)

@@ -18,6 +18,13 @@ namespace Unity.Tiny.Bootstrap.Hybrid
             // filter out the tiny systems
             systems = systems.Where(s => {
                 var asmName = s.Assembly.FullName;
+
+                // white list
+                if(asmName.Contains("Unity.Tiny.Rendering"))
+                {
+                    return true;
+                }
+
                 if (asmName.Contains("Unity.Tiny") && !asmName.Contains("Hybrid"))
                 {
                     return false;

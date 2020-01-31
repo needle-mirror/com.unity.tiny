@@ -23,6 +23,29 @@ namespace Unity.Tiny.Input
     };
 
     /// <summary>
+    /// Pointer mode type
+    /// </summary>
+    public enum PointerModeType
+    {
+        /// <summary>
+        /// Cursor behaves in default manner according to OS
+        /// </summary>
+        Normal = 0,
+
+        /// <summary>
+        /// Cursor is hidden and locked to center of window. Window must get input focus for this
+        /// to activate, and if input focus is lost (i.e. switch to another window) the cursor
+        /// is unlocked
+        /// </summary>
+        Locked = 1,
+
+        /// <summary>
+        /// Cursor is hidden (so you can provide your own) but not locked to the window
+        /// </summary>
+        Hidden = 2
+    }
+
+    /// <summary>
     /// Pointer generalizes the mouse pointer and the touch.
     /// </summary>
     public struct Pointer
@@ -173,10 +196,11 @@ namespace Unity.Tiny.Input
     };
 
     // input service - now a system.
-    // input providing systems should inher from it
+    // input providing systems should inherit from it
     // and overwrite the m_inputState in their system update
     [DisableAutoCreation]
-    public class InputSystem : ComponentSystem {
+    public class InputSystem : ComponentSystem
+    {
         /// <summary>
         ///  Returns true if the key is currently held down.
         /// </summary>
@@ -242,6 +266,13 @@ namespace Unity.Tiny.Input
         }
 
         /// <summary>
+        ///  Sets mouse pointer mode to normal, hidden, or locked if mouse is available on the platform.
+        /// </summary>
+        public virtual void SetMouseMode(PointerModeType type)
+        {
+        }
+
+        /// <summary>
         ///  Returns true if the current device produces touch input responses.
         ///  This value may not be accurate until a first touch occurs.
         /// </summary>
@@ -275,6 +306,15 @@ namespace Unity.Tiny.Input
         public float2 GetInputPosition()
         {
             return new float2((float)m_inputState.mouseX, (float)m_inputState.mouseY);
+        }
+
+        /// <summary>
+        ///  Returns the input delta in screen pixels for this frame. For touch input this is
+        ///  the first touch. For mouse input, it is the mouse position delta.
+        /// </summary>
+        public float2 GetInputDelta()
+        {
+            return new float2((float)m_inputState.mouseDeltaX, (float)m_inputState.mouseDeltaY);
         }
 
         /// <summary>
@@ -375,6 +415,8 @@ namespace Unity.Tiny.Input
         public bool hasMouse;
         public int mouseX;
         public int mouseY;
+        public int mouseDeltaX;
+        public int mouseDeltaY;
 
         public bool hasTouch;
         public NativeList<Touch> touches = new NativeList<Touch>(Allocator.Persistent);

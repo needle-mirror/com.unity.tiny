@@ -1,69 +1,54 @@
 #include "NativeAudio.h"
 #include "SoundClip.h"
 #include "SoundSource.h"
+#include <allocators.h>
+#include <baselibext.h>
+
+// Using baselib for now since we need realloc and we currently don't support it in Unity::LowLevel
+#include <Baselib.h>
+#include <C/Baselib_Memory.h>
 
 #include <stdlib.h>
 #include <stdio.h>
 #include <assert.h>
 #include <limits.h>
-#if !defined(__APPLE__)
-#include <malloc.h>
-#endif
 
-#ifdef _MSC_VER
-    void* AlignedAlloc(size_t size, size_t alignment)
-    {
-        return _aligned_malloc(size, alignment);
-    }
-    void AlignedFree(void* p)
-    {
-        _aligned_free(p);
-    }
-#elif defined(__APPLE__)
-    void* AlignedAlloc(size_t size, size_t alignment)
-    {
-	// Mac & iOS seem to really not want this allocated using posix_memalign.  Must be malloc.
-    return malloc(size);
-    }
-    void AlignedFree(void* p)
-    {
-        free(p);
-    }
-#else
-    void* AlignedAlloc(size_t size, size_t alignment)
-    {
-        return memalign(alignment, size);
-    }
-    void AlignedFree(void* p)
-    {
-        free(p);
-    }
-#endif
-
-#include <chrono>
 #include <string>
 #include <map>
 #include <vector>
-#include <thread>
-#include <mutex>
 
 #include <Unity/Runtime.h>
 
 #define DR_FLAC_IMPLEMENTATION
-#include "./miniaudio/extras/dr_flac.h"  /* Enables FLAC decoding. */
+#include "./miniaudio/extras/dr_flac.h"     /* Enables FLAC decoding. */
 #define DR_MP3_IMPLEMENTATION
-#include "./miniaudio/extras/dr_mp3.h"   /* Enables MP3 decoding. */
+#include "./miniaudio/extras/dr_mp3.h"      /* Enables MP3 decoding. */
 #define DR_WAV_IMPLEMENTATION
-#include "./miniaudio/extras/dr_wav.h"   /* Enables WAV decoding. */
+#include "./miniaudio/extras/dr_wav.h"      /* Enables WAV decoding. */
+#define STB_VORBIS_HEADER_ONLY
+#include "./miniaudio/extras/stb_vorbis.c"  /* Enables OGG decoding. */
+
+static void FreeWrapped(void* p)
+{
+    if (!p)
+        return;
+    Baselib_Memory_AlignedFree(p);
+}
+
+#define MA_MALLOC(sz)           Baselib_Memory_AlignedAllocate(sz,16)
+#define MA_REALLOC(p, sz)       Baselib_Memory_AlignedReallocate(p,sz,16)
+#define MA_FREE(p)              FreeWrapped(p)
 #define MINIAUDIO_IMPLEMENTATION
 #include "./miniaudio/miniaudio.h"
+
+using namespace Unity::LowLevel;
 
 // #define AUDIO_TIMER
 
 // Need a mutex to protect access to the SoundSources 
 // that are used by the callback. The SoundClips are
 // refCounted; so they are safe.
-std::mutex sourceListMutex;
+baselib::Lock soundSourceMutex;
 
 uint32_t clipIDPool = 0;
 std::map<uint32_t, SoundClip*> clipMap;
@@ -85,27 +70,27 @@ void flushMemory()
     std::vector<std::map<uint32_t, SoundClip*>::iterator> clipDeleteList;
     std::vector<std::map<uint32_t, SoundSource*>::iterator> sourceDeleteList;
 
-    for(auto it = clipMap.begin(); it != clipMap.end(); ++it) {
+    for (auto it = clipMap.begin(); it != clipMap.end(); ++it) {
         SoundClip* clip = it->second;
         if (clip->isQueuedForDeletion() && clip->refCount() == 0) {
             clipDeleteList.push_back(it);
         }
     }
-    for(int i=0; i<(int)clipDeleteList.size(); ++i) {
+    for (int i = 0; i < (int)clipDeleteList.size(); ++i) {
         SoundClip* clip = clipDeleteList[i]->second;
         delete clip;
         clipMap.erase(clipDeleteList[i]);
     }
 
-    std::lock_guard<std::mutex> lock(sourceListMutex);
-    for(auto it = sourceMap.begin(); it != sourceMap.end(); ++it) {
+    BaselibLock lock(soundSourceMutex);
+    for (auto it = sourceMap.begin(); it != sourceMap.end(); ++it) {
         SoundSource* source = it->second;
         if (source->readyToDelete()) {
             sourceDeleteList.push_back(it);
         }
     }
 
-    for(int i=0; i<(int)sourceDeleteList.size(); ++i) {
+    for (int i = 0; i < (int)sourceDeleteList.size(); ++i) {
         SoundSource* source = sourceDeleteList[i]->second;
         delete source;
         LOGE("Deleting sound source.");
@@ -115,8 +100,8 @@ void flushMemory()
 
 void freeAllSources()
 {
-    std::lock_guard<std::mutex> lock(sourceListMutex);
-    while(!sourceMap.empty()) {
+    BaselibLock lock(soundSourceMutex);
+    while (!sourceMap.empty()) {
         auto it = sourceMap.begin();
         SoundSource* source = it->second;
         source->stop();
@@ -127,7 +112,7 @@ void freeAllSources()
 
 void freeAllClips()
 {
-    for(auto it = clipMap.begin(); it != clipMap.end(); ++it) {
+    for (auto it = clipMap.begin(); it != clipMap.end(); ++it) {
         SoundClip* clip = it->second;
         clip->queueDeletion();
     }
@@ -137,7 +122,7 @@ void freeAllClips()
 
 
 DOTS_EXPORT(void)
-freeAudio(uint32_t clipID) 
+freeAudio(uint32_t clipID)
 {
     if (!audioInitialized) return;
 
@@ -154,7 +139,7 @@ freeAudio(uint32_t clipID)
 }
 
 
-void* createTestWAV(const char* name, size_t* size) 
+void* createTestWAV(const char* name, size_t* size)
 {
     int nFrames = 0;
     int channels = 0;
@@ -164,14 +149,14 @@ void* createTestWAV(const char* name, size_t* size)
     const char* p = strchr(name, '/');
     if (p && *p) {
         nFrames = atoi(p + 1);
-        p = strchr(p+1, '/');
+        p = strchr(p + 1, '/');
         if (p && *p) {
             channels = atoi(p + 1);
-            p = strchr(p+1, '/');
+            p = strchr(p + 1, '/');
             if (p && *p) {
                 bitsPerSample = atoi(p + 1);
-                p = strchr(p+1, '/');
-                if (p && *p) 
+                p = strchr(p + 1, '/');
+                if (p && *p)
                     frequency = atoi(p + 1);
             }
         }
@@ -180,7 +165,7 @@ void* createTestWAV(const char* name, size_t* size)
 }
 
 #if defined(UNITY_ANDROID)
-    extern "C" void* loadAsset(const char *path, int *size);
+extern "C" void* loadAsset(const char* path, int* size, void* (*alloc)(size_t));
 #endif
 
 DOTS_EXPORT(uint32_t)
@@ -190,13 +175,13 @@ startLoad(const char* path)
 
     ++clipIDPool;
 
-    if (strstr(path, "!audiotest!")) 
+    if (strstr(path, "!audiotest!"))
     {
         size_t size = 0;
         void* mem = createTestWAV(path, &size);
         clipMap[clipIDPool] = new SoundClip(mem, size);
     }
-    else 
+    else
     {
 #if defined(UNITY_ANDROID)
         // Don't let miniaudio handle IO. Load the asset upfront and
@@ -204,7 +189,7 @@ startLoad(const char* path)
         // null is returned and the error will be reported when SoundClip is used
         // (startLoad() doesn't allow for failure in it's API) 
         int size = 0;
-        void *data = loadAsset(path, &size);
+        void* data = loadAsset(path, &size, [](size_t bytes) -> void* { return unsafeutility_malloc(bytes, 16, Allocator::Persistent); });
         clipMap[clipIDPool] = new SoundClip(data, size);
 #else
         clipMap[clipIDPool] = new SoundClip(std::string(path));
@@ -220,9 +205,9 @@ DOTS_EXPORT(int32_t)
 numSourcesAllocated()
 {
     flushMemory();
-    std::lock_guard<std::mutex> lock(sourceListMutex);
+    BaselibLock lock(soundSourceMutex);
     LOGE("numSourcesAllocated=%d", (int)sourceMap.size());
-    return (int) sourceMap.size();
+    return (int)sourceMap.size();
 }
 
 // Testing
@@ -230,9 +215,9 @@ DOTS_EXPORT(int32_t)
 numClipsAllocated()
 {
     flushMemory();
-    std::lock_guard<std::mutex> lock(sourceListMutex);
+    BaselibLock lock(soundSourceMutex);
     LOGE("numClipsAllocated=%d", (int)clipMap.size());
-    return (int) clipMap.size();
+    return (int)clipMap.size();
 }
 
 // Testing
@@ -240,7 +225,7 @@ DOTS_EXPORT(int32_t)
 sourcePoolID()
 {
     flushMemory();
-    std::lock_guard<std::mutex> lock(sourceListMutex);
+    BaselibLock lock(soundSourceMutex);
     LOGE("sourcePoolID=%d", (int)sourcePoolID);
     return sourceIDPool;
 }
@@ -287,10 +272,44 @@ pauseAudio(bool _audioPaused)
 
 }
 
+DOTS_EXPORT(bool)
+setVolume(uint32_t sourceID, float volume)
+{
+    if (!audioInitialized) return 0;
+    flushMemory();
+
+    BaselibLock lock(soundSourceMutex);
+    auto it = sourceMap.find(sourceID);
+    if (it == sourceMap.end()) {
+        LOGE("setVolume() sourceID=%d failed.", sourceID);
+        return false;
+    }
+
+    it->second->setVolume(volume);
+    return true;
+}
+
+DOTS_EXPORT(bool)
+setPan(uint32_t sourceID, float pan)
+{
+    if (!audioInitialized) return 0;
+    flushMemory();
+
+    BaselibLock lock(soundSourceMutex);
+    auto it = sourceMap.find(sourceID);
+    if (it == sourceMap.end()) {
+        LOGE("setPan() sourceID=%d failed.", sourceID);
+        return false;
+    }
+
+    it->second->setPan(pan);
+    return true;
+}
+
 #ifdef AUDIO_TIMER
-uint32_t callbackLongest = 0, 
-         callbackShortest = 0xffffffff, 
-         callbackTotal=0, 
+uint32_t callbackLongest = 0,
+         callbackShortest = 0xffffffff,
+         callbackTotal = 0,
          nCallback = 0,
          headerLongest = 0,
          headerShortest = 0xffffffff,
@@ -305,7 +324,7 @@ uint32_t callbackLongest = 0,
 void sendFramesToDevice(ma_device* pDevice, void* pSamples, const void* pInput, ma_uint32 frameCount)
 {
 #ifdef AUDIO_TIMER
-    std::chrono::time_point<std::chrono::high_resolution_clock> start = std::chrono::high_resolution_clock::now();
+    auto start = baselib::high_precision_clock::now();
 #endif
 
     const uint32_t bytesPerSample = ma_get_bytes_per_sample(pDevice->playback.format);
@@ -321,13 +340,15 @@ void sendFramesToDevice(ma_device* pDevice, void* pSamples, const void* pInput, 
         return;
     }
 
-    std::lock_guard<std::mutex> lock(sourceListMutex);
+    UserData* pUser = (UserData*)(pDevice->pUserData);
+
+    BaselibLock lock(soundSourceMutex);
 #ifdef AUDIO_TIMER
-    std::chrono::time_point<std::chrono::high_resolution_clock> header = std::chrono::high_resolution_clock::now();
+    auto start = baselib::high_precision_clock::now();
 #endif
 
     int count = 0;
-    for(auto it = sourceMap.begin(); it != sourceMap.end() && count < MAX_CHANNELS; ++it) {        
+    for (auto it = sourceMap.begin(); it != sourceMap.end() && count < MAX_CHANNELS; ++it) {
         SoundSource* source = it->second;
         if (source->isPlaying() && source->volume()) {
             bool done = false;
@@ -335,23 +356,30 @@ void sendFramesToDevice(ma_device* pDevice, void* pSamples, const void* pInput, 
 
             uint32_t totalFrames = 0;
             int16_t* target = (int16_t*)pSamples;
-            int32_t volume = int32_t(source->volume() * 1024.0f);
 
-            while(!done) {
+            // when pan is at center, setting both channels to .7 instead of .5 sounds more natural
+            // this is an approximation to sqrt(2) = 45 degree angle on unit circle, and for now
+            // we'll linearly interpolate to the extremes rather than rotate
+            float volume = source->volume() * 1024.0f;
+            float pan = source->pan();
+            int32_t coeffL = int32_t((.7f - (pan > 0 ? pan * .7f : pan * .3f))* volume);
+            int32_t coeffR = int32_t((.7f + (pan < 0 ? pan * .7f : pan * .3f)) * volume);
+
+            while (!done) {
                 uint32_t decodedFrames = 0;
                 const int16_t* src = source->fetch(frameCount - totalFrames, &decodedFrames);
                 totalFrames += decodedFrames;
-                
+
                 // Now 'buffer' is the source. Apply the volume and copy to 'pSamples'
-                for(uint32_t i=0; i<decodedFrames; ++i) {
-                    int val = *target + *src * volume / 1024;
+                for (uint32_t i = 0; i < decodedFrames; ++i) {
+                    int32_t val = *target + *src * coeffL / 1024;
                     if (val < SHRT_MIN) val = SHRT_MIN;
                     if (val > SHRT_MAX) val = SHRT_MAX;
                     *target = val;
                     ++target;
                     ++src;
 
-                    val = *target + *src * volume / 1024;
+                    val = *target + *src * coeffR / 1024;
                     if (val < SHRT_MIN) val = SHRT_MIN;
                     if (val > SHRT_MAX) val = SHRT_MAX;
                     *target = val;
@@ -368,7 +396,7 @@ void sendFramesToDevice(ma_device* pDevice, void* pSamples, const void* pInput, 
         }
     }
 #ifdef AUDIO_TIMER
-    std::chrono::time_point<std::chrono::high_resolution_clock> end = std::chrono::high_resolution_clock::now();
+    auto start = baselib::high_precision_clock::now();
 
     uint32_t tMicros = (uint32_t)std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
     if (tMicros < callbackShortest) callbackShortest = tMicros;
@@ -388,7 +416,7 @@ void sendFramesToDevice(ma_device* pDevice, void* pSamples, const void* pInput, 
         fflush(stdout);
         callbackLongest = 0;
         callbackShortest = 0xffffffff;
-        callbackTotal=0; 
+        callbackTotal = 0;
         nCallback = 0;
         headerLongest = 0;
         headerShortest = 0xffffffff;
@@ -411,7 +439,15 @@ initAudio() {
         maConfig.sampleRate = 44100;
         maConfig.dataCallback = sendFramesToDevice;
         maConfig.pUserData = &userData;
-        
+
+        // must be aligned to whatever the struct is set to, as miniadio specifies an explicit alignment
+        maDevice = (ma_device*)unsafeutility_malloc(sizeof(ma_device), alignof(ma_device), Allocator::Persistent);
+
+        if (ma_device_init(NULL, &maConfig, maDevice) != MA_SUCCESS) {
+            LOGE("Failed to init audio device.");
+            return;
+        }
+
         if (maConfig.playback.format != ma_format_s16) {
             LOGE("Failed to get signed-16 format.");
             return;
@@ -425,14 +461,6 @@ initAudio() {
             return;
         }
 
-        // must be aligned to the platform's natural alignment 
-        maDevice = (ma_device*) AlignedAlloc(sizeof(ma_device), sizeof(void*));
-
-        if (ma_device_init(NULL, &maConfig, maDevice) != MA_SUCCESS) {
-            LOGE("Failed to init audio device.");
-            return;
-        }
-        
         if (ma_device_start(maDevice) != MA_SUCCESS) {
             LOGE("Failed to start audio device.");
             return;
@@ -448,9 +476,9 @@ destroyAudio() {
     freeAllSources();
     freeAllClips();
     if (audioInitialized) {
-        ma_device_uninit(maDevice);  
+        ma_device_uninit(maDevice);
     }
-    AlignedFree(maDevice);
+    unsafeutility_free(maDevice, Allocator::Persistent);
     maDevice = 0;
     LOGE("destroyAudio() okay");
     audioInitialized = false;
@@ -458,7 +486,7 @@ destroyAudio() {
 
 
 DOTS_EXPORT(uint32_t)
-playSource(uint32_t clipID, float volume, bool loop)
+playSource(uint32_t clipID, float volume, float pan, bool loop)
 {
     if (!audioInitialized) return 0;
     flushMemory();
@@ -475,12 +503,13 @@ playSource(uint32_t clipID, float volume, bool loop)
     SoundSource* source = new SoundSource(clip);
 
     source->setVolume(volume);
+    source->setPan(pan);
     source->setLoop(loop);
     source->play();
 
-    if (source->getStatus() == SoundSource::SoundStatus::Playing) 
+    if (source->getStatus() == SoundSource::SoundStatus::Playing)
     {
-        std::lock_guard<std::mutex> lock(sourceListMutex);
+        BaselibLock lock(soundSourceMutex);
         sourceMap[++sourceIDPool] = source;
         LOGE("SoundSource %d created", sourceIDPool);
         return sourceIDPool;
@@ -492,11 +521,11 @@ playSource(uint32_t clipID, float volume, bool loop)
 
 
 DOTS_EXPORT(bool)
-isPlaying(uint32_t sourceID) 
+isPlaying(uint32_t sourceID)
 {
     if (!audioInitialized) return false;
 
-    std::lock_guard<std::mutex> lock(sourceListMutex);
+    BaselibLock lock(soundSourceMutex);
     auto it = sourceMap.find(sourceID);
     if (it == sourceMap.end()) {
         // This isn't an error; the lifetime of an Audio object on the C#
@@ -505,7 +534,7 @@ isPlaying(uint32_t sourceID)
     }
     const SoundSource* source = it->second;
     return source->getStatus() == SoundSource::SoundStatus::NotYetStarted ||
-           source->getStatus() == SoundSource::SoundStatus::Playing;
+        source->getStatus() == SoundSource::SoundStatus::Playing;
 }
 
 
@@ -514,7 +543,7 @@ stopSource(uint32_t sourceID)
 {
     if (!audioInitialized) return false;
 
-    std::lock_guard<std::mutex> lock(sourceListMutex);
+    BaselibLock lock(soundSourceMutex);
     auto it = sourceMap.find(sourceID);
     if (it == sourceMap.end()) {
         return false;

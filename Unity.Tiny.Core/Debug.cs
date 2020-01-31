@@ -181,7 +181,11 @@ namespace Unity.Tiny
         // We just write everything to Console
         internal static void LogOutputString(string message)
         {
+#if UNITY_EDITOR
+            UnityEngine.Debug.Log(message);
+#else
             Console.WriteLine(message);
+#endif
         }
     }
 }

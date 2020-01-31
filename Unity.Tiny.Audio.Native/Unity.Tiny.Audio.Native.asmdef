@@ -4,7 +4,8 @@
         "Unity.Entities",
         "Unity.Tiny.Core",
         "Unity.Tiny.Audio",
-        "Unity.Tiny.IO"
+        "Unity.Tiny.IO",
+        "Unity.Platforms.Common"
     ],
     "optionalUnityReferences": [],
     "includePlatforms": [],

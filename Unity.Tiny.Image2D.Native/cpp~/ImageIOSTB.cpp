@@ -1,7 +1,30 @@
 #include <stdlib.h>
 #include <stdint.h>
 
+// Using baselib for now since we need realloc and we currently don't support it in Unity::LowLevel
+#include <Baselib.h>
+#include <C/Baselib_Memory.h>
+
+static void FreeWrapped(void* p) 
+{
+    if (!p)
+        return;
+    Baselib_Memory_AlignedFree(p);
+}
+
+#define STBI_MALLOC(sz)           Baselib_Memory_AlignedAllocate(sz,16)
+#define STBI_REALLOC(p,newsz)     Baselib_Memory_AlignedReallocate(p,newsz,16)
+#define STBI_FREE(p)              FreeWrapped(p)
+#define STBI_REALLOC_SIZED(p,oldsz,newsz) STBI_REALLOC(p,newsz)
+#define STBIW_MALLOC(sz)          STBI_MALLOC(sz)
+#define STBIW_REALLOC(p,newsz)    STBI_REALLOC(p,newsz)
+#define STBIW_FREE(p)             STBI_FREE(p)
+#define STBIW_REALLOC_SIZED(p,oldsz,newsz) STBI_REALLOC_SIZED(p,oldsz,newsz)
+
+#define STB_IMAGE_IMPLEMENTATION
 #include "libstb/stb_image.h"
+
+#define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "libstb/stb_image_write.h"
 
 #include "Base64.h"
@@ -25,7 +48,7 @@ public:
     ImageSTB(int _w, int _h) {
         w = _w;
         h = _h;
-        pixels = new uint32_t[w*h];
+        pixels = (uint32_t*)STBI_MALLOC(w*h*sizeof(uint32_t));
     }
 
     ~ImageSTB() {
@@ -33,7 +56,7 @@ public:
     }
 
     void Free() {
-        delete [] pixels;
+        STBI_FREE(pixels);
         pixels = 0;
     }
 
@@ -46,8 +69,8 @@ public:
 
     ImageSTB& operator=(ImageSTB&& other) {
         if ( this == &other ) return *this;
-        delete[] pixels; 
-        pixels = other.pixels; 
+        STBI_FREE(pixels);
+        pixels = other.pixels;
         w = other.w;
         h = other.h;
         other.pixels = 0;
@@ -55,8 +78,8 @@ public:
     }
 
     void Set(uint32_t *_pixels, int _w, int _h) {
-        delete[] pixels;
-        pixels = _pixels; 
+        STBI_FREE(pixels);
+        pixels = _pixels;
         w = _w;
         h = _h;
     }
@@ -68,7 +91,7 @@ public:
 static std::vector<ImageSTB*> allImages(1); // by handle, reserve handle 0
 
 #if defined(UNITY_ANDROID)
-extern "C" void* loadAsset(const char *path, int *size);
+extern "C" void* loadAsset(const char *path, int *size, void* (*alloc)(size_t));
 #endif
 
 static bool
@@ -84,7 +107,7 @@ LoadImageFromFile(const char* fn, size_t fnlen, ImageSTB& colorImg)
         pixels = (uint32_t*)stbi_load_from_memory(dataurimem.data(), (int)dataurimem.size(), &w, &h, &bpp, 4);
 #if defined(UNITY_ANDROID)
     int size;
-    void *data = loadAsset(fn, &size);
+    void *data = loadAsset(fn, &size, malloc);
     pixels = (uint32_t*)stbi_load_from_memory((uint8_t*)data, size, &w, &h, &bpp, 4);
     free(data);
 #endif
@@ -106,7 +129,8 @@ LoadSTBImageOnly(ImageSTB& colorImg, const char *imageFile, const char *maskFile
         return false;
 
     if (hasColorFile && strcmp(imageFile,"::white1x1")==0 ) { // special case 1x1 image
-        colorImg.Set(new uint32_t(1), 1, 1);
+        uint32_t* pixel1x1 = (uint32_t*)STBI_MALLOC(1 * 1 * sizeof(uint32_t));
+        colorImg.Set(pixel1x1, 1, 1);
         colorImg.pixels[0] = ~0;
         return true;
     }

@@ -9,6 +9,7 @@ using Unity.Tiny.Codec;
 using Unity.Tiny.IO;
 using Unity.Tiny.Assertions;
 using static Unity.Tiny.IO.AsyncOp;
+using Unity.Entities.Runtime;
 
 namespace Unity.Tiny.Scenes
 {
@@ -54,7 +55,7 @@ namespace Unity.Tiny.Scenes
         /// </summary>
         /// <param name="sceneReference"></param>
         /// <returns>A new Entity with a `SceneData` component which should be stored for use in `GetSceneStatus`</returns>
-        static public Entity LoadSceneAsync(World world, SceneReference sceneReference)
+        static public Entity LoadSceneAsync(World world, Unity.Entities.Runtime.SceneReference sceneReference)
         {
             return LoadSceneAsync(world, new SceneGuid() { Guid = sceneReference.SceneGuid });
         }
@@ -90,7 +91,7 @@ namespace Unity.Tiny.Scenes
         /// Unloads all scene instances of the same type as the `SceneReference` passed in.
         /// </summary>
         /// <param name="sceneReference"></param>
-        static public void UnloadAllSceneInstances(World world, SceneReference sceneReference)
+        static public void UnloadAllSceneInstances(World world, Unity.Entities.Runtime.SceneReference sceneReference)
         {
             UnloadAllSceneInstances(world, new SceneGuid() { Guid = sceneReference.SceneGuid });
         }
