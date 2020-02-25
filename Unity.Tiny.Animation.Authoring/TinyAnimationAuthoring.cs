@@ -10,7 +10,7 @@ namespace Unity.Tiny.Animation
     public class TinyAnimationAuthoring : MonoBehaviour, IAnimationClipSource
     {
         [NotKeyable]
-        public AnimationClip animationClip;
+        public List<AnimationClip> animationClips = new List<AnimationClip>{null};
 
         [NotKeyable]
         [Tooltip("Should this animation start playing automatically upon creation?")]
@@ -24,8 +24,11 @@ namespace Unity.Tiny.Animation
 
         public void GetAnimationClips(List<AnimationClip> results)
         {
-            if (animationClip != null)
-                results.Add(animationClip);
+            foreach (var clip in animationClips)
+            {
+                if (clip != null)
+                    results.Add(clip);
+            }
         }
     }
 }

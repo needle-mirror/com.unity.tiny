@@ -21,10 +21,10 @@ namespace Unity.Tiny.Animation
             var globalVersion = entityComponentStore->GlobalSystemVersion;
 
             Entities
-               .WithAllReadOnly<TinyAnimationPlayback>()
+               .WithAllReadOnly<TinyAnimationClip>()
                .WithAllReadOnly<ApplyAnimationResultTag>()
                .WithAllReadOnly<AnimationPPtrBinding>()
-               .ForEach((DynamicBuffer<AnimationPPtrBinding> bindings, ref TinyAnimationPlayback animData) =>
+               .ForEach((DynamicBuffer<AnimationPPtrBinding> bindings, ref TinyAnimationClip animData) =>
                 {
                     var time = animData.time;
                     for (int i = 0; i < bindings.Length; ++i)

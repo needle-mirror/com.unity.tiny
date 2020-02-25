@@ -20,8 +20,8 @@ namespace Unity.Tiny.Animation
             Entities
                 .WithNone<AnimationBindingRetarget>()
                 .WithAllReadOnly<ApplyAnimationResultTag>()
-                .WithAllReadOnly<TinyAnimationPlayback>()
-                .ForEach((DynamicBuffer<AnimationBinding> bindings, ref TinyAnimationPlayback animData) =>
+                .WithAllReadOnly<TinyAnimationClip>()
+                .ForEach((DynamicBuffer<AnimationBinding> bindings, ref TinyAnimationClip animData) =>
                 {
                     var bindingsArray = bindings.ToNativeArray(Allocator.TempJob);
                     var job = new UpdateJob

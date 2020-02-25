@@ -1,20 +1,7 @@
-# About com.unity.tiny;
+# About com.unity.tiny
+This package includes a set of features specific to Project Tiny. 
+To get all required packages for Project Tiny use the main [Project Tiny All package](https://docs.unity3d.com/Packages/com.unity.tiny.all@latest), which include general information, requirements and getting started details.
 
-Project Tiny enables you to create lightweight Web-based games using the Unity Editor.
-
-
-# Installing com.unity.tiny;
-
-To install this package, follow the instructions in the [Package Manager documentation](https://docs.unity3d.com/Packages/com.unity.package-manager-ui@latest/index.html). 
-
-# Technical details
-## Requirements
-
-This version of the package is compatible with the following versions of the Unity Editor:
-
-* 2019.3 and later
-
-|Date|Reason|
-|---|---|
-|October 8, 2019|Document created.|
->>>
+# Work In Progress
+Project Tiny is under heavy development. 
+Be sure to check the [forum](https://forum.unity.com/forums/project-tiny.151/) to get the latest announcements.

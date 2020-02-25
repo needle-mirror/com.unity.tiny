@@ -13,8 +13,15 @@ namespace Unity.Tiny.Animation.Editor
         {
             Entities.ForEach((TinyAnimationAuthoring tinyAnimationAuthoring) =>
             {
-                if (tinyAnimationAuthoring.animationClip != null)
-                    DeclareAnimationClipReferencedAssets(tinyAnimationAuthoring.animationClip);
+                var animationClips = tinyAnimationAuthoring.animationClips;
+                if (animationClips == null || animationClips.Count == 0)
+                    return;
+
+                foreach (var clip in animationClips)
+                {
+                    if (clip != null)
+                        DeclareAnimationClipReferencedAssets(clip);
+                }
             });
         }
 

@@ -107,7 +107,7 @@ namespace Unity.Tiny.IO
         [DllImport("lib_unity_tiny_io", EntryPoint = "GetErrorStatus")]
         static extern unsafe int GetErrorStatusImpl(int handle);
         [DllImport("lib_unity_tiny_io", EntryPoint = "Close")]
-        static extern unsafe int CloseImpl(int handle);
+        static extern unsafe void CloseImpl(int handle);
         [DllImport("lib_unity_tiny_io", EntryPoint = "GetData")]
         static extern unsafe void GetDataImpl(int handle, ref byte* data, ref int sizeInBytes);
     }

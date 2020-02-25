@@ -3,6 +3,7 @@
     "references": [
         "Unity.Entities.Hybrid",
         "Unity.Tiny.Authoring",
+        "Unity.Tiny.Image2D",
         "Unity.Tiny.Image2D.Authoring"
     ],
     "optionalUnityReferences": [

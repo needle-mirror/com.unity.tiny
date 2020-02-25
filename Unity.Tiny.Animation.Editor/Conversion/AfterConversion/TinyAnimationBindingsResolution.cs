@@ -70,7 +70,7 @@ namespace Unity.Tiny.Animation.Editor
                     // Nothing to animate
                     commandBuffer.RemoveComponent<AnimationBinding>(entity);
                     commandBuffer.RemoveComponent<AnimationBindingRetarget>(entity);
-                    commandBuffer.RemoveComponent<TinyAnimationPlayback>(entity);
+                    commandBuffer.RemoveComponent<TinyAnimationClip>(entity);
                     if (DstEntityManager.HasComponent<UpdateAnimationTimeTag>(entity))
                         commandBuffer.RemoveComponent<UpdateAnimationTimeTag>(entity);
                     if (DstEntityManager.HasComponent<ApplyAnimationResultTag>(entity))

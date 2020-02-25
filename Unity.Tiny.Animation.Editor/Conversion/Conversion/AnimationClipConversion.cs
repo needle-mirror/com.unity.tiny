@@ -28,7 +28,19 @@ namespace Unity.Tiny.Animation.Editor
 
         void Convert(TinyAnimationAuthoring tinyAnimationAuthoring)
         {
-            var clip = tinyAnimationAuthoring.animationClip;
+            var animationClips = tinyAnimationAuthoring.animationClips;
+            if (animationClips == null || animationClips.Count == 0)
+                return;
+
+            foreach (var clip in animationClips)
+            {
+                if (clip != null)
+                    Convert(tinyAnimationAuthoring, clip);
+            }
+        }
+
+        void Convert(TinyAnimationAuthoring tinyAnimationAuthoring, AnimationClip clip)
+        {
             if (clip == null || clip.empty)
                     return;
 

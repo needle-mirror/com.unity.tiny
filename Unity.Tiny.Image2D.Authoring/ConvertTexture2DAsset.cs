@@ -3,6 +3,7 @@ using System.IO;
 using Unity.Entities;
 using UnityEditor;
 using Unity.Tiny;
+using UnityEngine;
 
 namespace Unity.TinyConversion
 {
@@ -13,17 +14,22 @@ namespace Unity.TinyConversion
             Entities.ForEach((UnityEngine.Texture2D texture) =>
             {
                 var entity = GetPrimaryEntity(texture);
-                string textPath = AssetDatabase.GetAssetPath(texture);
-                TextureImporter importer = (TextureImporter)TextureImporter.GetAtPath(textPath);
-                TextureImporterSettings textureImporterSettings = new TextureImporterSettings();
-                if (null != importer)
-                    importer.ReadTextureSettings(textureImporterSettings);
+                var textPath = AssetDatabase.GetAssetPath(texture);
+                var importer = (TextureImporter)TextureImporter.GetAtPath(textPath);
+
+                TextureImporterSettings importerSettings = null;
+                if (importer != null)
+                {
+                    importerSettings = new TextureImporterSettings();
+                    importer.ReadTextureSettings(importerSettings);   
+                }
+
                 DstEntityManager.AddComponentData(entity, new Image2D()
                 {
                     imagePixelWidth = texture.width,
                     imagePixelHeight = texture.height,
                     status = ImageStatus.Invalid,
-                    flags = Texture2DExportUtils.GetTextureFlags(textureImporterSettings, texture)
+                    flags = Texture2DExportUtils.GetTextureFlags(texture, importerSettings)
                 });
 
                 DstEntityManager.AddComponent<Image2DLoadFromFile>(entity);
@@ -62,20 +68,24 @@ namespace Unity.TinyConversion
             return texture.width > 0 && texture.height > 0 && ((texture.width & (texture.width - 1)) == 0) && ((texture.height & (texture.height - 1)) == 0);
         }
         
-        internal static TextureFlags GetTextureFlags(TextureImporterSettings textImporter, UnityEngine.Texture2D texture)
+        internal static TextureFlags GetTextureFlags(UnityEngine.Texture2D texture, TextureImporterSettings textureImporter)
         {
             TextureFlags flags = 0;
 
-            // Handle Atlas. It does not have an Importer for now.
-            if (textImporter == null)
+            switch (texture.filterMode)
             {
-                flags |= TextureFlags.UClamp;
-                flags |= TextureFlags.VClamp;
-                flags |= TextureFlags.Point;
-                return flags;
+                case UnityEngine.FilterMode.Point:
+                    flags |= TextureFlags.Point;
+                    break;
+                case UnityEngine.FilterMode.Trilinear:
+                    flags |= TextureFlags.Trilinear;
+                    break;
+                default:
+                    flags |= TextureFlags.Linear;
+                    break;
             }
             
-            switch(textImporter.wrapModeU)
+            switch(texture.wrapModeU)
             {
                 case UnityEngine.TextureWrapMode.Clamp:
                     flags |= TextureFlags.UClamp;
@@ -88,7 +98,7 @@ namespace Unity.TinyConversion
                     break;
             }
 
-            switch (textImporter.wrapModeV)
+            switch (texture.wrapModeV)
             {
                 case UnityEngine.TextureWrapMode.Clamp:
                     flags |= TextureFlags.VClamp;
@@ -100,20 +110,14 @@ namespace Unity.TinyConversion
                     flags |= TextureFlags.URepeat;
                     break;
             }
-          
-            if (textImporter.filterMode == UnityEngine.FilterMode.Point)
-                flags |= TextureFlags.Point;
-
-            if (textImporter.filterMode == UnityEngine.FilterMode.Trilinear)
-                flags |= TextureFlags.Trilinear;
-
-            if (textImporter.mipmapEnabled)
+            
+            if (texture.mipmapCount > 1)
                 flags |= TextureFlags.MimapEnabled;
 
-            if (textImporter.sRGBTexture)
+            if (textureImporter != null && textureImporter.sRGBTexture)
                 flags |= TextureFlags.Srgb;
 
-            if (textImporter.textureType == TextureImporterType.NormalMap)
+            if (textureImporter != null && textureImporter.textureType == TextureImporterType.NormalMap) 
                 flags |= TextureFlags.IsNormalMap;
 
             if(!IsPowerOfTwo(texture))
@@ -200,13 +204,21 @@ namespace Unity.TinyConversion
 
         internal static UnityEngine.Texture2D BlitTexture(UnityEngine.Texture2D texture, UnityEngine.TextureFormat format, bool alphaOnly = false)
         {
+            var textPath = AssetDatabase.GetAssetPath(texture);
+            RenderTextureReadWrite rtReadWrite = UnityEngine.RenderTextureReadWrite.Linear;
+            var importer = (TextureImporter)TextureImporter.GetAtPath(textPath);
+            if (importer != null)
+            {
+                rtReadWrite = importer.sRGBTexture? UnityEngine.RenderTextureReadWrite.sRGB : UnityEngine.RenderTextureReadWrite.Linear;
+            }
+
             // Create a temporary RenderTexture of the same size as the texture
             var tmp = UnityEngine.RenderTexture.GetTemporary(
                 texture.width,
                 texture.height,
                 0,
                 UnityEngine.RenderTextureFormat.Default,
-                UnityEngine.RenderTextureReadWrite.sRGB);
+                rtReadWrite);
 
             // Blit the pixels on texture to the RenderTexture
             UnityEngine.Graphics.Blit(texture, tmp);

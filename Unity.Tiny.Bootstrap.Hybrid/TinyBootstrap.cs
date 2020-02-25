@@ -19,8 +19,9 @@ namespace Unity.Tiny.Bootstrap.Hybrid
             systems = systems.Where(s => {
                 var asmName = s.Assembly.FullName;
 
-                // white list
-                if(asmName.Contains("Unity.Tiny.Rendering"))
+                // White list `Unity.Tiny.Rendering`, but not `Unity.Tiny.Rendering.Native`
+                // We need the camera and the world bounds for in editor play mode
+                if(asmName.Contains("Unity.Tiny.Rendering") && !asmName.Contains("Native"))
                 {
                     return true;
                 }

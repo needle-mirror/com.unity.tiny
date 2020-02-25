@@ -16,7 +16,7 @@ namespace Unity.Tiny.Animation.Editor
 
         static readonly HashSet<Type> k_SkipVisiting = new HashSet<Type>
         {
-            typeof(AnimationBinding), typeof(TinyAnimationPlayback), typeof(LocalToWorld)
+            typeof(AnimationBinding), typeof(TinyAnimationClip), typeof(LocalToWorld)
         };
 
         readonly StringBuilder m_CurrentPropertyPath = new StringBuilder();

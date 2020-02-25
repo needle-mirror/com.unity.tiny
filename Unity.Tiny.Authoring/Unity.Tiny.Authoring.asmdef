@@ -21,7 +21,8 @@
         "Unity.Tiny.Rendering",
         "Unity.Tiny.Image2D",
         "Unity.Tiny.Scenes",
-        "Unity.Tiny.Video"
+        "Unity.Tiny.Video",
+        "Unity.Tiny.Scenes.Authoring"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

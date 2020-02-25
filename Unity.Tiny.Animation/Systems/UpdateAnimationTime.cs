@@ -11,13 +11,13 @@ namespace Unity.Tiny.Animation
     {
         [BurstCompile(FloatMode = FloatMode.Fast)]
         [RequireComponentTag(typeof(UpdateAnimationTimeTag))]
-        struct AnimationTimeUpdateJob : IJobForEach<TinyAnimationPlayback>
+        struct AnimationTimeUpdateJob : IJobForEach<TinyAnimationClip>
         {
             public float dt;
 
-            public void Execute(ref TinyAnimationPlayback tinyAnimationPlayback)
+            public void Execute(ref TinyAnimationClip tinyAnimationClip)
             {
-                tinyAnimationPlayback.time = Repeat(tinyAnimationPlayback.time + dt, tinyAnimationPlayback.duration);
+                tinyAnimationClip.time = Repeat(tinyAnimationClip.time + dt, tinyAnimationClip.duration);
             }
 
             // Reimplementation of Mathf.Repeat()

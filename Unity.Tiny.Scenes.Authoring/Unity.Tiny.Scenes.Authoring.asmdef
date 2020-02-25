@@ -1,0 +1,19 @@
+{
+    "name": "Unity.Tiny.Scenes.Authoring",
+    "references": [
+        "Unity.Entities.Runtime.Build",
+        "Unity.Entities",
+        "Unity.Tiny.Scenes",
+        "Unity.Tiny.Core",
+        "Unity.Entities.Runtime",
+        "Unity.Scenes.Hybrid"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": ["UNITY_EDITOR"],
+    "versionDefines": []
+}

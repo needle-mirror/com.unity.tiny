@@ -33,7 +33,7 @@ namespace Unity.Tiny.Animation
     /// class FloatValueAuthoring : MonoBehaviour, IConvertGameObjectToEntity
     /// {
     ///     [SerializeField]
-    ///     [CreateAnimationBinding(typeof(FloatValue), nameof(FloatValue.value))] // We use the attribute to tell the system what IComponentData field it should match
+    ///     [CreateAnimationBinding(typeof(FloatValue).Name, nameof(FloatValue.value))] // We use the attribute to tell the system what IComponentData field it should match
     ///     float m_Value;
     ///     public void Convert(Entity entity, EntityManager dstManager, GameObjectConversionSystem conversionSystem)
     ///     {
