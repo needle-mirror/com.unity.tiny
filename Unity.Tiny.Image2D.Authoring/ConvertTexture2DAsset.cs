@@ -114,7 +114,7 @@ namespace Unity.TinyConversion
             if (texture.mipmapCount > 1)
                 flags |= TextureFlags.MimapEnabled;
 
-            if (textureImporter != null && textureImporter.sRGBTexture)
+            if (textureImporter == null || textureImporter.sRGBTexture)
                 flags |= TextureFlags.Srgb;
 
             if (textureImporter != null && textureImporter.textureType == TextureImporterType.NormalMap) 
@@ -205,7 +205,7 @@ namespace Unity.TinyConversion
         internal static UnityEngine.Texture2D BlitTexture(UnityEngine.Texture2D texture, UnityEngine.TextureFormat format, bool alphaOnly = false)
         {
             var textPath = AssetDatabase.GetAssetPath(texture);
-            RenderTextureReadWrite rtReadWrite = UnityEngine.RenderTextureReadWrite.Linear;
+            RenderTextureReadWrite rtReadWrite = UnityEngine.RenderTextureReadWrite.sRGB;
             var importer = (TextureImporter)TextureImporter.GetAtPath(textPath);
             if (importer != null)
             {

@@ -1,7 +1,7 @@
 {
   "name": "com.unity.tiny",
   "displayName": "Project Tiny",
-  "version": "0.22.0-preview.5",
+  "version": "0.22.0-preview.7",
   "unity": "2019.3",
   "unityRelease": "0f1",
   "description": "Project Tiny enables you to create lightweight Web-based games using the Unity Editor.",
@@ -17,9 +17,9 @@
     "com.unity.entities": "0.5.1-preview.11"
   },
   "repository": {
-    "footprint": "06b18f5599518c0bf0001d3311b997e230c8178b",
+    "footprint": "ee88641fcacd7d7bdd8b84353380cdbb507c3f77",
     "type": "git",
     "url": "https://github.com/Unity-Technologies/dots.git",
-    "revision": "2dbf49832b3c371a16738117dfaddf5cce72ad29"
+    "revision": "f261e177ed9fc0db1e226537aa358915c8ff4fce"
   }
 }
