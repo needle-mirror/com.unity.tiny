@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using Unity.Mathematics;
 using Unity.Entities;
 using Unity.Collections;
+using Unity.Core;
 using Unity.Tiny;
 using Unity.Tiny.Assertions;
 using Unity.Transforms;
@@ -199,8 +201,24 @@ namespace Unity.Tiny.Input
     // input providing systems should inherit from it
     // and overwrite the m_inputState in their system update
     [DisableAutoCreation]
-    public class InputSystem : ComponentSystem
+    public class InputSystem : SystemBase
     {
+        /// <summary>
+        /// If this setting is enabled, rotation values reported by sensors are rotated around the Z axis as follows:
+        /// for devices with natural Portrait orientation
+        /// ScreenOrientation.Portrait - values remain unchanged.
+        /// ScreenOrientation.PortraitUpsideDown - values rotate by 180 degrees.
+        /// ScreenOrientation.LandscapeLeft - values rotate by 90 degrees.
+        /// ScreenOrientation.LandscapeRight - values rotate by 270 degrees.
+        /// for devices with natural Landscape orientation
+        /// ScreenOrientation.LandscapeRight - values remain unchanged.
+        /// ScreenOrientation.Portrait - values rotate by 270 degrees.
+        /// ScreenOrientation.PortraitUpsideDown - values rotate by 90 degrees.
+        /// ScreenOrientation.LandscapeLeft - values rotate by 180 degrees.
+        /// This setting is enabled by default.
+        /// </summary>
+        public bool CompensateForScreenOrientation { get; set; } = true; // TODO set this from project settings
+
         /// <summary>
         ///  Returns true if the key is currently held down.
         /// </summary>
@@ -374,6 +392,7 @@ namespace Unity.Tiny.Input
         protected override void OnUpdate()
         {
             m_inputState.AdvanceFrame();
+            Sensor.ProcessActiveSensors();
         }
 
         protected override void OnCreate()
@@ -385,10 +404,98 @@ namespace Unity.Tiny.Input
         protected override void OnDestroy()
         {
             m_inputState.Dispose();
+            for (int i = 0; i < m_Sensors.Count; ++i)
+            {
+                m_Sensors[i].Dispose();
+            }
         }
 
         // update this structure in implementations
         protected InputData m_inputState;
+
+        private List<Sensor> m_Sensors = new List<Sensor>();
+
+        private Sensor FindSensor(System.Type type)
+        {
+            for (int i = 0; i < m_Sensors.Count; ++i) {
+                var sensor = m_Sensors[i];
+                if (sensor.ComponentType == type)
+                    return sensor;
+            }
+            return null;
+        }
+
+        public void EnableSensor<T>() where T : struct, IComponentData
+        {
+            var sensor = FindSensor(typeof(T));
+            if (sensor == null)
+            {
+                sensor = CreateSensor(typeof(T));
+                if (sensor == null) // sensor cannot be created
+                {
+                    return;
+                }
+                m_Sensors.Add(sensor);
+            }
+            sensor.Enabled = true;
+        }
+
+        public void DisableSensor<T>() where T : struct, IComponentData
+        {
+            var sensor = FindSensor(typeof(T));
+            if (sensor != null)
+            {
+                sensor.Enabled = false;
+            }
+        }
+
+        public void SetSensorSamplingFrequency<T>(int freq) where T : IComponentData
+        {
+            var sensor = FindSensor(typeof(T));
+            if (sensor != null)
+            {
+                sensor.SamplingFrequency = freq;
+            }
+        }
+
+        public int GetSensorSamplingFrequency<T>() where T : struct, IComponentData
+        {
+            return FindSensor(typeof(T))?.SamplingFrequency ?? 0;
+        }
+
+        public bool IsAvailable<T>() where T : struct, IComponentData
+        {
+            return IsAvailable(typeof(T));
+        }
+
+        protected virtual Sensor CreateSensor(ComponentType type)
+        {
+            return null;
+        }
+
+        protected virtual bool IsAvailable(ComponentType type)
+        {
+            return false;
+        }
+
+        internal int GetRotationIndex()
+        {
+            var windowSystem = World.GetExistingSystem<WindowSystem>();
+            return GetRotationIndex(windowSystem.GetOrientation());
+        }
+
+        protected virtual int GetRotationIndex(ScreenOrientation orientation)
+        {
+            switch (orientation)
+            {
+                case ScreenOrientation.Portrait: return 0;
+                case ScreenOrientation.Landscape: return 1;
+                case ScreenOrientation.ReversePortrait: return 2;
+                case ScreenOrientation.ReverseLandscape: return 3;
+            }
+            // unknown
+            return 0;
+        }
     }
 
     public class InputData : IDisposable
@@ -859,5 +966,190 @@ namespace Unity.Tiny.Input
         Mouse6 = 329,
     }
 
+    public interface IPlatformSensor : IDisposable
+    {
+        bool Enabled { get; set; }
+        int SamplingFrequency { get; set; }
+        void ProcessSensorData();
+    }
 
+    public class Sensor
+    {
+        internal Sensor(ComponentType componentType, IPlatformSensor platformSensor)
+        {
+            m_EnableCounter = 0;
+            ComponentType = componentType;
+            m_PlatformSensor = platformSensor;
+        }
+
+        public void Dispose()
+        {
+            m_EnabledSensors.Remove(this);
+            m_PlatformSensor?.Dispose();
+        }
+
+        public ComponentType ComponentType { get; private set; }
+
+        public bool Enabled
+        {
+            get { return m_PlatformSensor?.Enabled ?? false; }
+            set
+            {
+                if (m_PlatformSensor != null)
+                {
+                    if (value)
+                    {
+                        if (m_EnableCounter == 0)
+                        {
+                            m_PlatformSensor.Enabled = true;
+                            if (m_PlatformSensor.Enabled)
+                            {
+                                ++m_EnableCounter;
+                                m_EnabledSensors.Add(this);
+                            }
+                        }
+                        else
+                        {
+                            ++m_EnableCounter;
+                        }
+                    }
+                    else if (m_EnableCounter > 0)
+                    {
+                        if ((--m_EnableCounter) == 0)
+                        {
+                            m_PlatformSensor.Enabled = false;
+                            m_EnabledSensors.Remove(this);
+                        }
+                    }
+                }
+            }
+        }
+
+        public int SamplingFrequency
+        {
+            get { return m_PlatformSensor?.SamplingFrequency ?? 0; }
+            set { if (m_PlatformSensor != null) m_PlatformSensor.SamplingFrequency = value; }
+        }
+
+        public void ProcessSensorData()
+        {
+            m_PlatformSensor?.ProcessSensorData();
+        }
+
+        internal static void ProcessActiveSensors()
+        {
+            foreach (var sensor in m_EnabledSensors) sensor.ProcessSensorData();
+        }
+
+        private static List<Sensor> m_EnabledSensors = new List<Sensor>();
+
+        private IPlatformSensor m_PlatformSensor = null;
+
+        private int m_EnableCounter;
+    }
+
+    /// <summary>
+    ///  Use the accelerometer to measure the acceleration of a device.
+    ///  It reports the acceleration measured on a device both due to moving
+    ///  the device around, and due to gravity pulling the device down.
+    ///  Use Acceleration property (float3) to get acceleration values.
+    ///  Values are affected by the InputSystem.CompensateForScreenOrientation setting.
+    /// </summary>
+    public struct AccelerometerSensor : IComponentData
+    {
+        public TimeData LastUpdateTime;
+        public float3 Acceleration;
+    }
+
+    /// <summary>
+    ///  Use the gyroscope to measure the angular velocity of a device.
+    ///  Use AngularVelocity property (float3) to get angular velocity values.
+    ///  Values are affected by the InputSystem.CompensateForScreenOrientation setting.
+    /// </summary>
+    public struct GyroscopeSensor : IComponentData
+    {
+        public TimeData LastUpdateTime;
+        public float3 AngularVelocity;
+    }
+
+    /// <summary>
+    ///  Use the gravity sensor to determine the direction of the gravity vector relative to a device.
+    ///  Use Gravity property (float3) to get gravity vector values.
+    ///  Values are affected by the InputSystem.CompensateForScreenOrientation setting.
+    /// </summary>
+    public struct GravitySensor : IComponentData
+    {
+        public TimeData LastUpdateTime;
+        public float3 Gravity;
+    }
+
+    /// <summary>
+    ///  Use the attitude sensor to determine the orientation of a device.
+    ///  Use Attitude property (quaternion) to get device orientation values.
+    ///  Values are affected by the InputSystem.CompensateForScreenOrientation setting.
+    /// </summary>
+    public struct AttitudeSensor : IComponentData
+    {
+        public TimeData LastUpdateTime;
+        public quaternion Attitude;
+    }
+
+    /// <summary>
+    ///  Use the accelerometer to measure the acceleration of a device.
+    ///  It reports the acceleration measured on a device due to moving
+    ///  the device around, without gravity effect.
+    ///  Use Acceleration property (float3) to get acceleration values.
+    ///  Values are affected by the InputSystem.CompensateForScreenOrientation setting.
+    /// </summary>
+    public struct LinearAccelerationSensor : IComponentData
+    {
+        public TimeData LastUpdateTime;
+        public float3 Acceleration;
+    }
+
+    // Processors to convert raw sensors data to platform independent values
+    internal abstract class InputProcessor<TValue> where TValue : struct
+    {
+        public abstract void Process(InputSystem inputSystem, ref TValue value);
+    }
+
+    internal class CompensateDirectionProcessor : InputProcessor<float3>
+    {
+        public override void Process(InputSystem inputSystem, ref float3 value)
+        {
+            if (inputSystem.CompensateForScreenOrientation)
+            {
+                var sin = 0.0f; var cos = 1.0f; // 0
+                switch (inputSystem.GetRotationIndex())
+                {
+                    case 1: sin =  1.0f; cos =  0.0f; break; //  90
+                    case 2: sin =  0.0f; cos = -1.0f; break; // 180
+                    case 3: sin = -1.0f; cos =  0.0f; break; // 270
+                }
+                var x = value.x * cos - value.y * sin;
+                var y = value.x * sin + value.y * cos;
+                value.x = x; value.y = y;
+            }
+        }
+    }
+
+    internal class CompensateRotationProcessor : InputProcessor<quaternion>
+    {
+        public override void Process(InputSystem inputSystem, ref quaternion value)
+        {
+            if (inputSystem.CompensateForScreenOrientation)
+            {
+                var rotationIndex = inputSystem.GetRotationIndex();
+                const float kSqrtOfTwo = 1.4142135623731f;
+                var q = quaternion.identity;
+                switch (inputSystem.GetRotationIndex())
+                {
+                    case 1: q = new quaternion(0.0f, 0.0f, kSqrtOfTwo * 0.5f /*sin(pi/4)*/, -kSqrtOfTwo * 0.5f /*cos(pi/4)*/); break;
+                    case 2: q = new quaternion(0.0f, 0.0f, 1.0f /*sin(pi/2)*/, 0.0f /*cos(pi/2)*/); break;
+                    case 3: q = new quaternion(0.0f, 0.0f, -kSqrtOfTwo * 0.5f /*sin(3pi/4)*/, -kSqrtOfTwo * 0.5f /*cos(3pi/4)*/); break;
+                }
+                value = math.mul(value, q);
+            }
+        }
+    }
 }

@@ -350,7 +350,7 @@ void sendFramesToDevice(ma_device* pDevice, void* pSamples, const void* pInput, 
     int count = 0;
     for (auto it = sourceMap.begin(); it != sourceMap.end() && count < MAX_CHANNELS; ++it) {
         SoundSource* source = it->second;
-        if (source->isPlaying() && source->volume()) {
+        if (source->isPlaying()) {
             bool done = false;
             ++count;
 

@@ -190,19 +190,15 @@ namespace Unity.Tiny.Scenes
     /// </summary>
     [AlwaysUpdateSystem]
     [UpdateInGroup(typeof(InitializationSystemGroup))]
-    public class SceneStreamingSystem : ComponentSystem
+    public class SceneStreamingSystem : SystemBase
     {
         static public readonly string DataRootPath = "Data/";
 
         private World m_LoadingWorld;
-        private EntityQuery m_PendingRequestsQuery;
 
         protected override void OnCreate()
         {
             m_LoadingWorld = new World("Loading World");
-            m_PendingRequestsQuery = GetEntityQuery(
-                ComponentType.ReadWrite<SceneData>(),
-                ComponentType.ReadWrite<SceneLoadRequest>());
 
             // Ensure these systems are created
             EntityManager.World.GetOrCreateSystem<EntityReferenceRemapSystem>();
@@ -219,10 +215,10 @@ namespace Unity.Tiny.Scenes
 
         protected override unsafe void OnUpdate()
         {
-            var ecb = new EntityCommandBuffer(Allocator.TempJob);
             Entities
                 .WithAll<SceneData, RequestSceneLoaded>()
                 .WithNone<SceneLoadRequest>()
+                .WithStructuralChanges()
                 .ForEach((Entity e) =>
                 {
                     var sceneData = EntityManager.GetComponentData<SceneData>(e);
@@ -235,39 +231,29 @@ namespace Unity.Tiny.Scenes
                     // Fire async reads for scene data
                     SceneLoadRequest request = new SceneLoadRequest();
                     request.SceneOpHandle = IOService.RequestAsyncRead(path);
-                    ecb.AddComponent(e, request);
-                    ecb.RemoveComponent<RequestSceneLoaded>(e);
+                    EntityManager.AddComponentData(e, request);
+                    EntityManager.RemoveComponent<RequestSceneLoaded>(e);
 
                     sceneData.Status = SceneStatus.Loading;
-                    ecb.SetComponent(e, sceneData);
-                });
-            ecb.Playback(EntityManager);
-            ecb.Dispose();
+                    EntityManager.SetComponentData(e, sceneData);
+                }).Run();
 
-            var pendingRequests = m_PendingRequestsQuery.ToEntityArray(Allocator.TempJob);
-            ecb = new EntityCommandBuffer(Allocator.TempJob);
-            foreach (var requestEntity in pendingRequests)
+            Entities.WithStructuralChanges().ForEach((Entity requestEntity, ref SceneData sceneData, ref SceneLoadRequest request) =>
             {
-                SceneData sceneData = EntityManager.GetComponentData<SceneData>(requestEntity);
-                SceneLoadRequest request = EntityManager.GetComponentData<SceneLoadRequest>(requestEntity);
-
                 var opStatus = request.SceneOpHandle.GetStatus();
-
                 if (opStatus <= Status.InProgress)
-                {
-                    continue;
-                }
+                    return;
 
                 if (opStatus == Status.Failure)
                 {
                     request.SceneOpHandle.Dispose();
-                    ecb.RemoveComponent<SceneLoadRequest>(requestEntity);
+                    EntityManager.RemoveComponent<SceneLoadRequest>(requestEntity);
 
                     Debug.Log($"SceneStreamingSystem: Failed to load {DebugSceneGuid(sceneData)}");
 
                     sceneData.Status = SceneStatus.FailedToLoad;
-                    ecb.SetComponent(requestEntity, sceneData);
-                    continue;
+                    EntityManager.SetComponentData(requestEntity, sceneData);
+                    return;
                 }
                 Assert.IsTrue(opStatus == Status.Success);
 
@@ -303,8 +289,8 @@ namespace Unity.Tiny.Scenes
                 activeEM.MoveEntitiesFrom(out var movedEntities, m_LoadingWorld.EntityManager);
                 foreach (var e in movedEntities)
                 {
-                    ecb.AddSharedComponent(e, scene.SceneGuid);
-                    ecb.AddSharedComponent(e, scene.SceneInstanceId);
+                    EntityManager.AddSharedComponentData(e, scene.SceneGuid);
+                    EntityManager.AddSharedComponentData(e, scene.SceneInstanceId);
                 }
 
                 // Fixup Entity references now that the entities have moved
@@ -319,17 +305,14 @@ namespace Unity.Tiny.Scenes
                 Debug.Log($"SceneStreamingSystem: Loaded scene {DebugSceneGuid(sceneData)}");
 #endif
                 sceneData.Status = SceneStatus.Loaded;
-                ecb.SetComponent(requestEntity, sceneData);
+                EntityManager.SetComponentData(requestEntity, sceneData);
 
                 request.SceneOpHandle.Dispose();
-                ecb.RemoveComponent<SceneLoadRequest>(requestEntity);
+                EntityManager.RemoveComponent<SceneLoadRequest>(requestEntity);
 
                 m_LoadingWorld.EntityManager.PrepareForDeserialize();
                 movedEntities.Dispose();
-            }
-            ecb.Playback(EntityManager);
-            ecb.Dispose();
-            pendingRequests.Dispose();
+            }).Run();
         }
     }
 }

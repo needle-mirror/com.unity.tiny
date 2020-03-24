@@ -1,6 +1,8 @@
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Tiny;
+using Unity.Transforms;
+using Unity.Mathematics;
 
 namespace Unity.Tiny.Audio
 {
@@ -21,6 +23,12 @@ namespace Unity.Tiny.Audio
 
         /// <summary>The clip cannot be loaded in memory.</summary>
         LoadError
+    }
+
+    public enum AudioRolloffMode
+    {
+        Logarithmic = 0,
+        Linear = 1
     }
 
     /// <summary>
@@ -80,7 +88,7 @@ namespace Unity.Tiny.Audio
 
 
     [UpdateInGroup(typeof(PresentationSystemGroup))]
-    public abstract class AudioSystem : ComponentSystem
+    public abstract class AudioSystem : SystemBase
     {
         protected abstract void InitAudioSystem();
         protected abstract void DestroyAudioSystem();
@@ -104,48 +112,140 @@ namespace Unity.Tiny.Audio
         protected override void OnUpdate()
         {
             var mgr = EntityManager;
+            LocalToWorld listenerLocalToWorld = new LocalToWorld();
+            bool foundListener = false;
+
+            // Get the listener position.
+            Entities.ForEach((Entity e, ref LocalToWorld localToWorld, ref AudioListener listener) =>
             {
-                EntityCommandBuffer ecb = new EntityCommandBuffer(Allocator.Temp);
+                if (!foundListener)
+                {
+                    listenerLocalToWorld = localToWorld;
+                    foundListener = true;
+                }
+            }).Run();
+
+            // Stop sounds.
+            {
                 Entities
+                    .WithStructuralChanges()
+                    .WithoutBurst()
                     .WithAll<AudioSource>()
                     .ForEach((Entity e, ref AudioSourceStop tag) =>
                     {
                         StopSource(e);
-                        PostUpdateCommands.RemoveComponent<AudioSourceStop>(e);
-                    });
+                        mgr.RemoveComponent<AudioSourceStop>(e);
+                    }).Run();
                 Entities
-                   .WithAll<AudioSource>()
-                   .ForEach((Entity e, ref Disabled tag) =>
-                   {
-                       StopSource(e);
-                   });
-                ecb.Playback(EntityManager);
-                ecb.Dispose();
+                    .WithoutBurst()
+                    .WithAll<AudioSource>()
+                    .ForEach((Entity e, ref Disabled tag) =>
+                    {
+                        StopSource(e);
+                    }).Run();
             }
+
+            // Play sounds.
             {
-                EntityCommandBuffer ecb = new EntityCommandBuffer(Allocator.Temp);
                 Entities
+                    .WithStructuralChanges()
                     .WithAll<AudioSource>()
                     .ForEach((Entity e, ref AudioSourceStart tag) =>
                     {
                         if(PlaySource(e))
-                            PostUpdateCommands.RemoveComponent<AudioSourceStart>(e);
-                    });
-                ecb.Playback(EntityManager);
-                ecb.Dispose();
+                            mgr.RemoveComponent<AudioSourceStart>(e);
+                    }).Run();
             }
+
+            // Update isPlaying.
+            Entities
+                .WithoutBurst()
+                .ForEach((Entity e, ref AudioSource source) =>
             {
-                EntityCommandBuffer ecb = new EntityCommandBuffer(Allocator.Temp);
-                Entities
-                    .ForEach((Entity e, ref AudioSource tag) =>
+                source.isPlaying = IsPlaying(e);
+            }).Run();
+
+            // Update volume for sources that are not distance-attenuated.
+            Entities
+                .WithoutBurst()
+                .WithNone<AudioDistanceAttenuation>()
+                .ForEach((Entity e, ref AudioSource source) =>
+            {
+                SetVolume(e, source.volume);
+            }).Run();
+
+            // Update volume for sources that are distance-attenuated.
+            Entities
+                .WithoutBurst()
+                .ForEach((Entity e, ref AudioSource source, ref AudioDistanceAttenuation distanceAttenuation) =>
+            {
+                float distanceAttenuationVolume = 0.0f;
+
+                if (foundListener && HasComponent<LocalToWorld>(e))
+                {
+                    LocalToWorld localToWorld = GetComponent<LocalToWorld>(e);
+                    float xDist = localToWorld.Position.x - listenerLocalToWorld.Position.x;
+                    float yDist = localToWorld.Position.y - listenerLocalToWorld.Position.y;
+                    float zDist = localToWorld.Position.z - listenerLocalToWorld.Position.z;
+                    float distanceToListener = math.sqrt(xDist*xDist + yDist*yDist + zDist*zDist);
+
+                    if (distanceToListener <= distanceAttenuation.minDistance)
                     {
-                        tag.isPlaying = IsPlaying(e);
-                        SetVolume(e, tag.volume);
-                        SetPan(e, tag.pan);
-                    });
-                ecb.Playback(EntityManager);
-                ecb.Dispose();
-            }
+                        distanceAttenuationVolume = 1.0f;
+                    }
+                    else if (distanceToListener > distanceAttenuation.maxDistance)
+                    {
+                        distanceAttenuationVolume = 0.0f;
+                    }
+                    else
+                    {
+                        // Reduce distanceToListener by minDistance because, in our simulation, we start lowering the volume after a sound is min distance away from the listener.
+                        distanceToListener -= distanceAttenuation.minDistance;
+
+                        if (distanceAttenuation.rolloffMode == AudioRolloffMode.Linear)
+                        {   
+                            float attenuationRange = distanceAttenuation.maxDistance - distanceAttenuation.minDistance;
+                            distanceAttenuationVolume = 1.0f - (distanceToListener / attenuationRange);
+                        }
+                        else if (distanceAttenuation.rolloffMode == AudioRolloffMode.Logarithmic)
+                        {
+                            // In Unity's original implementation of logarithmic attenuation, the volume is halved every minDistance units. We are copying that approach here.
+                            float volumeHalfLives = distanceToListener / distanceAttenuation.minDistance;
+                            distanceAttenuationVolume = 1.0f / math.pow(2.0f, volumeHalfLives);
+                        }
+                    }
+                }
+
+                distanceAttenuation.volume = distanceAttenuationVolume;
+                SetVolume(e, source.volume * distanceAttenuationVolume);
+            }).Run();
+
+            // Update 2d panning.
+            Entities
+                .WithoutBurst()
+                .ForEach((Entity e, ref AudioSource source, ref Audio2dPanning panning) =>
+            {
+                SetPan(e, panning.pan);
+            }).Run();
+
+            // Update 3d panning.
+            Entities
+                .WithoutBurst()
+                .ForEach((Entity e, ref AudioSource source, ref Audio3dPanning panning) =>
+            {
+                float pan = 0.0f;
+
+                if (foundListener && HasComponent<LocalToWorld>(e))
+                {
+                    LocalToWorld localToWorld = GetComponent<LocalToWorld>(e);
+                    float3 listenerRight = math.normalize(listenerLocalToWorld.Right);
+                    float3 listenerToSound = math.normalize(localToWorld.Position - listenerLocalToWorld.Position);
+                    pan = math.dot(listenerRight, listenerToSound);
+                }
+
+                panning.pan = pan;
+                SetPan(e, pan);
+            }).Run();
         }
     }
 
@@ -183,6 +283,19 @@ namespace Unity.Tiny.Audio
         ///  no audio plays.
         /// </remarks>
         public bool unlocked;
+    }
+
+    /// <summary>
+    ///  Attach an AudioListener component to an entity with a LocalToWorld component. 3d 
+    ///  audio panning and distance-attenuation will be calculated relative to this entity's
+    ///  position and orientation.
+    /// </summary>
+    /// <remarks>
+    ///  There should only be one enabled AudioListener. If there are no listeners, all
+    ///  3d sounds will be silent.
+    /// </remarks>
+    public struct AudioListener : IComponentData
+    {
     }
 
     /// <summary>
@@ -232,7 +345,7 @@ namespace Unity.Tiny.Audio
     ///  To start playback use the AudioSourceStart component.
     ///  To stop playback use the AudioSourceStop component.
     ///
-    ///  `clip`, `volume`, `pan`, and `loop` are read when the audio source
+    ///  `clip`, `volume`, and `loop` are read when the audio source
     ///  starts as a result of AudioSourceStart being added. `clip` and `loop`
     ///  will not change audio that is already playing.
     ///
@@ -252,11 +365,6 @@ namespace Unity.Tiny.Audio
         public float volume;
 
         /// <summary>
-        ///  Specifies the audio clip's playback stereo pan. Values can range from -1..1.
-        /// </summary>
-        public float pan;
-
-        /// <summary>
         ///  If true, replays the audio clip when it reaches end.
         /// </summary>
         public bool loop;
@@ -269,5 +377,85 @@ namespace Unity.Tiny.Audio
         ///  is removed by the Audio system.
         /// </remarks>
         public bool isPlaying { get; internal set; }
+    }
+
+    /// <summary>
+    ///  An Audio2dPanning component controls an AudioSource's 2d panning.
+    /// </summary>
+    /// <remarks>
+    ///  `pan` is read when the associated AudioSource starts playing.
+    /// <example>
+    /// Minimal code to play an AudioClip with 2d panning:
+    /// <code>
+    ///     var eSource = mgr.CreateEntity();
+    ///     AudioSource source = new AudioSource();
+    ///     source.clip = eClip;
+    ///     mgr.AddComponentData(eSource, source);
+    ///     Audio2dPanning panning = new Audio2dPanning();
+    ///     panning.pan = 0.0f;
+    ///     mgr.AddComponentData(eSource, panning);
+    ///     mgr.AddComponent(eSource, typeof(AudioSourceStart));
+    /// </code>
+    /// </example>
+    /// </remarks>
+    public struct Audio2dPanning: IComponentData
+    {
+        /// <summary>
+        ///  Specifies the audio clip's playback stereo pan. Values can range from -1..1.
+        /// </summary>
+        public float pan;
+    }
+
+    /// <summary>
+    ///  An Audio3dPanning component controls an AudioSource's 3d panning. 
+    /// </summary>
+    /// <remarks>
+    ///  The AudioSystem automatically adjusts the associated AudioSource's stereo panning 
+    ///  value based on the AudioSource's position relative to the AudioListener.
+    /// </remarks>
+    public struct Audio3dPanning : IComponentData
+    { 
+        /// <summary>
+        /// Specifies the audio clip's playback stereo pan. Values can range from -1..1. 
+        /// This value is set automatically by the AudioSystem.
+        /// </summary>
+        public float pan { get; internal set; }
+    }
+
+    /// <summary>
+    ///  An AudioDistanceAttenuation component adjusts an AudioSource's volume.
+    /// </summary>
+    /// <remarks>
+    ///  The AudioSystem automatically adjusts the associated AudioSource's volume 
+    ///  based on the AudioSource's distance from the AudioListener and the properties
+    ///  in this component. When an AudioSource is less than minDistance away from the 
+    ///  AudioListener, the volume is not changed. When an AudioSource is further than
+    ///  maxDistance away from the AudioListener, the volume is zero. The volume parameter
+    ///  is set internally by the AudioSystem and is the last calculated distance-attenuation 
+    ///  volume.
+    /// <example>
+    /// Minimal code to play an AudioClip with 3d panning and distance-attenuation:
+    /// <code>
+    ///     var eSource = mgr.CreateEntity();
+    ///     AudioSource source = new AudioSource();
+    ///     source.clip = eClip;
+    ///     mgr.AddComponentData(eSource, source);
+    ///     Audio3dPanning panning = new Audio3dPanning();
+    ///     mgr.AddComponentData(eSource, panning);
+    ///     AudioDistanceAttenuation distanceAttenuation = new AudioDistanceAttenuation();
+    ///     distanceAttenuation.rolloffMode = AudioRolloffMode.Logarithmic;
+    ///     distanceAttenuation.minDistance = 3.0f;
+    ///     distanceAttenuation.maxDistance = 50.0f;
+    ///     mgr.AddComponentData(eSource, distanceAttenuation);
+    ///     mgr.AddComponent(eSource, typeof(AudioSourceStart));
+    /// </code>
+    /// </example>
+    /// </remarks>
+    public struct AudioDistanceAttenuation : IComponentData
+    {
+        public AudioRolloffMode rolloffMode;
+        public float minDistance;
+        public float maxDistance;
+        public float volume { get; internal set; }
     }
 }

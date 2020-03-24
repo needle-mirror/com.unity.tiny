@@ -1,70 +1,45 @@
+using JetBrains.Annotations;
 using Unity.Burst;
-using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
-using Unity.Jobs;
 
 namespace Unity.Tiny.Animation
 {
-    // TODO: jobify once the bogus IL generation is fixed in DOTS Player
-    
+    [UsedImplicitly]
     [UpdateInGroup(typeof(TinyAnimationSystemGroup))]
     [UpdateAfter(typeof(UpdateAnimationTime))]
-    class UpdateAnimatedComponents : ComponentSystem
+    unsafe class UpdateAnimatedComponents : SystemBase
     {
-        protected override unsafe void OnUpdate()
+        protected override void OnUpdate()
         {
             var entityComponentStore = EntityManager.EntityComponentStore;
             var globalVersion = entityComponentStore->GlobalSystemVersion;
 
-            Entities
-                .WithNone<AnimationBindingRetarget>()
-                .WithAllReadOnly<ApplyAnimationResultTag>()
-                .WithAllReadOnly<TinyAnimationClip>()
-                .ForEach((DynamicBuffer<AnimationBinding> bindings, ref TinyAnimationClip animData) =>
-                {
-                    var bindingsArray = bindings.ToNativeArray(Allocator.TempJob);
-                    var job = new UpdateJob
-                    {
-                        globalVersion = globalVersion,
-                        entityComponentStore = entityComponentStore,
-                        time = animData.time,
-                        bindings = bindingsArray
-                    };
+            Dependency =
+                Entities
+                   .WithNativeDisableUnsafePtrRestriction(entityComponentStore)
+                   .WithBurst(FloatMode.Fast)
+                   .WithAll<ApplyAnimationResultTag>()
+                   .ForEach(
+                        (in DynamicBuffer<AnimationBinding> bindings, in TinyAnimationTime animationTime) =>
+                        {
+                            var time = animationTime.Value;
+                            for (int i = 0; i < bindings.Length; ++i)
+                            {
+                                var binding = bindings[i];
+                                var result = KeyframeCurveEvaluator.Evaluate(time, binding.Curve);
+                                var typeIndex = binding.TargetComponentTypeIndex;
 
-                    job.Run();
-                    bindingsArray.Dispose();
-                });
-        }
+                                var entity = binding.TargetEntity;
 
-        [BurstCompile(FloatMode = FloatMode.Fast)]
-        unsafe struct UpdateJob : IJob
-        {
-            [NativeDisableUnsafePtrRestriction]
-            public EntityComponentStore* entityComponentStore;
-            public uint globalVersion;
+                                entityComponentStore->AssertEntityHasComponent(entity, typeIndex);
 
-            public float time;
-            public NativeArray<AnimationBinding> bindings;
+                                var targetComponentPtr = entityComponentStore->GetComponentDataWithTypeRW(entity, typeIndex, globalVersion);
+                                var targetFieldPtr = targetComponentPtr + binding.FieldOffset;
 
-            public void Execute()
-            {
-                for (int i = 0; i < bindings.Length; ++i)
-                {
-                    var binding = bindings[i];
-                    var result = KeyframeCurveEvaluator.Evaluate(time, binding.curve);
-                    var typeIndex = binding.targetComponentTypeIndex;
-
-                    var entity = binding.targetEntity;
-
-                    entityComponentStore->AssertEntityHasComponent(entity, typeIndex);
-
-                    var targetComponentPtr = entityComponentStore->GetComponentDataWithTypeRW(entity, typeIndex, globalVersion);
-                    var targetFieldPtr = targetComponentPtr + binding.fieldOffset;
-
-                    UnsafeUtility.MemCpy(targetFieldPtr, UnsafeUtility.AddressOf(ref result), binding.fieldSize);
-                }
-            }
+                                UnsafeUtility.MemCpy(targetFieldPtr, UnsafeUtility.AddressOf(ref result), binding.FieldSize);
+                            }
+                        }).Schedule(Dependency);
         }
     }
 }

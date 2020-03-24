@@ -2,14 +2,14 @@ using Unity.Entities;
 
 namespace Unity.Tiny.Animation
 {
-    struct TinyAnimationPlayer : IComponentData
+    public struct TinyAnimationPlayer : IComponentData
     {
-        public Entity currentClip;
-        public int currentIndex; // Might be a waste of space to use an int (limit to 255 and store in byte?)
+        public Entity CurrentClip;
+        public int CurrentIndex;
     }
 
-    struct TinyAnimationClipRef : IBufferElementData
+    public struct TinyAnimationClipRef : IBufferElementData
     {
-        public Entity value;
+        public Entity Value;
     }
 }

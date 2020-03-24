@@ -2,11 +2,26 @@ using Unity.Entities;
 
 namespace Unity.Tiny.Animation
 {
-    struct UpdateAnimationTimeTag : IComponentData { }
-    struct ApplyAnimationResultTag : IComponentData { }
-    struct TinyAnimationClip : IComponentData
+    public struct UpdateAnimationTimeTag : IComponentData { }
+    public struct ApplyAnimationResultTag : IComponentData { }
+    public struct TinyAnimationTime : IComponentData
     {
-        public float time;
-        public float duration;
+        public float InternalWorkTime;
+        public float Value;
+    }
+
+    public struct TinyAnimationPlaybackInfo : IComponentData
+    {
+        public float Duration;
+        public float CycleOffset;
+        public WrapMode WrapMode;
+    }
+
+    public enum WrapMode : byte
+    {
+        Once,
+        ClampForever,
+        Loop,
+        PingPong,
     }
 }

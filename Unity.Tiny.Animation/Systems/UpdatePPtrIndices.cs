@@ -1,12 +1,13 @@
+using JetBrains.Annotations;
+using Unity.Burst;
 using Unity.Entities;
 
 namespace Unity.Tiny.Animation
 {
-    // TODO: jobify once the bogus IL generation is fixed in DOTS Player
-
+    [UsedImplicitly]
     [UpdateInGroup(typeof(TinyAnimationSystemGroup))]
     [UpdateAfter(typeof(UpdateAnimationTime))]
-    class UpdatePPtrIndices : ComponentSystem
+    unsafe class UpdatePPtrIndices : SystemBase
     {
         int m_PPtrIndexTypeIndex;
 
@@ -15,29 +16,32 @@ namespace Unity.Tiny.Animation
             m_PPtrIndexTypeIndex = ComponentType.ReadWrite<PPtrIndex>().TypeIndex;
         }
 
-        protected override unsafe void OnUpdate()
+        protected override void OnUpdate()
         {
             var entityComponentStore = EntityManager.EntityComponentStore;
             var globalVersion = entityComponentStore->GlobalSystemVersion;
+            var pPtrTypeIndex = m_PPtrIndexTypeIndex;
 
-            Entities
-               .WithAllReadOnly<TinyAnimationClip>()
-               .WithAllReadOnly<ApplyAnimationResultTag>()
-               .WithAllReadOnly<AnimationPPtrBinding>()
-               .ForEach((DynamicBuffer<AnimationPPtrBinding> bindings, ref TinyAnimationClip animData) =>
-                {
-                    var time = animData.time;
-                    for (int i = 0; i < bindings.Length; ++i)
-                    {
-                        var binding = bindings[i];
-                        var result = KeyframeCurveEvaluator.Evaluate(time, binding.curve);
-                        var entity = binding.targetEntity;
+            Dependency =
+                Entities
+                   .WithNativeDisableUnsafePtrRestriction(entityComponentStore)
+                   .WithBurst(FloatMode.Fast)
+                   .WithAll<ApplyAnimationResultTag>()
+                   .ForEach(
+                        (in DynamicBuffer<AnimationPPtrBinding> bindings, in TinyAnimationTime animationTime) =>
+                        {
+                            var time = animationTime.Value;
+                            for (int i = 0; i < bindings.Length; ++i)
+                            {
+                                var binding = bindings[i];
+                                var result = KeyframeCurveEvaluator.Evaluate(time, binding.Curve);
+                                var entity = binding.TargetEntity;
 
-                        entityComponentStore->AssertEntityHasComponent(entity, m_PPtrIndexTypeIndex);
-                        var targetComponentPtr = (PPtrIndex*) entityComponentStore->GetComponentDataWithTypeRW(entity, m_PPtrIndexTypeIndex, globalVersion);
-                        targetComponentPtr->value = (ushort) result;
-                    }
-                });
+                                entityComponentStore->AssertEntityHasComponent(entity, pPtrTypeIndex);
+                                var targetComponentPtr = (PPtrIndex*) entityComponentStore->GetComponentDataWithTypeRW(entity, pPtrTypeIndex, globalVersion);
+                                targetComponentPtr->Value = (ushort) result;
+                            }
+                        }).Schedule(Dependency);
         }
     }
 }

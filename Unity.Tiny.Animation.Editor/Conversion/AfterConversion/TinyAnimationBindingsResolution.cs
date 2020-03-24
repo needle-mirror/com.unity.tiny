@@ -33,22 +33,22 @@ namespace Unity.Tiny.Animation.Editor
 
                 for (int i = bindingBuffer.Length - 1; i >= 0; --i)
                 {
-                    var propertyPath = bindingNameBuffer[i].value;
+                    var propertyPath = bindingNameBuffer[i].Value;
                     var discardEntry = true;
 
                     // A 0-length property path had no ECS equivalent at build time
                     if (propertyPath.LengthInBytes > 0)
                     {
-                        var result = BindingUtils.GetBindingInfo(DstEntityManager, bindingBuffer[i].targetEntity, propertyPath);
-                        if (result.success)
+                        var result = BindingUtils.GetBindingInfo(DstEntityManager, bindingBuffer[i].TargetEntity, propertyPath);
+                        if (result.Success)
                         {
                             var retarget = bindingRetargetBuffer[i];
-                            retarget.stableTypeHash = result.stableTypeHash;
+                            retarget.StableTypeHash = result.StableTypeHash;
                             bindingRetargetBuffer[i] = retarget;
 
                             var binding = bindingBuffer[i];
-                            binding.fieldOffset = result.fieldOffset;
-                            binding.fieldSize = result.fieldSize;
+                            binding.FieldOffset = result.FieldOffset;
+                            binding.FieldSize = result.FieldSize;
                             bindingBuffer[i] = binding;
                             discardEntry = false;
                         }
@@ -70,7 +70,8 @@ namespace Unity.Tiny.Animation.Editor
                     // Nothing to animate
                     commandBuffer.RemoveComponent<AnimationBinding>(entity);
                     commandBuffer.RemoveComponent<AnimationBindingRetarget>(entity);
-                    commandBuffer.RemoveComponent<TinyAnimationClip>(entity);
+                    commandBuffer.RemoveComponent<TinyAnimationTime>(entity);
+                    commandBuffer.RemoveComponent<TinyAnimationPlaybackInfo>(entity);
                     if (DstEntityManager.HasComponent<UpdateAnimationTimeTag>(entity))
                         commandBuffer.RemoveComponent<UpdateAnimationTimeTag>(entity);
                     if (DstEntityManager.HasComponent<ApplyAnimationResultTag>(entity))

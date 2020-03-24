@@ -26,13 +26,33 @@ namespace Unity.TinyConversion
                 {
                     clip = GetPrimaryEntity(audioSource.clip),
                     volume = audioSource.volume,
-                    pan = audioSource.panStereo,
                     loop =  audioSource.loop
                 });
-                if (audioSource.playOnAwake)
+
+                // Supplement the base AudioSource with either a 2d panning or 3d panning component.
+                bool soundIs3d = (audioSource.spatialBlend > 0.0f) && ((audioSource.rolloffMode == UnityEngine.AudioRolloffMode.Linear) || (audioSource.rolloffMode == UnityEngine.AudioRolloffMode.Logarithmic));
+
+                if (soundIs3d)
                 {
-                    DstEntityManager.AddComponentData(primaryEntity, new AudioSourceStart());
+                    DstEntityManager.AddComponentData(primaryEntity, new Audio3dPanning());
+
+                    DstEntityManager.AddComponentData(primaryEntity, new AudioDistanceAttenuation()
+                    {
+                        rolloffMode = (AudioRolloffMode)audioSource.rolloffMode,
+                        minDistance = audioSource.minDistance,
+                        maxDistance = audioSource.maxDistance
+                    });    
                 }
+                else
+                {
+                    DstEntityManager.AddComponentData(primaryEntity, new Audio2dPanning()
+                    {
+                        pan = audioSource.panStereo
+                    });   
+                }
+                    
+                if (audioSource.playOnAwake)
+                    DstEntityManager.AddComponentData(primaryEntity, new AudioSourceStart());
             });
         }
     }

@@ -29,16 +29,13 @@ namespace Unity.Tiny.Animation
 
             var leftKey = curve.GetKeyframe(lhs);
             var rightKey = curve.GetKeyframe(rhs);
+
+            if (math.isinf(leftKey.OutTangent) || math.isinf(rightKey.InTangent))
+                return leftKey.Value;
+
             var output = HermiteInterpolate(time, leftKey, rightKey);
-            HandleSteppedCurve(leftKey, rightKey, ref output);
 
             return output;
-        }
-
-        static void HandleSteppedCurve(Keyframe lhs, Keyframe rhs, ref float output)
-        {
-            if (math.isinf(lhs.OutTangent) || math.isinf(rhs.InTangent))
-                output = lhs.Value;
         }
 
         static void FindIndicesForSampling(float time, ref KeyframeCurveAccessor curve, out int lhs, out int rhs)

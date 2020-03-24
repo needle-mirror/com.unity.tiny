@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Unity.Entities;
 using Unity.Mathematics;
 
@@ -22,6 +23,7 @@ namespace Unity.Tiny
         /// <summary> Alpha value, range is [0..1] </summary>
         public float a { get => Value.w; set => Value.w = value; }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Color(float red, float green, float blue, float alpha = 1f)
         {
             Value = new float4(red, green, blue, alpha);
@@ -52,11 +54,13 @@ namespace Unity.Tiny
             return !(cl == cr);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool Equals(Color c)
         {
             return this == c;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override bool Equals(object obj)
         {
             return Equals((Color)obj);
@@ -74,16 +78,19 @@ namespace Unity.Tiny
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Color Lerp(Color c1, Color c2, float time)
         {
             return c1 * (1.0f - time) + c2 * time;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public float4 AsFloat4()
         {
             return new float4(r, g, b, a);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void FromFloat4(float4 c)
         {
             r = c.x;
@@ -92,9 +99,64 @@ namespace Unity.Tiny
             a = c.w;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static float LinearToSRGB(float x)
+        {
+            if (x <= 0.0031308f) return x * 12.92f;
+            if (x >= 1.0f) return 1.0f;
+            return math.pow(x, 1.0f / 2.4f) * 1.055f - 0.055f;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static float SRGBToLinear(float x)
+        {
+            if (x < 0.04045f) return x * (1.0f / 12.92f);
+            if (x >= 1.0f) return 1.0f;
+            return math.pow((x + 0.055f) / 1.055f, 2.4f);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public float4 ToLinear()
         {
-            return new float4(math.pow(r, 2.2f), math.pow(g, 2.2f), math.pow(b, 2.2f), math.pow(a, 2.2f));
+            return new float4(SRGBToLinear(r), SRGBToLinear(g), SRGBToLinear(b), a);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static float3 LinearToSRGB(float3 rgb)
+        {
+            return new float3 (
+                LinearToSRGB(rgb.x),
+                LinearToSRGB(rgb.y),
+                LinearToSRGB(rgb.z) );
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static float4 LinearToSRGB(float4 rgba)
+        {
+            return new float4 (
+                LinearToSRGB(rgba.x),
+                LinearToSRGB(rgba.y),
+                LinearToSRGB(rgba.z),
+                rgba.w );
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static float3 SRGBToLinear(float3 rgb)
+        {
+            return new float3(
+                SRGBToLinear(rgb.x),
+                SRGBToLinear(rgb.y),
+                SRGBToLinear(rgb.z));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static float4 SRGBToLinear(float4 rgba)
+        {
+            return new float4(
+                SRGBToLinear(rgba.x),
+                SRGBToLinear(rgba.y),
+                SRGBToLinear(rgba.z),
+                rgba.w);
         }
     }
 

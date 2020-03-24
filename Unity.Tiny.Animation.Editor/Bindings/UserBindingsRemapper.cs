@@ -15,16 +15,8 @@ namespace Unity.Tiny.Animation.Editor
 
         static readonly Type[] k_ValidTypes = {typeof(IComponentData)};
 
-        [MenuItem("Animation/Tiny Animation - Rebuild Bindings Map", false, 110)]
-        public static void RebuildBindingsMap()
+        internal static void FillMap()
         {
-            FillMap();
-        }
-
-        [InitializeOnLoadMethod]
-        static void FillMap()
-        {
-            // Rebuild map on domain reload
             GatherGeneratedAuthoringComponentsBindings();
             GatherExplicitBindings();
         }

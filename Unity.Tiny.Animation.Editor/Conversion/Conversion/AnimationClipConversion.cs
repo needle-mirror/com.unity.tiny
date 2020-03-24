@@ -20,26 +20,23 @@ namespace Unity.Tiny.Animation.Editor
     {
         protected override void OnUpdate()
         {
-            Entities.ForEach((TinyAnimationAuthoring tinyAnimationAuthoring) =>
+            Entities.ForEach((UnityEngine.Animation animationComponent) =>
             {
-                Convert(tinyAnimationAuthoring);
+                var animationClips = ConversionUtils.GetAllAnimationClips(animationComponent);
+                if (animationClips.Length == 0)
+                    return;
+
+                ConversionUtils.WarnAboutUnsupportedFeatures(animationComponent);
+
+                foreach (var clip in animationClips)
+                {
+                    if (clip != null)
+                        Convert(animationComponent.gameObject, clip);
+                }
             });
         }
 
-        void Convert(TinyAnimationAuthoring tinyAnimationAuthoring)
-        {
-            var animationClips = tinyAnimationAuthoring.animationClips;
-            if (animationClips == null || animationClips.Count == 0)
-                return;
-
-            foreach (var clip in animationClips)
-            {
-                if (clip != null)
-                    Convert(tinyAnimationAuthoring, clip);
-            }
-        }
-
-        void Convert(TinyAnimationAuthoring tinyAnimationAuthoring, AnimationClip clip)
+        void Convert(GameObject rootGameObject, AnimationClip clip)
         {
             if (clip == null || clip.empty)
                     return;
@@ -52,13 +49,15 @@ namespace Unity.Tiny.Animation.Editor
             if (DstEntityManager.HasComponent<BakedAnimationClip>(entity))
                 return; // Already converted
 
+            ConversionUtils.WarnAboutUnsupportedFeatures(clip);
+
             var floatCurvesInfo = ConvertFloatCurves(clip);
-            var pPtrCurvesInfo = ConvertPPtrCurves(clip, tinyAnimationAuthoring.gameObject);
+            var pPtrCurvesInfo = ConvertPPtrCurves(clip, rootGameObject);
 
             DstEntityManager.AddComponentData(entity, new BakedAnimationClip
             {
-                floatCurvesInfo = floatCurvesInfo,
-                pPtrCurvesInfo = pPtrCurvesInfo
+                FloatCurvesInfo = floatCurvesInfo,
+                PPtrCurvesInfo = pPtrCurvesInfo
             });
         }
 
@@ -82,13 +81,13 @@ namespace Unity.Tiny.Animation.Editor
             for (var i = 0; i < numBindings; i++)
             {
                 var binding = bindings[i];
-                var rotationMode = TinyAnimationBridge.GetRotationMode(binding);
+                var rotationMode = TinyAnimationEditorBridge.GetRotationMode(binding);
 
-                if (rotationMode != TinyAnimationBridge.RotationMode.Undefined && rotationMode != TinyAnimationBridge.RotationMode.RawQuaternions)
+                if (rotationMode != TinyAnimationEditorBridge.RotationMode.Undefined && rotationMode != TinyAnimationEditorBridge.RotationMode.RawQuaternions)
                 {
                     // Handle non quaternion rotation
                     //TODO: Handle other modes as they show up
-                    if (rotationMode == TinyAnimationBridge.RotationMode.RawEuler)
+                    if (rotationMode == TinyAnimationEditorBridge.RotationMode.RawEuler)
                     {
                         if (i + 2 >= numBindings)
                             throw new InvalidDataException($"Euler rotation curve for {binding.type.Name}.{binding.propertyName} is malformed");
@@ -112,7 +111,7 @@ namespace Unity.Tiny.Animation.Editor
                         while (time <= clip.length + 0.001f) // Offset end in case of imprecision
                         {
                             var euler = new float3(xCurveOriginal.Evaluate(time), yCurveOriginal.Evaluate(time), zCurveOriginal.Evaluate(time));
-                            var quat = quaternion.Euler(math.radians(euler), math.RotationOrder.Default);
+                            var quat = quaternion.Euler(math.radians(euler));
 
                             // No interpolation between keyframes is not ideal, but shouldn't be super noticeable
                             xCurveNew.AddKey(new UnityEngine.Keyframe(time, quat.value.x, Mathf.Infinity, Mathf.Infinity));
@@ -143,10 +142,10 @@ namespace Unity.Tiny.Animation.Editor
                         lastKey.time = clip.length;
                         wCurveNew.keys[lastKeyIndex] = lastKey;
 
-                        var xPropName = GetConvertedName(binding.type, TinyAnimationBridge.CreateRawQuaternionsBindingName("x"));
-                        var yPropName = GetConvertedName(binding.type, TinyAnimationBridge.CreateRawQuaternionsBindingName("y"));
-                        var zPropName = GetConvertedName(binding.type, TinyAnimationBridge.CreateRawQuaternionsBindingName("z"));
-                        var wPropName = GetConvertedName(binding.type, TinyAnimationBridge.CreateRawQuaternionsBindingName("w"));
+                        var xPropName = GetConvertedName(binding.type, TinyAnimationEditorBridge.CreateRawQuaternionsBindingName("x"));
+                        var yPropName = GetConvertedName(binding.type, TinyAnimationEditorBridge.CreateRawQuaternionsBindingName("y"));
+                        var zPropName = GetConvertedName(binding.type, TinyAnimationEditorBridge.CreateRawQuaternionsBindingName("z"));
+                        var wPropName = GetConvertedName(binding.type, TinyAnimationEditorBridge.CreateRawQuaternionsBindingName("w"));
 
                         animationBindingsConvertedNames.Add(new NativeString512(xPropName));
                         animationBindingsConvertedNames.Add(new NativeString512(yPropName));
@@ -198,13 +197,13 @@ namespace Unity.Tiny.Animation.Editor
             {
                 ref var builderRoot = ref blobBuilder.ConstructRoot<CurvesInfo>();
 
-                var keyframesBuilder = blobBuilder.Allocate(ref builderRoot.keyframes, numKeys);
-                var curveOffsetsBuilder = blobBuilder.Allocate(ref builderRoot.curveOffsets, numBindingsAfterConversion);
-                var bindingNamesBuilder = blobBuilder.Allocate(ref builderRoot.bindingNames, numBindingsAfterConversion);
-                var targetPathsBuilder = blobBuilder.Allocate(ref builderRoot.targetGameObjectPaths, numBindingsAfterConversion);
+                var keyframesBuilder = blobBuilder.Allocate(ref builderRoot.Keyframes, numKeys);
+                var curveOffsetsBuilder = blobBuilder.Allocate(ref builderRoot.CurveOffsets, numBindingsAfterConversion);
+                var bindingNamesBuilder = blobBuilder.Allocate(ref builderRoot.BindingNames, numBindingsAfterConversion);
+                var targetPathsBuilder = blobBuilder.Allocate(ref builderRoot.TargetGameObjectPaths, numBindingsAfterConversion);
 
                 // We don't care about that field in this case
-                blobBuilder.Allocate(ref builderRoot.animatedAssetGroupings, 0);
+                blobBuilder.Allocate(ref builderRoot.AnimatedAssetGroupings, 0);
 
                 for (int bindingIndex = 0, keyIndex = 0, curveOffset = 0; bindingIndex < numBindingsAfterConversion; ++bindingIndex)
                 {
@@ -220,7 +219,7 @@ namespace Unity.Tiny.Animation.Editor
                     targetPathsBuilder[bindingIndex] = targetPaths[bindingIndex];
                 }
 
-                builderRoot.conversionActions = scaleRequired ? RequiredConversionActions.PatchScale : RequiredConversionActions.None;
+                builderRoot.ConversionActions = scaleRequired ? RequiredConversionActions.PatchScale : RequiredConversionActions.None;
 
                 blobAssetRef = blobBuilder.CreateBlobAssetReference<CurvesInfo>(Allocator.Persistent);
             }
@@ -289,7 +288,7 @@ namespace Unity.Tiny.Animation.Editor
 
                 DstEntityManager.AddComponentData(assetGroupEntity, new AnimatedAssetGrouping
                 {
-                    assetTypeHash = TypeHash.CalculateStableTypeHash(assetType)
+                    AssetTypeHash = TypeHash.CalculateStableTypeHash(assetType)
                 });
 
                 var assetRefBuffer = DstEntityManager.AddBuffer<AnimatedAssetReference>(assetGroupEntity);
@@ -307,7 +306,7 @@ namespace Unity.Tiny.Animation.Editor
                     {
                         index = foundObjects.Count;
                         foundObjects.Add(referencedAsset);
-                        assetRefBuffer.Add(new AnimatedAssetReference { primaryEntity = GetPrimaryEntity(referencedAsset) });
+                        assetRefBuffer.Add(new AnimatedAssetReference { PrimaryEntity = GetPrimaryEntity(referencedAsset) });
                     }
 
                     // Infinite tangents result in a stepped curve, which is an adequate representation for an integer curve
@@ -323,14 +322,14 @@ namespace Unity.Tiny.Animation.Editor
             {
                 ref var builderRoot = ref blobBuilder.ConstructRoot<CurvesInfo>();
 
-                var keyframesBuilder = blobBuilder.Allocate(ref builderRoot.keyframes, numKeys);
-                var curveOffsetsBuilder = blobBuilder.Allocate(ref builderRoot.curveOffsets, numBindings);
-                var animatedAssetGroupingsBuilder = blobBuilder.Allocate(ref builderRoot.animatedAssetGroupings, numBindings);
+                var keyframesBuilder = blobBuilder.Allocate(ref builderRoot.Keyframes, numKeys);
+                var curveOffsetsBuilder = blobBuilder.Allocate(ref builderRoot.CurveOffsets, numBindings);
+                var animatedAssetGroupingsBuilder = blobBuilder.Allocate(ref builderRoot.AnimatedAssetGroupings, numBindings);
 
                 // We don't care about that field in this case
-                blobBuilder.Allocate(ref builderRoot.bindingNames, 0);
+                blobBuilder.Allocate(ref builderRoot.BindingNames, 0);
 
-                var targetPathsBuilder = blobBuilder.Allocate(ref builderRoot.targetGameObjectPaths, numBindings);
+                var targetPathsBuilder = blobBuilder.Allocate(ref builderRoot.TargetGameObjectPaths, numBindings);
 
                 for (int bindingIndex = 0, keyIndex = 0, curveOffset = 0; bindingIndex < numBindings; ++bindingIndex)
                 {
@@ -346,7 +345,7 @@ namespace Unity.Tiny.Animation.Editor
                     animatedAssetGroupingsBuilder[bindingIndex] = animatedAssetGroupings[bindingIndex];
                 }
 
-                builderRoot.conversionActions = RequiredConversionActions.None;
+                builderRoot.ConversionActions = RequiredConversionActions.None;
 
                 blobAssetRef = blobBuilder.CreateBlobAssetReference<CurvesInfo>(Allocator.Persistent);
             }

@@ -14,7 +14,8 @@
         "Unity.Tiny.Rendering",
         "Unity.Transforms",
         "Unity.Transforms.Hybrid",
-        "Unity.InternalAPIEditorBridge.008"
+        "Unity.InternalAPIEditorBridge.008",
+        "Unity.InternalAPIEngineBridge.008"
     ],
     "includePlatforms": [
         "Editor"

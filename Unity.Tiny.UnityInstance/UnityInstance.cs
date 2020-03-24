@@ -7,6 +7,9 @@ using Unity.Tiny;
 using Unity.Tiny.Scenes;
 using Unity.Platforms;
 using Unity.Entities.Runtime;
+#if DEBUG && !UNITY_WEBGL
+using Unity.Development;
+#endif
 
 namespace Unity.Tiny
 {
@@ -36,6 +39,9 @@ namespace Unity.Tiny
             BurstInit();
             NativeLeakDetection.Mode = NativeLeakDetectionMode.Enabled;
             TypeManager.Initialize();
+#if DEBUG && !UNITY_WEBGL
+            PlayerConnectionProfiler.Initialize();
+#endif
             return new UnityInstance();
         }
 
@@ -52,8 +58,8 @@ namespace Unity.Tiny
 
         private UnityInstance()
         {
-            m_World = DefaultTinyWorldInitialization.InitializeWorld("main");
-            DefaultTinyWorldInitialization.InitializeSystems(m_World);
+            m_World = DefaultWorldInitialization.InitializeWorld("main");
+            DefaultWorldInitialization.AddSystemsToRootLevelSystemGroups(m_World);
 #if UNITY_DOTSPLAYER_EXPERIMENTAL_FIXED_SIM
             TinyInternals.SetSimFixedRate(m_World, 1.0f / 60.0f);
 #endif
@@ -72,6 +78,9 @@ namespace Unity.Tiny
         public bool Update()
         {
 #if UNITY_DOTSPLAYER
+    #if DEBUG && !UNITY_WEBGL
+            PlayerConnectionService.TransmitAndReceive();
+    #endif
             UnsafeUtility.FreeTempMemory();
 #endif
 

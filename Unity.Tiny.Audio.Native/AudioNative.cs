@@ -196,7 +196,15 @@ namespace Unity.Tiny.Audio
                             AudioNativeCalls.Stop(ans.sourceID);
                         }
 
-                        uint sourceID = AudioNativeCalls.Play(clip.clipID, audioSource.volume, audioSource.pan, audioSource.loop);
+                        float volume = audioSource.volume;
+                        float pan = mgr.HasComponent<Audio2dPanning>(e) ? mgr.GetComponentData<Audio2dPanning>(e).pan : 0.0f;
+
+                        // For 3d sounds, we start at volume zero because we don't know if this sound is close or far from the listener. 
+                        // It is much smoother to ramp up volume from zero than the alternative.
+                        if (mgr.HasComponent<Audio3dPanning>(e))
+                            volume = 0.0f;
+
+                        uint sourceID = AudioNativeCalls.Play(clip.clipID, volume, pan, audioSource.loop);
 
                         AudioNativeSource audioNativeSource = new AudioNativeSource()
                         {
@@ -208,7 +216,7 @@ namespace Unity.Tiny.Audio
                         }
                         else
                         {
-                            PostUpdateCommands.AddComponent(e, audioNativeSource);
+                            mgr.AddComponentData(e, audioNativeSource);
                         }
                         return true;
                     }
@@ -276,20 +284,19 @@ namespace Unity.Tiny.Audio
         {
             base.OnUpdate();
 
+            var mgr = EntityManager;
             TinyEnvironment env = World.TinyEnvironment();
             AudioConfig ac = env.GetConfigData<AudioConfig>();
             AudioNativeCalls.PauseAudio(ac.paused);
 
-            EntityCommandBuffer ecb = new EntityCommandBuffer(Allocator.Temp);
             Entities
+                .WithStructuralChanges()
                 .WithNone<AudioClipLoadFromFileAudioFile>()
                 .ForEach((Entity e, ref AudioNativeClip tag) =>
                 {
                     AudioNativeCalls.FreeAudio(tag.clipID);
-                    ecb.RemoveComponent<AudioNativeClip>(e);
-                });
-            ecb.Playback(EntityManager);
-            ecb.Dispose();
+                    mgr.RemoveComponent<AudioNativeClip>(e);
+                }).Run();
         }
 
         public void OnSuspendResume(object sender, SuspendResumeEvent evt)

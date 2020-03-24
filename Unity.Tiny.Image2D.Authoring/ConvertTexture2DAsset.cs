@@ -4,6 +4,7 @@ using Unity.Entities;
 using UnityEditor;
 using Unity.Tiny;
 using UnityEngine;
+using Debug = Unity.Tiny.Debug;
 
 namespace Unity.TinyConversion
 {
@@ -14,14 +15,17 @@ namespace Unity.TinyConversion
             Entities.ForEach((UnityEngine.Texture2D texture) =>
             {
                 var entity = GetPrimaryEntity(texture);
-                var textPath = AssetDatabase.GetAssetPath(texture);
-                var importer = (TextureImporter)TextureImporter.GetAtPath(textPath);
+                string texPath = AssetDatabase.GetAssetPath(texture);
 
-                TextureImporterSettings importerSettings = null;
-                if (importer != null)
+                var asset = AssetDatabase.LoadMainAssetAtPath(texPath);
+                TextureImporterSettings textureImporterSettings = null;
+
+                if (asset is Texture2D)
                 {
-                    importerSettings = new TextureImporterSettings();
-                    importer.ReadTextureSettings(importerSettings);   
+                    // grab the TextureImporterSettings
+                    var importer = (TextureImporter)AssetImporter.GetAtPath(texPath);
+                    textureImporterSettings = new TextureImporterSettings();
+                    importer?.ReadTextureSettings(textureImporterSettings);
                 }
 
                 DstEntityManager.AddComponentData(entity, new Image2D()
@@ -29,7 +33,7 @@ namespace Unity.TinyConversion
                     imagePixelWidth = texture.width,
                     imagePixelHeight = texture.height,
                     status = ImageStatus.Invalid,
-                    flags = Texture2DExportUtils.GetTextureFlags(texture, importerSettings)
+                    flags = Texture2DExportUtils.GetTextureFlags(texture, textureImporterSettings)
                 });
 
                 DstEntityManager.AddComponent<Image2DLoadFromFile>(entity);
@@ -67,7 +71,7 @@ namespace Unity.TinyConversion
         {
             return texture.width > 0 && texture.height > 0 && ((texture.width & (texture.width - 1)) == 0) && ((texture.height & (texture.height - 1)) == 0);
         }
-        
+
         internal static TextureFlags GetTextureFlags(UnityEngine.Texture2D texture, TextureImporterSettings textureImporter)
         {
             TextureFlags flags = 0;
@@ -84,7 +88,7 @@ namespace Unity.TinyConversion
                     flags |= TextureFlags.Linear;
                     break;
             }
-            
+
             switch(texture.wrapModeU)
             {
                 case UnityEngine.TextureWrapMode.Clamp:
@@ -110,17 +114,17 @@ namespace Unity.TinyConversion
                     flags |= TextureFlags.URepeat;
                     break;
             }
-            
+
             if (texture.mipmapCount > 1)
                 flags |= TextureFlags.MimapEnabled;
 
             if (textureImporter == null || textureImporter.sRGBTexture)
                 flags |= TextureFlags.Srgb;
 
-            if (textureImporter != null && textureImporter.textureType == TextureImporterType.NormalMap) 
+            if (textureImporter?.textureType == TextureImporterType.NormalMap)
                 flags |= TextureFlags.IsNormalMap;
 
-            if(!IsPowerOfTwo(texture))
+            if (!IsPowerOfTwo(texture))
             {
                 if ((flags & TextureFlags.MimapEnabled) == TextureFlags.MimapEnabled)
                     throw new ArgumentException($"Mipmapping is incompatible with NPOT textures. Update texture: {texture.name} to be power of two or disable mipmaps on it.");
@@ -204,12 +208,23 @@ namespace Unity.TinyConversion
 
         internal static UnityEngine.Texture2D BlitTexture(UnityEngine.Texture2D texture, UnityEngine.TextureFormat format, bool alphaOnly = false)
         {
-            var textPath = AssetDatabase.GetAssetPath(texture);
+            var texPath = AssetDatabase.GetAssetPath(texture);
+            var asset = AssetDatabase.LoadMainAssetAtPath(texPath);
             RenderTextureReadWrite rtReadWrite = UnityEngine.RenderTextureReadWrite.sRGB;
-            var importer = (TextureImporter)TextureImporter.GetAtPath(textPath);
-            if (importer != null)
+
+            if (asset is Texture2D)
             {
-                rtReadWrite = importer.sRGBTexture? UnityEngine.RenderTextureReadWrite.sRGB : UnityEngine.RenderTextureReadWrite.Linear;
+                var importer = (TextureImporter)AssetImporter.GetAtPath(texPath);
+                if (importer != null)
+                    rtReadWrite = importer.sRGBTexture ? UnityEngine.RenderTextureReadWrite.sRGB : UnityEngine.RenderTextureReadWrite.Linear;
+            }
+
+            // hack to support text mesh pro
+            var fontAssetType = Type.GetType("TMPro.TMP_FontAsset, Unity.TextMeshPro, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null");
+            if (fontAssetType != null && fontAssetType.IsInstanceOfType(asset))
+            {
+                // TMPro texture atlases are always Linear space
+                rtReadWrite = UnityEngine.RenderTextureReadWrite.Linear;
             }
 
             // Create a temporary RenderTexture of the same size as the texture

@@ -24,7 +24,7 @@ namespace Unity.Tiny.Animation
             return outputClip;
         }
 
-        private static void FillKeyframeCurveBlob(KeyframeCurve sourceCurve, ref BlobBuilder blobBuilder, ref KeyframeCurveBlob curveBlob)
+        static void FillKeyframeCurveBlob(KeyframeCurve sourceCurve, ref BlobBuilder blobBuilder, ref KeyframeCurveBlob curveBlob)
         {
             var keyframes = blobBuilder.Allocate(ref curveBlob.Keyframes, sourceCurve.Length);
 

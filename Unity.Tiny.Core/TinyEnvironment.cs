@@ -11,7 +11,7 @@ namespace Unity.Tiny
     }
 
     [UpdateInGroup(typeof(InitializationSystemGroup))]
-    public class TinyEnvironment : ComponentSystem
+    public class TinyEnvironment : SystemBase
     {
         private const uint m_EntityCacheSize = 4096;
         private Entity[] m_EntityNameCache;

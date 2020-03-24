@@ -9,7 +9,7 @@ namespace Unity.Tiny.Animation.Editor
     [UpdateInGroup(typeof(GameObjectDeclareReferencedObjectsGroup))]
     [UpdateAfter(typeof(BeforeTinyAnimationDeclaration))]
     [UpdateBefore(typeof(AfterTinyAnimationDeclaration))]
-    class DeclareExtraBindings : GameObjectConversionSystem
+    class DeclareExtraRenderingBindings : GameObjectConversionSystem
     {
         protected override void OnUpdate()
         {

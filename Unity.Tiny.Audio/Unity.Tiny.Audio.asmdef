@@ -2,7 +2,9 @@
     "name": "Unity.Tiny.Audio",
     "references": [
         "Unity.Entities",
-        "Unity.Tiny.Core"
+        "Unity.Tiny.Core",
+        "Unity.Transforms",
+        "Unity.Mathematics"
     ],
     "optionalUnityReferences": [],
     "includePlatforms": [],

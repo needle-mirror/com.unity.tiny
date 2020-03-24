@@ -1,15 +1,28 @@
+using System;
 using Unity.Entities;
 
 namespace Unity.Tiny
 {
+    [Flags]
     public enum ScreenOrientation
     {
+        Unknown = 0,
         Portrait = 1,
         PortraitUpsideDown = 2,
-        Landscape = 3,
-        LandscapeLeft = 3,
+        ReversePortrait = 2,
+        Landscape = 4,
         LandscapeRight = 4,
-        AutoRotation = 5
+        LandscapeLeft = 8,
+        ReverseLandscape = 8,
+        AutoRotationPortrait = Portrait | ReversePortrait,
+        AutoRotationLandscape = Landscape | ReverseLandscape,
+        AutoRotation = Portrait | ReversePortrait | Landscape | ReverseLandscape
+    }
+
+    public enum ColorSpace
+    {
+        Linear = 0,
+        Gamma = 1
     }
 
     /// <summary>
@@ -110,11 +123,21 @@ namespace Unity.Tiny
         public bool disableVSync;
 
         /// <summary>
-        ///  Disable SRGB encodings. 
-        ///  Filtering and blending will happen in non-linear (gamma) space, which is wrong but more performant on 
-        ///  older devices. Also the srgb texture flag is ignored for texture reads. 
-        ///  Enabling this flag is the equivalent of selecting Gamma workflow. 
+        ///  Color space to use for rendering.
+        ///  The default and recommended color space is Linear, where shader math and belnding is correct.
+        ///  In linear space srgb encodings are properly handled, and the backbuffer is srgb.
+        ///  Gamma space disables all srgb de and encoding.
+        ///  Using gamma space is required to run on older devices and some web browsers that do not 
+        ///  support srgb textures. 
         /// </summary>
-        public bool disableSRGB;
+        public ColorSpace colorSpace;
+
+        /// <summary>
+        /// Color to clear the background when rendering at fixed aspect 
+        /// This color is the "black bars" where there is no rendering and the rendering aspect is not the same
+        /// as the display aspect. 
+        /// Cameras still clear with their own color
+        /// </summary>
+        public Color backgroundBorderColor;  // linear color 
     }
 }

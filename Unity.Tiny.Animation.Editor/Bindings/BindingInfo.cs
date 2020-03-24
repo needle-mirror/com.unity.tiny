@@ -4,28 +4,28 @@ namespace Unity.Tiny.Animation.Editor
 {
     readonly struct BindingInfo
     {
-        public readonly bool success;
-        public readonly ulong stableTypeHash;
-        public readonly ushort fieldOffset;
-        public readonly ushort fieldSize;
+        public readonly bool Success;
+        public readonly ulong StableTypeHash;
+        public readonly ushort FieldOffset;
+        public readonly ushort FieldSize;
 
         public static BindingInfo UnsuccessfulBinding => new BindingInfo(false, 0, 0, 0);
 
         public BindingInfo(bool success, ulong stableTypeHash, ushort fieldOffset, ushort fieldSize)
         {
-            this.success = success;
-            this.stableTypeHash = stableTypeHash;
-            this.fieldOffset = fieldOffset;
-            this.fieldSize = fieldSize;
+            Success = success;
+            StableTypeHash = stableTypeHash;
+            FieldOffset = fieldOffset;
+            FieldSize = fieldSize;
         }
 
         public override string ToString()
         {
-            return success
+            return Success
                 ? "Successful binding - " +
-                  $"{nameof(stableTypeHash)} = {stableTypeHash.ToString(NumberFormatInfo.InvariantInfo)} - " +
-                  $"{nameof(fieldOffset)} = {fieldOffset.ToString(NumberFormatInfo.InvariantInfo)} - " +
-                  $"{nameof(fieldSize)} = {fieldSize.ToString(NumberFormatInfo.InvariantInfo)}"
+                  $"{nameof(StableTypeHash)} = {StableTypeHash.ToString(NumberFormatInfo.InvariantInfo)} - " +
+                  $"{nameof(FieldOffset)} = {FieldOffset.ToString(NumberFormatInfo.InvariantInfo)} - " +
+                  $"{nameof(FieldSize)} = {FieldSize.ToString(NumberFormatInfo.InvariantInfo)}"
                 : "Binding unsuccessful";
         }
     }

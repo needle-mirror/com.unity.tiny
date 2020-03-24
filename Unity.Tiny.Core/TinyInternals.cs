@@ -11,7 +11,7 @@ namespace Unity.Tiny
         public static void SetSimFixedRate(World world, float rate)
         {
             SimulationSystemGroup sim = world.GetExistingSystem<SimulationSystemGroup>();
-            sim.SetFixedTimeStep(rate);
+            FixedRateUtils.EnableFixedRateWithCatchUp(sim, rate);
         }
     }
 

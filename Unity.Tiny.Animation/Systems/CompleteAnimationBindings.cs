@@ -1,25 +1,39 @@
+using JetBrains.Annotations;
 using Unity.Entities;
 
 namespace Unity.Tiny.Animation
 {
-    // TODO: jobify once the bogus IL generation is fixed in DOTS Player
-    
+    [UsedImplicitly]
     [UpdateInGroup(typeof(InitializationSystemGroup))]
-    class CompleteAnimationBindings : ComponentSystem
+    class CompleteAnimationBindings : SystemBase
     {
+        EndInitializationEntityCommandBufferSystem m_ECBSystem;
+
+        protected override void OnCreate()
+        {
+            m_ECBSystem = World.GetOrCreateSystem<EndInitializationEntityCommandBufferSystem>();
+        }
+
         protected override void OnUpdate()
         {
-            Entities.ForEach((Entity entity, DynamicBuffer<AnimationBindingRetarget> bindingRetargetBuffer, DynamicBuffer<AnimationBinding> bindings) =>
-            {
-                for (int i = 0; i < bindingRetargetBuffer.Length; ++i)
-                {
-                    var binding = bindings[i];
-                    binding.targetComponentTypeIndex = TypeManager.GetTypeIndexFromStableTypeHash(bindingRetargetBuffer[i].stableTypeHash);
-                    bindings[i] = binding;
-                }
+            var commandBuffer = m_ECBSystem.CreateCommandBuffer().ToConcurrent();
+            Dependency =
+                Entities
+                   .WithoutBurst() // Burst does not support: TypeManager.GetTypeIndexFromStableTypeHash
+                   .ForEach(
+                        (Entity entity, int entityInQueryIndex, ref DynamicBuffer<AnimationBinding> bindings, in DynamicBuffer<AnimationBindingRetarget> bindingRetargetBuffer) =>
+                        {
+                            for (int i = 0; i < bindingRetargetBuffer.Length; ++i)
+                            {
+                                var binding = bindings[i];
+                                binding.TargetComponentTypeIndex = TypeManager.GetTypeIndexFromStableTypeHash(bindingRetargetBuffer[i].StableTypeHash);
+                                bindings[i] = binding;
+                            }
 
-                PostUpdateCommands.RemoveComponent<AnimationBindingRetarget>(entity);
-            });
+                            commandBuffer.RemoveComponent<AnimationBindingRetarget>(entityInQueryIndex, entity);
+                        }).Schedule(Dependency);
+
+            m_ECBSystem.AddJobHandleForProducer(Dependency);
         }
     }
 }

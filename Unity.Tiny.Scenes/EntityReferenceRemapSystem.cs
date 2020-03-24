@@ -5,7 +5,7 @@ using Unity.Entities;
 namespace Unity.Tiny.Scenes
 {
     [DisableAutoCreation]
-    public class EntityReferenceRemapSystem : ComponentSystem
+    public class EntityReferenceRemapSystem : SystemBase
     {
         [BurstCompile]
         private struct BuildEntityGuidHashMapJob : IJobChunk
@@ -134,7 +134,7 @@ namespace Unity.Tiny.Scenes
     }
 
     [DisableAutoCreation]
-    public class ClearRemappedEntityReferenceSystem : ComponentSystem
+    public class ClearRemappedEntityReferenceSystem : SystemBase
     {
         private EntityQuery m_EntityReferenceRemapQuery;
 
@@ -218,33 +218,21 @@ namespace Unity.Tiny.Scenes
 
     [DisableAutoCreation]
     [UpdateAfter(typeof(EntityReferenceRemapSystem))]
-    public class RemoveRemapInformationSystem : ComponentSystem
+    public class RemoveRemapInformationSystem : SystemBase
     {
         private EntityQuery m_EntityReferenceRemapQuery;
 
-        protected override void OnCreate()
-        {
-            base.OnCreate();
-
-            m_EntityReferenceRemapQuery = EntityManager.CreateEntityQuery
-            (
-                new EntityQueryDesc
-                {
-                    All = new[] {ComponentType.ReadWrite<EntityReferenceRemap>()},
-                    Options = EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabled
-                }
-            );
-        }
-
         protected override void OnUpdate()
         {
-            using (var entities = m_EntityReferenceRemapQuery.ToEntityArray(Allocator.TempJob))
-            {
-                foreach (var entity in entities)
+            Entities
+                .WithAll<EntityReferenceRemap>()
+                .WithStructuralChanges()
+                .WithEntityQueryOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabled)
+                .WithStoreEntityQueryInField(ref m_EntityReferenceRemapQuery)
+                .ForEach((Entity e) => 
                 {
-                    PostUpdateCommands.RemoveComponent<EntityReferenceRemap>(entity);
-                }
-            }
+                    EntityManager.RemoveComponent<EntityReferenceRemap>(e);
+                }).Run();
         }
     }
 }

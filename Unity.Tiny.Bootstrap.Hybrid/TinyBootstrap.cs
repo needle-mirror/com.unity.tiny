@@ -19,13 +19,6 @@ namespace Unity.Tiny.Bootstrap.Hybrid
             systems = systems.Where(s => {
                 var asmName = s.Assembly.FullName;
                 
-                //Filter out all configuration systems converting bgfx shader, tiny render settings and tiny SceneStartups
-                string typeName = s?.BaseType?.Name;
-                if (typeName != null && (typeName.Contains("ConfigurationSystemBase") || typeName.Contains("ShaderExportSystem")))
-                {
-                    return false;
-                }
-
                 // White list `Unity.Tiny.Rendering`, but not `Unity.Tiny.Rendering.Native`
                 // We need the camera and the world bounds for in editor play mode
                 if(asmName.Contains("Unity.Tiny.Rendering") && !asmName.Contains("Native"))

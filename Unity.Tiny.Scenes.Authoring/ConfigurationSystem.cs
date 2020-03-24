@@ -6,6 +6,7 @@ using System.Linq;
 
 namespace Unity.Tiny.Authoring
 {
+    [DisableAutoCreation]
     public class ConfigurationSystem : ConfigurationSystemBase
     {
         protected override void OnUpdate()

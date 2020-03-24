@@ -11,10 +11,10 @@ namespace Unity.Tiny.Animation.Editor
     {
         protected override void OnUpdate()
         {
-            Entities.ForEach((TinyAnimationAuthoring tinyAnimationAuthoring) =>
+            Entities.ForEach((UnityEngine.Animation animationComponent) =>
             {
-                var animationClips = tinyAnimationAuthoring.animationClips;
-                if (animationClips == null || animationClips.Count == 0)
+                var animationClips = ConversionUtils.GetAllAnimationClips(animationComponent);
+                if (animationClips.Length == 0)
                     return;
 
                 foreach (var clip in animationClips)
@@ -23,12 +23,15 @@ namespace Unity.Tiny.Animation.Editor
                         DeclareAnimationClipReferencedAssets(clip);
                 }
             });
+
+            UserBindingsRemapper.FillMap();
         }
 
         void DeclareAnimationClipReferencedAssets(AnimationClip clip)
         {
             DeclareReferencedAsset(clip);
 
+            // Animation clip may have references to other assets through pPtr curves (like Sprites, Materials, etc.)
             var bindings = AnimationUtility.GetObjectReferenceCurveBindings(clip);
             if (bindings.Length == 0)
                 return;

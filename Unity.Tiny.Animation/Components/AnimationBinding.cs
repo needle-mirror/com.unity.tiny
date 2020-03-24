@@ -1,5 +1,3 @@
-using JetBrains.Annotations;
-using Unity.Collections;
 using Unity.Entities;
 
 namespace Unity.Tiny.Animation
@@ -11,35 +9,22 @@ namespace Unity.Tiny.Animation
     [InternalBufferCapacity(16)]
     struct AnimationBinding : IBufferElementData
     {
-        public BlobAssetReference<KeyframeCurveBlob> curve;
-        public Entity targetEntity;
-        public int targetComponentTypeIndex;
-        public ushort fieldOffset;
-        public ushort fieldSize;
-    }
-
-    struct AnimationBindingName : IBufferElementData
-    {
-        public NativeString512 value;
+        public BlobAssetReference<KeyframeCurveBlob> Curve;
+        public Entity TargetEntity;
+        public int TargetComponentTypeIndex;
+        public ushort FieldOffset;
+        public ushort FieldSize;
     }
 
     // Used for runtime retargetting; also marks an animation as "not fully bound"
     struct AnimationBindingRetarget : IBufferElementData
     {
-        public ulong stableTypeHash;
+        public ulong StableTypeHash;
     }
 
     struct AnimationPPtrBinding : IBufferElementData
     {
-        public BlobAssetReference<KeyframeCurveBlob> curve;
-        public Entity targetEntity;
-    }
-
-    [PublicAPI]
-    public struct PPtrIndex : IComponentData
-    {
-        // Updated using type index. Not consumed by this package.
-        [UsedImplicitly]
-        public ushort value;
+        public BlobAssetReference<KeyframeCurveBlob> Curve;
+        public Entity TargetEntity;
     }
 }

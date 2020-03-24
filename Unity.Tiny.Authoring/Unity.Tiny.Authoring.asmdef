@@ -1,7 +1,6 @@
 {
     "name": "Unity.Tiny.Authoring",
     "references": [
-        "Unity.Build",
         "Unity.Entities.Runtime.Build",
         "Unity.Collections",
         "Unity.Transforms",
