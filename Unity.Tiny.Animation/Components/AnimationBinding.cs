@@ -16,15 +16,23 @@ namespace Unity.Tiny.Animation
         public ushort FieldSize;
     }
 
+    struct AnimationPPtrBinding : IBufferElementData
+    {
+        public BlobAssetReference<KeyframeCurveBlob> Curve;
+        public Entity SourceEntity;
+        public Entity TargetEntity;
+        public int TargetComponentTypeIndex;
+        public ushort FieldOffset;
+    }
+
+    struct AnimationPPtrBindingSources : IBufferElementData
+    {
+        public Entity Value;
+    }
+
     // Used for runtime retargetting; also marks an animation as "not fully bound"
     struct AnimationBindingRetarget : IBufferElementData
     {
         public ulong StableTypeHash;
-    }
-
-    struct AnimationPPtrBinding : IBufferElementData
-    {
-        public BlobAssetReference<KeyframeCurveBlob> Curve;
-        public Entity TargetEntity;
     }
 }

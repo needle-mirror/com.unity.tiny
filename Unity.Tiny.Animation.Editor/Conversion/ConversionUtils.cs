@@ -1,57 +1,70 @@
-using JetBrains.Annotations;
 using TinyInternal.Bridge;
-using UnityEditor;
 using UnityEngine;
 
 namespace Unity.Tiny.Animation.Editor
 {
     static class ConversionUtils
     {
-        public static AnimationClip[] GetAllAnimationClips([NotNull] UnityEngine.Animation animationComponent)
-        {
-            // TODO: Cache this result in TinyAnimationConversionState, once that PR gets merged on the 2D side.
-            var animations = AnimationUtility.GetAnimationClips(animationComponent.gameObject);
-            return animations;
-        }
-
-        public static (WrapMode wrapMode, float cycleOffset) GetWrapInfo(AnimationClip clip)
+        public static WrapMode GetWrapMode(AnimationClip clip)
         {
             if (!clip.legacy)
             {
-                var clipSettings = TinyAnimationEditorBridge.GetAnimationClipSettings(clip);
-                if (clipSettings.loopTime)
-                    return (WrapMode.Loop, AnimationMath.NormalizeCycle(clipSettings.cycleOffset));
+                var clipSettings = TinyAnimationConversionState.GetAnimationClipSettings(clip);
+                return clipSettings.loopTime ? WrapMode.Loop : WrapMode.ClampForever;
             }
-
-            var result = (wrapMode: WrapMode.ClampForever, cycleOffset: 0.0f);
 
             switch (clip.wrapMode)
             {
                 case UnityEngine.WrapMode.Once: // Shares value with UnityEngine.WrapMode.Clamp
                 {
-                    result.wrapMode = WrapMode.Once;
-                    break;
+                    return WrapMode.Once;
                 }
                 case UnityEngine.WrapMode.Loop:
                 {
-                    result.wrapMode = WrapMode.Loop;
-                    break;
+                    return WrapMode.Loop;
                 }
                 case UnityEngine.WrapMode.PingPong:
                 {
-                    result.wrapMode = WrapMode.PingPong;
-                    break;
+                    return WrapMode.PingPong;
                 }
                 case UnityEngine.WrapMode.ClampForever:
                 case UnityEngine.WrapMode.Default:
                 default:
                 {
-                    result.wrapMode = WrapMode.ClampForever;
-                    break;
+                    return WrapMode.ClampForever;
                 }
             }
+        }
 
-            return result;
+        public static float GetCycleOffset(AnimationClip clip)
+        {
+            return clip.legacy ? 0.0f : TinyAnimationConversionState.GetAnimationClipSettings(clip).cycleOffset;
+        }
+
+        public static bool ValidateGameObjectAndWarn(GameObject gameObject)
+        {
+            var hasAnimationComponent = gameObject.GetComponent<UnityEngine.Animation>() != null;
+            var hasTinyAnimationAuthoring = gameObject.GetComponent<TinyAnimationAuthoring>() != null;
+
+            if (!hasAnimationComponent && !hasTinyAnimationAuthoring)
+            {
+                Debug.LogWarning($"The GameObject {gameObject.name} has no support for TinyAnimation.");
+                return false;
+            }
+
+            if (hasAnimationComponent && hasTinyAnimationAuthoring)
+            {
+                Debug.LogWarning($"The GameObject {gameObject.name} has both an Animation component and an Animator component, which is not supported by TinyAnimation.");
+                return false;
+            }
+
+            if (!hasTinyAnimationAuthoring && gameObject.GetComponent<Animator>() != null)
+            {
+                Debug.LogWarning($"The GameObject {gameObject.name} has an animator but no {typeof(TinyAnimationAuthoring).Name} component was added.");
+                return false;
+            }
+
+            return true;
         }
 
         public static void WarnAboutUnsupportedFeatures(UnityEngine.Animation animationComponent)
@@ -63,6 +76,21 @@ namespace Unity.Tiny.Animation.Editor
                 Debug.LogWarning($"The Animation component on {animationComponent.gameObject.name} has \"animatePhysics\" set to true, but it is not supported by TinyAnimation.");
         }
 
+        public static void WarnAboutUnsupportedFeatures(Animator animatorComponent)
+        {
+            if (animatorComponent == null)
+                return;
+
+            if (animatorComponent.applyRootMotion)
+                Debug.LogWarning($"The Animator component on {animatorComponent.gameObject.name} requires Root Motion, but it is not supported by TinyAnimation.");
+
+            if (animatorComponent.updateMode != AnimatorUpdateMode.Normal)
+                Debug.LogWarning($"The Animator component on {animatorComponent.gameObject.name} has the update mode: {animatorComponent.updateMode}, but only {AnimatorUpdateMode.Normal} is supported by TinyAnimation.");
+
+            if (animatorComponent.cullingMode != AnimatorCullingMode.AlwaysAnimate)
+                Debug.LogWarning($"The Animator component on {animatorComponent.gameObject.name} has the culling mode: {animatorComponent.cullingMode}, but only {AnimatorCullingMode.AlwaysAnimate} is supported by TinyAnimation.");
+        }
+
         public static void WarnAboutUnsupportedFeatures(AnimationClip clip)
         {
             if (clip.events.Length > 0)
@@ -70,7 +98,7 @@ namespace Unity.Tiny.Animation.Editor
 
             if (clip.legacy) return;
 
-            var clipSettings = TinyAnimationEditorBridge.GetAnimationClipSettings(clip);
+            var clipSettings = TinyAnimationConversionState.GetAnimationClipSettings(clip);
 
             if (clipSettings.loopBlend)
                 Debug.LogWarning($"The animation clip {clip.name} has enabled Loop Pose, but it is not supported by TinyAnimation.");

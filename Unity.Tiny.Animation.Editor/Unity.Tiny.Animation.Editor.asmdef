@@ -6,7 +6,7 @@
         "Unity.Collections",
         "Unity.Entities",
         "Unity.Entities.Hybrid",
-        "Unity.Entities.Properties",
+        "Unity.Entities.Editor",
         "Unity.Jobs",
         "Unity.Mathematics",
         "Unity.Properties",

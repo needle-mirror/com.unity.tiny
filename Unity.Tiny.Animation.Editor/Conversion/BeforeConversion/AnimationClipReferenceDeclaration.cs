@@ -13,14 +13,31 @@ namespace Unity.Tiny.Animation.Editor
         {
             Entities.ForEach((UnityEngine.Animation animationComponent) =>
             {
-                var animationClips = ConversionUtils.GetAllAnimationClips(animationComponent);
+                if (!TinyAnimationConversionState.ValidateGameObjectAndWarn(animationComponent.gameObject))
+                    return;
+
+                var animationClips = TinyAnimationConversionState.GetAllAnimationClips(animationComponent);
                 if (animationClips.Length == 0)
                     return;
 
                 foreach (var clip in animationClips)
                 {
-                    if (clip != null)
-                        DeclareAnimationClipReferencedAssets(clip);
+                    DeclareAnimationClipReferencedAssets(clip);
+                }
+            });
+
+            Entities.ForEach((TinyAnimationAuthoring animationComponent) =>
+            {
+                if (!TinyAnimationConversionState.ValidateGameObjectAndWarn(animationComponent.gameObject))
+                    return;
+
+                var animationClips = TinyAnimationConversionState.GetAllAnimationClips(animationComponent);
+                if (animationClips.Length == 0)
+                    return;
+
+                foreach (var clip in animationClips)
+                {
+                    DeclareAnimationClipReferencedAssets(clip);
                 }
             });
 
@@ -42,6 +59,7 @@ namespace Unity.Tiny.Animation.Editor
                 foreach (var reference in references)
                 {
                     DeclareReferencedAsset(reference.value);
+                    TinyAnimationConversionState.RegisterDeclaredAsset(reference.value);
                 }
             }
         }

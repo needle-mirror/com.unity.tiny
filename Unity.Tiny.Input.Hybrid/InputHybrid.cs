@@ -41,6 +41,8 @@ namespace Unity.Tiny.Hybrid
 
         private NativeList<KeyEvent> m_KeyEventList;
 
+        private bool m_MouseInitDelta = true;
+
         protected override void OnCreate()
         {
             base.OnCreate();
@@ -49,6 +51,8 @@ namespace Unity.Tiny.Hybrid
             m_GuiGrabberGO = new GameObject("GUIEventGrabber");
             m_GuiGrabber = m_GuiGrabberGO.AddComponent<HybridInputBehaviour>();
             m_GuiGrabber.m_KeyEventList = m_KeyEventList;
+
+            m_MouseInitDelta = true;
         }
 
         protected override void OnDestroy()
@@ -81,6 +85,19 @@ namespace Unity.Tiny.Hybrid
             // mouse
             m_inputState.hasMouse = UnityInput.mousePresent;
             var mouse = UnityInput.mousePosition;
+
+            if (!m_MouseInitDelta)
+            {
+                m_inputState.mouseDeltaX = (int) mouse.x - m_inputState.mouseX;
+                m_inputState.mouseDeltaY = (int) mouse.y - m_inputState.mouseY;
+            }
+            else
+            {
+                m_inputState.mouseDeltaX = 0;
+                m_inputState.mouseDeltaY = 0;
+                m_MouseInitDelta = false;
+            }
+
             m_inputState.mouseX = (int) mouse.x;
             m_inputState.mouseY = (int) mouse.y;
             for (int i = 0; i < 3; ++i)

@@ -98,6 +98,7 @@ namespace Unity.Tiny.Audio
         protected abstract bool IsPlaying(Entity e);
         protected abstract bool SetVolume(Entity e, float volume);
         protected abstract bool SetPan(Entity e, float pan);
+        protected abstract bool SetPitch(Entity e, float pitch);
 
         protected override void OnCreate()
         {
@@ -245,6 +246,17 @@ namespace Unity.Tiny.Audio
 
                 panning.pan = pan;
                 SetPan(e, pan);
+            }).Run();
+
+            // Update pitch.
+            Entities
+                .WithoutBurst()
+                .ForEach((Entity e, ref AudioSource source, ref AudioPitch pitchEffect) =>
+            {
+                if (pitchEffect.pitch > 0.0f)
+                    SetPitch(e, pitchEffect.pitch);
+                else
+                    SetPitch(e, 1.0f);
             }).Run();
         }
     }
@@ -457,5 +469,29 @@ namespace Unity.Tiny.Audio
         public float minDistance;
         public float maxDistance;
         public float volume { get; internal set; }
+    }
+
+    /// <summary>
+    ///  An AudioPitch component adjusts an AudioSource's pitch.
+    /// </summary>
+    /// <remarks>
+    ///  The AudioSystem pushes updated pitch values down to the native audio code on each platform.
+    /// <example>
+    /// Minimal code to play an AudioClip with a modified pitch:
+    /// <code>
+    ///     var eSource = mgr.CreateEntity();
+    ///     AudioSource source = new AudioSource();
+    ///     source.clip = eClip;
+    ///     mgr.AddComponentData(eSource, source);
+    ///     AudioPitch pitchEffect = new AudioPitch();
+    ///     pitchEffect.pitch = 2.0f;
+    ///     mgr.AddComponentData(eSource, pitchEffect);
+    ///     mgr.AddComponent(eSource, typeof(AudioSourceStart));
+    /// </code>
+    /// </example>
+    /// </remarks>
+    public struct AudioPitch : IComponentData
+    {     
+        public float pitch;
     }
 }

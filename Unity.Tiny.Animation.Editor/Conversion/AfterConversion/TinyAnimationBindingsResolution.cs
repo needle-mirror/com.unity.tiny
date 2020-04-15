@@ -15,79 +15,112 @@ namespace Unity.Tiny.Animation.Editor
                 All = new[]
                 {
                     ComponentType.ReadOnly<AnimationBindingName>(),
-                    ComponentType.ReadWrite<AnimationBinding>(),
                     ComponentType.ReadWrite<AnimationBindingRetarget>()
+                },
+                Any = new []
+                {
+                    ComponentType.ReadWrite<AnimationBinding>(),
+                    ComponentType.ReadWrite<AnimationPPtrBinding>()
                 }
             });
 
-            var commandBuffer = new EntityCommandBuffer(Allocator.TempJob);
-            var animatedEntities = dstWorldQuery.ToEntityArray(Allocator.TempJob);
-
-            for (int entityIndex = 0; entityIndex < animatedEntities.Length; ++entityIndex)
+            using (var commandBuffer = new EntityCommandBuffer(Allocator.Temp))
+            using (var animatedEntities = dstWorldQuery.ToEntityArray(Allocator.TempJob))
             {
-                var entity = animatedEntities[entityIndex];
-
-                var bindingBuffer = DstEntityManager.GetBuffer<AnimationBinding>(entity);
-                var bindingNameBuffer = DstEntityManager.GetBuffer<AnimationBindingName>(entity);
-                var bindingRetargetBuffer = DstEntityManager.GetBuffer<AnimationBindingRetarget>(entity);
-
-                for (int i = bindingBuffer.Length - 1; i >= 0; --i)
+                for (int entityIndex = 0; entityIndex < animatedEntities.Length; ++entityIndex)
                 {
-                    var propertyPath = bindingNameBuffer[i].Value;
-                    var discardEntry = true;
+                    var entity = animatedEntities[entityIndex];
 
-                    // A 0-length property path had no ECS equivalent at build time
-                    if (propertyPath.LengthInBytes > 0)
+                    var bindingNameBuffer = DstEntityManager.GetBuffer<AnimationBindingName>(entity);
+                    var bindingRetargetBuffer = DstEntityManager.GetBuffer<AnimationBindingRetarget>(entity);
+
+                    var isFloatAnimation = DstEntityManager.HasComponent<AnimationBinding>(entity);
+                    var floatBindingBuffer = isFloatAnimation ? DstEntityManager.GetBuffer<AnimationBinding>(entity)     : default;
+                    var pPtrBindingBuffer = !isFloatAnimation ? DstEntityManager.GetBuffer<AnimationPPtrBinding>(entity) : default;
+
+                    for (int i = bindingNameBuffer.Length - 1; i >= 0; --i)
                     {
-                        var result = BindingUtils.GetBindingInfo(DstEntityManager, bindingBuffer[i].TargetEntity, propertyPath);
-                        if (result.Success)
-                        {
-                            var retarget = bindingRetargetBuffer[i];
-                            retarget.StableTypeHash = result.StableTypeHash;
-                            bindingRetargetBuffer[i] = retarget;
+                        var propertyPath = bindingNameBuffer[i].Value;
+                        var discardEntry = true;
 
-                            var binding = bindingBuffer[i];
-                            binding.FieldOffset = result.FieldOffset;
-                            binding.FieldSize = result.FieldSize;
-                            bindingBuffer[i] = binding;
-                            discardEntry = false;
+                        // A 0-length property path had no ECS equivalent at build time
+                        if (propertyPath.LengthInBytes > 0)
+                        {
+                            var targetEntity = isFloatAnimation ? floatBindingBuffer[i].TargetEntity : pPtrBindingBuffer[i].TargetEntity;
+                            var result = BindingUtils.GetBindingInfo(DstEntityManager, targetEntity, propertyPath);
+
+                            if (result.Success)
+                            {
+                                var retarget = bindingRetargetBuffer[i];
+                                retarget.StableTypeHash = result.StableTypeHash;
+                                bindingRetargetBuffer[i] = retarget;
+
+                                if (isFloatAnimation)
+                                {
+                                    var binding = floatBindingBuffer[i];
+                                    binding.FieldOffset = result.FieldOffset;
+                                    binding.FieldSize = result.FieldSize;
+                                    floatBindingBuffer[i] = binding;
+                                }
+                                else
+                                {
+                                    var binding = pPtrBindingBuffer[i];
+                                    binding.FieldOffset = result.FieldOffset;
+                                    pPtrBindingBuffer[i] = binding;
+                                }
+
+                                discardEntry = false;
+                            }
+                        }
+
+                        if (discardEntry)
+                        {
+                            if (isFloatAnimation)
+                            {
+                                floatBindingBuffer.RemoveAt(i);
+                            }
+                            else
+                            {
+                                pPtrBindingBuffer.RemoveAt(i);
+                            }
+
+                            bindingRetargetBuffer.RemoveAt(i);
                         }
                     }
 
-                    if (discardEntry)
+                    // Cleanup
+                    bindingNameBuffer.Clear();
+                    commandBuffer.RemoveComponent<AnimationBindingName>(entity);
+
+                    if ((isFloatAnimation && floatBindingBuffer.Length == 0) || (!isFloatAnimation && pPtrBindingBuffer.Length == 0))
                     {
-                        bindingBuffer.RemoveAt(i);
-                        bindingRetargetBuffer.RemoveAt(i);
+                        // Nothing to animate
+                        if (isFloatAnimation)
+                            commandBuffer.RemoveComponent<AnimationBinding>(entity);
+                        else
+                            commandBuffer.RemoveComponent<AnimationPPtrBinding>(entity);
+
+                        commandBuffer.RemoveComponent<AnimationBindingRetarget>(entity);
+                        commandBuffer.RemoveComponent<TinyAnimationTime>(entity);
+                        commandBuffer.RemoveComponent<TinyAnimationPlaybackInfo>(entity);
+                        if (DstEntityManager.HasComponent<UpdateAnimationTimeTag>(entity))
+                            commandBuffer.RemoveComponent<UpdateAnimationTimeTag>(entity);
+                        if (DstEntityManager.HasComponent<ApplyAnimationResultTag>(entity))
+                            commandBuffer.RemoveComponent<ApplyAnimationResultTag>(entity);
+                    }
+                    else
+                    {
+                        if (isFloatAnimation)
+                            floatBindingBuffer.TrimExcess();
+                        else
+                            pPtrBindingBuffer.TrimExcess();
+
+                        bindingRetargetBuffer.TrimExcess();
                     }
                 }
 
-                // Cleanup
-                bindingNameBuffer.Clear();
-                commandBuffer.RemoveComponent<AnimationBindingName>(entity);
-
-                if (bindingBuffer.Length == 0)
-                {
-                    // Nothing to animate
-                    commandBuffer.RemoveComponent<AnimationBinding>(entity);
-                    commandBuffer.RemoveComponent<AnimationBindingRetarget>(entity);
-                    commandBuffer.RemoveComponent<TinyAnimationTime>(entity);
-                    commandBuffer.RemoveComponent<TinyAnimationPlaybackInfo>(entity);
-                    if (DstEntityManager.HasComponent<UpdateAnimationTimeTag>(entity))
-                        commandBuffer.RemoveComponent<UpdateAnimationTimeTag>(entity);
-                    if (DstEntityManager.HasComponent<ApplyAnimationResultTag>(entity))
-                        commandBuffer.RemoveComponent<ApplyAnimationResultTag>(entity);
-                }
-                else
-                {
-                    bindingBuffer.TrimExcess();
-                    bindingRetargetBuffer.TrimExcess();
-                }
+                commandBuffer.Playback(DstEntityManager);
             }
-
-            commandBuffer.Playback(DstEntityManager);
-            commandBuffer.Dispose();
-
-            animatedEntities.Dispose();
         }
     }
 }

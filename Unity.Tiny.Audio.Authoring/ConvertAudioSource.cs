@@ -51,6 +51,14 @@ namespace Unity.TinyConversion
                     });   
                 }
                     
+                if ((audioSource.pitch > 0.0f) && (audioSource.pitch != 1.0f))
+                {
+                    DstEntityManager.AddComponentData(primaryEntity, new AudioPitch()
+                    {
+                        pitch = audioSource.pitch
+                    });
+                }
+
                 if (audioSource.playOnAwake)
                     DstEntityManager.AddComponentData(primaryEntity, new AudioSourceStart());
             });

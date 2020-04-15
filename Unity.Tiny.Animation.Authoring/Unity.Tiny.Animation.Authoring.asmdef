@@ -1,10 +1,6 @@
 {
     "name": "Unity.Tiny.Animation.Authoring",
-    "references": [
-        "Unity.Entities",
-        "Unity.Entities.Hybrid",
-        "Unity.InternalAPIEditorBridge.008"
-    ],
+    "references": [],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,

@@ -1,3 +1,4 @@
+#if !UNITY_DOTSPLAYER
 using System;
 
 namespace Unity.Tiny.Animation
@@ -69,3 +70,4 @@ namespace Unity.Tiny.Animation
         }
     }
 }
+#endif

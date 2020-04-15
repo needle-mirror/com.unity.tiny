@@ -2493,6 +2493,7 @@ MA_ALIGNED_STRUCT(MA_SIMD_ALIGNMENT) ma_device
             ma_uint32 originalPeriods;
             ma_bool32 isDefaultPlaybackDevice;
             ma_bool32 isDefaultCaptureDevice;
+            ma_bool32 hasDefaultPlaybackDeviceChanged;
             ma_bool32 isSwitchingPlaybackDevice;   /* <-- Set to true when the default device has changed and miniaudio is in the process of switching. */
             ma_bool32 isSwitchingCaptureDevice;    /* <-- Set to true when the default device has changed and miniaudio is in the process of switching. */
             ma_pcm_rb duplexRB;
@@ -18170,30 +18171,11 @@ OSStatus ma_default_device_changed__coreaudio(AudioObjectID objectID, UInt32 add
     if (addressCount == 0) {
         return noErr;
     }
-    
-    if (pAddresses[0].mSelector == kAudioHardwarePropertyDefaultOutputDevice) {
-        ma_result reinitResult;
 
-        pDevice->coreaudio.isSwitchingPlaybackDevice = MA_TRUE;
-        reinitResult = ma_device_reinit_internal__coreaudio(pDevice, ma_device_type_playback, MA_TRUE);
-        pDevice->coreaudio.isSwitchingPlaybackDevice = MA_FALSE;
-        
-        if (reinitResult == MA_SUCCESS) {
-            ma_device__post_init_setup(pDevice, ma_device_type_playback);
-            
-            /* Restart the device if required. If this fails we need to stop the device entirely. */
-            if (ma_device__get_state(pDevice) == MA_STATE_STARTED) {
-                OSStatus status = ((ma_AudioOutputUnitStart_proc)pDevice->pContext->coreaudio.AudioOutputUnitStart)((AudioUnit)pDevice->coreaudio.audioUnitPlayback);
-                if (status != noErr) {
-                    if (pDevice->type == ma_device_type_duplex) {
-                        ((ma_AudioOutputUnitStop_proc)pDevice->pContext->coreaudio.AudioOutputUnitStop)((AudioUnit)pDevice->coreaudio.audioUnitCapture);
-                    }
-                    ma_device__set_state(pDevice, MA_STATE_STOPPED);
-                }
-            }
-        }
+    if (pAddresses[0].mSelector == kAudioHardwarePropertyDefaultOutputDevice) {
+        pDevice->coreaudio.hasDefaultPlaybackDeviceChanged = true;
     }
-    
+
     if (pAddresses[0].mSelector == kAudioHardwarePropertyDefaultInputDevice) {
         ma_result reinitResult;
 
@@ -18763,18 +18745,19 @@ ma_result ma_device_init__coreaudio(ma_context* pContext, const ma_device_config
             return result;
         }
         
-        pDevice->coreaudio.isDefaultPlaybackDevice   = (pConfig->playback.pDeviceID == NULL);
+        pDevice->coreaudio.isDefaultPlaybackDevice          = (pConfig->playback.pDeviceID == NULL);
+        pDevice->coreaudio.hasDefaultPlaybackDeviceChanged  = false;
     #if defined(MA_APPLE_DESKTOP)
-        pDevice->coreaudio.deviceObjectIDPlayback    = (ma_uint32)data.deviceObjectID;
+        pDevice->coreaudio.deviceObjectIDPlayback           = (ma_uint32)data.deviceObjectID;
     #endif
-        pDevice->coreaudio.audioUnitPlayback         = (ma_ptr)data.audioUnit;
+        pDevice->coreaudio.audioUnitPlayback                = (ma_ptr)data.audioUnit;
         
-        pDevice->playback.internalFormat             = data.formatOut;
-        pDevice->playback.internalChannels           = data.channelsOut;
-        pDevice->playback.internalSampleRate         = data.sampleRateOut;
+        pDevice->playback.internalFormat                    = data.formatOut;
+        pDevice->playback.internalChannels                  = data.channelsOut;
+        pDevice->playback.internalSampleRate                = data.sampleRateOut;
         ma_copy_memory(pDevice->playback.internalChannelMap, data.channelMapOut, sizeof(data.channelMapOut));
-        pDevice->playback.internalBufferSizeInFrames = data.bufferSizeInFramesOut;
-        pDevice->playback.internalPeriods            = data.periodsOut;
+        pDevice->playback.internalBufferSizeInFrames        = data.bufferSizeInFramesOut;
+        pDevice->playback.internalPeriods                   = data.periodsOut;
         
         /* TODO: This needs to be made global. */
     #if defined(MA_APPLE_DESKTOP)

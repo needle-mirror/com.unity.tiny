@@ -16,13 +16,24 @@ namespace Unity.Tiny.Animation.Editor
         {
             Entities.ForEach((UnityEngine.Animation animationComponent) =>
             {
+                if (!TinyAnimationConversionState.ValidateGameObjectAndWarn(animationComponent.gameObject))
+                    return;
+
+                Convert(animationComponent);
+            });
+
+            Entities.ForEach((TinyAnimationAuthoring animationComponent) =>
+            {
+                if (!TinyAnimationConversionState.ValidateGameObjectAndWarn(animationComponent.gameObject))
+                    return;
+
                 Convert(animationComponent);
             });
         }
 
-        void Convert(UnityEngine.Animation animationComponent)
+        void Convert(Component animationComponent)
         {
-            var animationClips = ConversionUtils.GetAllAnimationClips(animationComponent);
+            var animationClips = TinyAnimationConversionState.GetAllAnimationClips(animationComponent);
             if (animationClips.Length == 0)
                 return;
 
@@ -36,8 +47,7 @@ namespace Unity.Tiny.Animation.Editor
 
             foreach (var clip in animationClips)
             {
-                if (clip != null)
-                    anythingToAnimate |= Convert(animationComponent, clip, gameObjectEntity);
+                anythingToAnimate |= Convert(animationComponent, clip, gameObjectEntity);
             }
 
             if (anythingToAnimate)
@@ -46,7 +56,7 @@ namespace Unity.Tiny.Animation.Editor
                 var currentClipEntity = clipReferences[0].Value;
                 DstEntityManager.AddComponentData(gameObjectEntity, new TinyAnimationPlayer { CurrentClip = currentClipEntity, CurrentIndex = 0 });
 
-                if (animationComponent.playAutomatically)
+                if (PlaysAutomatically(animationComponent))
                 {
                     DstEntityManager.AddComponent<UpdateAnimationTimeTag>(currentClipEntity);
                     DstEntityManager.AddComponent<ApplyAnimationResultTag>(currentClipEntity);
@@ -59,7 +69,7 @@ namespace Unity.Tiny.Animation.Editor
             }
         }
 
-        bool Convert(UnityEngine.Animation animationComponent, AnimationClip clip, Entity gameObjectEntity)
+        bool Convert(Component animationComponent, AnimationClip clip, Entity gameObjectEntity)
         {
             if (clip == null)
                 return false;
@@ -93,7 +103,8 @@ namespace Unity.Tiny.Animation.Editor
 
             if (anythingToAnimate)
             {
-                var (wrapMode, cycleOffset) = ConversionUtils.GetWrapInfo(clip);
+                var wrapMode = ConversionUtils.GetWrapMode(clip);
+                var cycleOffset = ConversionUtils.GetCycleOffset(clip);
 
                 DstEntityManager.AddComponentData(
                     clipEntity, new TinyAnimationPlaybackInfo
@@ -131,8 +142,7 @@ namespace Unity.Tiny.Animation.Editor
             var animationBindingsNames = new List<AnimationBindingName>(length);
 
             var rootTransform = rootGameObject.transform;
-            var shouldPatchScale = (curvesInfo.ConversionActions & RequiredConversionActions.PatchScale) > 0 &&
-                                   rootGameObject.GetComponent<TinyAnimationScalePatcher>()?.disableScalePatching == false;
+            var shouldPatchScale = (curvesInfo.ConversionActions & RequiredConversionActions.PatchScale) > 0 && GameObjectAllowsScalePatching(rootGameObject);
 
             for (var i = 0; i < length; i++)
             {
@@ -149,14 +159,16 @@ namespace Unity.Tiny.Animation.Editor
                     continue;
                 }
 
-                var curve = curvesInfo.GetCurve(i, Allocator.Temp);
-                animationBindings.Add(new AnimationBinding
+                using (var curve = curvesInfo.GetCurve(i, Allocator.Temp))
                 {
-                    Curve = curve.ToBlobAssetRef(),
-                    TargetEntity = targetEntity
-                });
+                    animationBindings.Add(
+                        new AnimationBinding
+                        {
+                            Curve = curve.ToBlobAssetRef(),
+                            TargetEntity = targetEntity
+                        });
+                }
 
-                curve.Dispose();
                 animationBindingsNames.Add(new AnimationBindingName
                 {
                     Value = curvesInfo.BindingNames[i]
@@ -197,6 +209,7 @@ namespace Unity.Tiny.Animation.Editor
 
             var length = curvesInfo.GetCurvesCount();
             var pPtrBindings = new List<AnimationPPtrBinding>(length);
+            var animationBindingsNames = new List<AnimationBindingName>(length);
 
             var rootTransform = rootGameObject.transform;
 
@@ -215,26 +228,20 @@ namespace Unity.Tiny.Animation.Editor
                     continue;
                 }
 
-                if (!DstEntityManager.HasComponent<PPtrIndex>(targetEntity))
+                using (var curve = curvesInfo.GetCurve(i, Allocator.Temp))
                 {
-                    DstEntityManager.AddComponent<PPtrIndex>(targetEntity);
-                    DstEntityManager.AddComponentData(targetEntity, new AnimatedAssetGroupingRef { Value = curvesInfo.AnimatedAssetGroupings[i]});
-                }
-                else
-                {
-                    Debug.LogWarning($"Multiple PPtr bindings target {target.gameObject.name} ({targetEntity.ToString()} " +
-                                     "which is not currently supported. Only one binding will be applied.)");
-                    continue;
+                    pPtrBindings.Add(new AnimationPPtrBinding
+                    {
+                        Curve = curve.ToBlobAssetRef(),
+                        SourceEntity = curvesInfo.AnimatedAssetGroupings[i],
+                        TargetEntity = targetEntity
+                    });
                 }
 
-                var curve = curvesInfo.GetCurve(i, Allocator.Temp);
-                pPtrBindings.Add(new AnimationPPtrBinding
+                animationBindingsNames.Add(new AnimationBindingName
                 {
-                    Curve = curve.ToBlobAssetRef(),
-                    TargetEntity = targetEntity
+                    Value = curvesInfo.BindingNames[i]
                 });
-
-                curve.Dispose();
             }
 
             // Length may have changed due to discarded bindings
@@ -246,7 +253,45 @@ namespace Unity.Tiny.Animation.Editor
             var pPtrBindingsBuffer = DstEntityManager.AddBuffer<AnimationPPtrBinding>(entity);
             pPtrBindingsBuffer.CopyFrom(pPtrBindings.ToArray());
 
+            var animationBindingsNamesBuffer = DstEntityManager.AddBuffer<AnimationBindingName>(entity);
+            animationBindingsNamesBuffer.CopyFrom(animationBindingsNames.ToArray());
+
+            var animationBindingRetargetBuffer = DstEntityManager.AddBuffer<AnimationBindingRetarget>(entity);
+            animationBindingRetargetBuffer.ResizeUninitialized(length);
+
             return true;
+        }
+
+        static bool PlaysAutomatically(Component animationComponent)
+        {
+            switch (animationComponent)
+            {
+                case UnityEngine.Animation animation:
+                {
+                    return animation.playAutomatically;
+                }
+                case TinyAnimationAuthoring tinyAnimationAuthoring:
+                {
+                    return tinyAnimationAuthoring.playAutomatically;
+                }
+                default:
+                {
+                    throw new ArgumentException($"Component {animationComponent} is not of a recognized type.");
+                }
+            }
+        }
+
+        static bool GameObjectAllowsScalePatching(GameObject gameObject)
+        {
+            var scalePatcherComponent = gameObject.GetComponent<TinyAnimationScalePatcher>();
+            if (scalePatcherComponent != null)
+                return !scalePatcherComponent.disableScalePatching;
+
+            var tinyAnimationAuthoringComponent = gameObject.GetComponent<TinyAnimationAuthoring>();
+            if (tinyAnimationAuthoringComponent != null)
+                return tinyAnimationAuthoringComponent.patchMissingScaleIfNeeded;
+
+            return false;
         }
     }
 }

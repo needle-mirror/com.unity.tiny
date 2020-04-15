@@ -1,15 +1,11 @@
 using System;
 using System.Runtime.InteropServices;
 using Unity.Collections;
-using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
-using Unity.Tiny;
 using Unity.Tiny.Scenes;
 using Unity.Platforms;
+using Unity.Core;
 using Unity.Entities.Runtime;
-#if DEBUG && !UNITY_WEBGL
-using Unity.Development;
-#endif
 
 namespace Unity.Tiny
 {
@@ -34,31 +30,12 @@ namespace Unity.Tiny
         public World World => m_World;
         public BootPhase Phase => m_BootPhase;
 
-        public static UnityInstance Initialize()
-        {
-            BurstInit();
-            NativeLeakDetection.Mode = NativeLeakDetectionMode.Enabled;
-            TypeManager.Initialize();
-#if DEBUG && !UNITY_WEBGL
-            PlayerConnectionProfiler.Initialize();
-#endif
-            return new UnityInstance();
-        }
-
-        [DllImport("lib_unity_lowlevel", EntryPoint="BurstInit")]
-        private static extern void BurstInitNative();
-
-        public static void BurstInit()
-        {
-#if UNITY_DOTSPLAYER
-            Unity.Burst.DotsRuntimeInitStatics.Init();
-#endif
-            BurstInitNative();
-        }
+        [DllImport("lib_unity_lowlevel")]
+        public static extern void BurstInit();
 
         private UnityInstance()
         {
-            m_World = DefaultWorldInitialization.InitializeWorld("main");
+            m_World = DefaultWorldInitialization.InitializeWorld("Default World");
             DefaultWorldInitialization.AddSystemsToRootLevelSystemGroups(m_World);
 #if UNITY_DOTSPLAYER_EXPERIMENTAL_FIXED_SIM
             TinyInternals.SetSimFixedRate(m_World, 1.0f / 60.0f);
@@ -68,29 +45,48 @@ namespace Unity.Tiny
             m_EntityManager = m_World.EntityManager;
             m_SceneStreamingSystem = m_World.GetExistingSystem<SceneStreamingSystem>();
         }
-        
+
+        public static UnityInstance Initialize()
+        {
+            BurstInit();
+
+#if UNITY_DOTSPLAYER
+            DotsRuntime.Initialize();
+#endif
+
+#if ENABLE_UNITY_COLLECTIONS_CHECKS
+            NativeLeakDetection.Mode = NativeLeakDetectionMode.Enabled;
+#endif
+
+            TypeManager.Initialize();
+            return new UnityInstance();
+        }
+
         public void Deinitialize()
         {
             m_World.Dispose();
             TypeManager.Shutdown();
+#if UNITY_DOTSPLAYER
+            DotsRuntime.Shutdown();
+#endif
         }
 
         public bool Update()
         {
-#if UNITY_DOTSPLAYER
-    #if DEBUG && !UNITY_WEBGL
-            PlayerConnectionService.TransmitAndReceive();
-    #endif
-            UnsafeUtility.FreeTempMemory();
-#endif
-
             var shouldContinue = true;
-
             
             if (m_BootPhase == BootPhase.Running)
             {
+#if UNITY_DOTSPLAYER
+                DotsRuntime.UpdatePreFrame();
+#endif
+
                 m_World.Update();
                 shouldContinue = !m_World.QuitUpdate;
+
+#if UNITY_DOTSPLAYER
+                DotsRuntime.UpdatePostFrame(shouldContinue);
+#endif
             }
             else
             {

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
-using System.Text;
 using JetBrains.Annotations;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
@@ -14,12 +13,20 @@ namespace Unity.Tiny.Animation.Editor
     {
         readonly string m_PropertyPath;
 
+        // None of these types are worth visiting since they will never be animated but but they show up everywhere
         static readonly HashSet<Type> k_SkipVisiting = new HashSet<Type>
         {
-            typeof(AnimationBinding), typeof(AnimationPPtrBinding), typeof(TinyAnimationTime), typeof(TinyAnimationPlaybackInfo), typeof(LocalToWorld)
+            // Binding Data
+            typeof(AnimationBinding), typeof(AnimationPPtrBinding),
+            // Animation Player
+            typeof(TinyAnimationTime), typeof(TinyAnimationPlayer), typeof(TinyAnimationPlaybackInfo),
+            // Transform System
+            typeof(LocalToWorld), typeof(LocalToParent), typeof(Parent),
+            // Live Link
+            typeof(EntityGuid), typeof(SceneSection)
         };
 
-        readonly StringBuilder m_CurrentPropertyPath = new StringBuilder();
+        readonly PropertyPath m_CurrentPropertyPath = new PropertyPath();
         readonly string m_SearchPropertyPath;
         bool m_OperationComplete;
 
@@ -42,105 +49,82 @@ namespace Unity.Tiny.Animation.Editor
             return new BindingInfo(m_Success, m_StableTypeHash, m_FieldOffset, m_FieldSize);
         }
 
-        public override bool IsExcluded<TProperty, TContainer, TValue>(TProperty property, ref TContainer container)
+        protected override bool IsExcluded<TContainer, TValue>(Property<TContainer, TValue> property, ref TContainer container, ref TValue value)
         {
-            // Skip specific component types
-            if (k_SkipVisiting.Contains(container.GetType()))
-                return true;
-
-            // Skip everything else once we're done
-            return m_OperationComplete;
+            return m_OperationComplete ||
+                   k_SkipVisiting.Contains(property.DeclaredValueType()) ||
+                   k_SkipVisiting.Contains(container.GetType());
         }
 
-        protected override VisitStatus BeginContainer<TProperty, TContainer, TValue>(
-            TProperty property, ref TContainer container, ref TValue value, ref ChangeTracker changeTracker)
+        protected override void VisitProperty<TContainer, TValue>(Property<TContainer, TValue> property, ref TContainer container, ref TValue value)
         {
-            Append(property.GetName(), true);
+            if (IsExcluded(property, ref container, ref value))
+                return;
+
+            m_CurrentPropertyPath.PushProperty(property);
 
             var t = value.GetType();
-
+            
             // TODO: Do we support more types?
             if (typeof(IComponentData).IsAssignableFrom(t))
             {
                 m_TargetComponentType = t;
-                m_PropertyNameStartIndex = m_CurrentPropertyPath.Length;
+                m_PropertyNameStartIndex = m_CurrentPropertyPath.PartsCount;
             }
 
-            return VisitStatus.Handled;
+            if (BindingUtils.IsTypeAnimatable(value.GetType()))
+            {
+                ProcessProperty(ref value);
+            }
+            else
+            {
+                property.Visit(this, ref value);
+            }
+            
+            m_CurrentPropertyPath.Pop();
         }
 
-        protected override void EndContainer<TProperty, TContainer, TValue>(
-            TProperty property, ref TContainer container, ref TValue value, ref ChangeTracker changeTracker)
-        {
-            Pop(property.GetName(), true);
-        }
-
-        protected override VisitStatus Visit<TProperty, TContainer, TValue>(
-            TProperty property, ref TContainer container, ref TValue value, ref ChangeTracker changeTracker)
-        {
-            if (!BindingUtils.IsTypeAnimatable(value.GetType()))
-                return VisitStatus.Handled;
-
-            var name = property.GetName();
-            Append(name, false);
-
-            ProcessProperty(property, ref container, ref value, ref changeTracker);
-
-            Pop(name, false);
-            return VisitStatus.Handled;
-        }
-
-        void ProcessProperty<TProperty, TContainer, TValue>(
-            TProperty property, ref TContainer container, ref TValue value, ref ChangeTracker changeTracker)
+        void ProcessProperty<TValue>(ref TValue value)
         {
             if (m_CurrentPropertyPath.ToString() != m_SearchPropertyPath)
+            {
                 return;
+            }
 
-            var truncatedPropertyPath = m_CurrentPropertyPath.ToString(m_PropertyNameStartIndex, m_CurrentPropertyPath.Length - m_PropertyNameStartIndex);
-
-            if (TryGetOffsetOfField(m_TargetComponentType, truncatedPropertyPath, out var offset))
+            if (TryGetOffsetOfField(m_TargetComponentType, m_CurrentPropertyPath, m_PropertyNameStartIndex, out var offset))
             {
                 m_Success = true;
-                m_FieldOffset = (ushort)offset;
-                m_FieldSize = (ushort)UnsafeUtility.SizeOf(value.GetType());
+                m_FieldOffset = (ushort) offset;
+                m_FieldSize = (ushort) UnsafeUtility.SizeOf(value.GetType());
                 m_StableTypeHash = TypeHash.CalculateStableTypeHash(m_TargetComponentType);
             }
 
             m_OperationComplete = true;
         }
 
-        void Append(string str, bool isContainer)
-        {
-            m_CurrentPropertyPath.Append(str);
-
-            if (isContainer)
-                m_CurrentPropertyPath.Append('.');
-        }
-
-        void Pop(string str, bool isContainer)
-        {
-            m_CurrentPropertyPath.Length -= isContainer ? str.Length + 1 : str.Length;
-        }
-
-        static bool TryGetOffsetOfField(Type rootType, string propertyPath, out int offset)
+        static bool TryGetOffsetOfField(Type rootType, PropertyPath propertyPath, int startIndex, out int offset)
         {
             offset = 0;
 
-            if (string.IsNullOrEmpty(propertyPath))
-                return false;
-
-            var propertyPathParts = propertyPath.Split('.');
             var currentType = rootType;
-
-            foreach (var part in propertyPathParts)
+            
+            for (var i = startIndex; i < propertyPath.PartsCount; i++)
             {
-                var f = currentType.GetField(part, BindingFlags.Instance | BindingFlags.Public);
-                if (f == null)
-                    return false;
-
                 if (!currentType.IsValueType)
                     return false;
+                
+                var part = propertyPath[i];
 
+                if (part.IsIndex || part.IsKey)
+                {
+                    throw new ArgumentException("TinyAnimation does not support array indexers or dictionary keys for bindings.");
+                }
+
+                var f = currentType.GetField(propertyPath[i].Name, BindingFlags.Instance | BindingFlags.Public);
+                    
+                if (f == null)
+                    return false;
+                
                 offset += UnsafeUtility.GetFieldOffset(f);
                 currentType = f.FieldType;
             }

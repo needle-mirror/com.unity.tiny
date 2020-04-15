@@ -1,11 +1,10 @@
-using Unity.Entities;
+#if !UNITY_DOTSPLAYER
 using UnityEngine;
 using UnityEngine.Animations;
 
 namespace Unity.Tiny.Animation
 {
     [NotKeyable]
-    [RequiresEntityConversion]
     [DisallowMultipleComponent]
     [RequireComponent(typeof(UnityEngine.Animation))]
     public class TinyAnimationScalePatcher : MonoBehaviour
@@ -16,3 +15,4 @@ namespace Unity.Tiny.Animation
         public bool disableScalePatching;
     }
 }
+#endif

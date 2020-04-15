@@ -9,7 +9,7 @@ namespace Unity.Tiny.Animation.Editor
 {
     static class BindingUtils
     {
-        static readonly HashSet<Type> k_AnimatableTypes = new HashSet<Type> {typeof(float) /*, typeof(double)*/}; // double is not trivially supported, skip for now
+        static readonly HashSet<Type> k_AnimatableTypes = new HashSet<Type> {typeof(float), typeof(Entity)};
 
         public static bool IsTypeAnimatable(Type type)
         {

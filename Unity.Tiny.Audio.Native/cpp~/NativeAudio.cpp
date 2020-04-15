@@ -49,7 +49,6 @@ using namespace Unity::LowLevel;
 // that are used by the callback. The SoundClips are
 // refCounted; so they are safe.
 baselib::Lock soundSourceMutex;
-
 uint32_t clipIDPool = 0;
 std::map<uint32_t, SoundClip*> clipMap;
 uint32_t sourceIDPool = 0;
@@ -62,8 +61,17 @@ struct UserData
     void* dummy;
 };
 UserData userData;
+
 bool audioInitialized = false;
 bool audioPaused = false;
+uint64_t audioOutputTimeInFrames = 0;
+float *mixBuffer = nullptr;
+float maxSample = 0.9f;
+uint32_t numFramesSinceMaxSample = 0;
+// Our mix buffer is 8K frames, 2 samples/frame (stereo), and each sample is a float ranging from -1.0f to 1.0f.
+const uint32_t mixBufferSize = 8192*2*sizeof(float);
+const float limiterHeadroom = 0.1f;
+const uint32_t limiterWindowInFrames = 22050;
 
 void flushMemory()
 {
@@ -273,6 +281,22 @@ pauseAudio(bool _audioPaused)
 }
 
 DOTS_EXPORT(bool)
+hasDefaultDeviceChanged()
+{
+#if UNITY_MACOSX
+    return maDevice ? maDevice->coreaudio.hasDefaultPlaybackDeviceChanged : false;
+#else
+    return false;
+#endif
+}
+
+DOTS_EXPORT(uint64_t)
+getAudioOutputTimeInFrames()
+{
+    return audioOutputTimeInFrames;
+}
+
+DOTS_EXPORT(bool)
 setVolume(uint32_t sourceID, float volume)
 {
     if (!audioInitialized) return 0;
@@ -306,6 +330,23 @@ setPan(uint32_t sourceID, float pan)
     return true;
 }
 
+DOTS_EXPORT(bool)
+setPitch(uint32_t sourceID, float pitch)
+{
+    if (!audioInitialized) return 0;
+    flushMemory();
+
+    BaselibLock lock(soundSourceMutex);
+    auto it = sourceMap.find(sourceID);
+    if (it == sourceMap.end()) {
+        LOGE("setPitch() sourceID=%d failed.", sourceID);
+        return false;
+    }
+
+    it->second->setPitch(pitch);
+    return true;
+}
+
 #ifdef AUDIO_TIMER
 uint32_t callbackLongest = 0,
          callbackShortest = 0xffffffff,
@@ -324,21 +365,25 @@ uint32_t callbackLongest = 0,
 void sendFramesToDevice(ma_device* pDevice, void* pSamples, const void* pInput, ma_uint32 frameCount)
 {
 #ifdef AUDIO_TIMER
-    auto start = baselib::high_precision_clock::now();
+    auto header = baselib::high_precision_clock::now();
 #endif
 
     const uint32_t bytesPerSample = ma_get_bytes_per_sample(pDevice->playback.format);
-    const uint32_t bytpesPerFrame = ma_get_bytes_per_frame(pDevice->playback.format, pDevice->playback.channels);
+    const uint32_t bytesPerFrame = ma_get_bytes_per_frame(pDevice->playback.format, pDevice->playback.channels);
+    const float SHRT_MAX_FLOAT = (float)SHRT_MAX;
+
     ASSERT(bytesPerSample == 2);
-    ASSERT(bytpesPerFrame == 4);
+    ASSERT(bytesPerFrame == 4);
+    ASSERT(mixBufferSize >= frameCount*2*sizeof(float));
 
-    uint32_t nSamples = frameCount * 2; // Stereo
-    static const int MAX_CHANNELS = 16; // Caps the performance
-
-    memset(pSamples, 0, bytpesPerFrame * frameCount);
-    if (audioPaused) {
+    if (audioPaused)
         return;
-    }
+
+    if ((mixBuffer == nullptr) || (mixBufferSize < frameCount*2*sizeof(float)))
+        return;
+
+    for (int i = 0; i < frameCount*2; i++)
+        mixBuffer[i] = 0.0f;
 
     UserData* pUser = (UserData*)(pDevice->pUserData);
 
@@ -347,56 +392,89 @@ void sendFramesToDevice(ma_device* pDevice, void* pSamples, const void* pInput, 
     auto start = baselib::high_precision_clock::now();
 #endif
 
-    int count = 0;
-    for (auto it = sourceMap.begin(); it != sourceMap.end() && count < MAX_CHANNELS; ++it) {
+    for (auto it = sourceMap.begin(); it != sourceMap.end(); ++it) 
+    {
         SoundSource* source = it->second;
-        if (source->isPlaying()) {
+        if (source->isPlaying()) 
+        {
             bool done = false;
-            ++count;
 
             uint32_t totalFrames = 0;
-            int16_t* target = (int16_t*)pSamples;
+            float* target = mixBuffer;
 
             // when pan is at center, setting both channels to .7 instead of .5 sounds more natural
             // this is an approximation to sqrt(2) = 45 degree angle on unit circle, and for now
             // we'll linearly interpolate to the extremes rather than rotate
-            float volume = source->volume() * 1024.0f;
+            float volume = source->volume();
             float pan = source->pan();
-            int32_t coeffL = int32_t((.7f - (pan > 0 ? pan * .7f : pan * .3f))* volume);
-            int32_t coeffR = int32_t((.7f + (pan < 0 ? pan * .7f : pan * .3f)) * volume);
+            float coeffL = (.7f - (pan > 0 ? pan * .7f : pan * .3f)) * volume;
+            float coeffR = (.7f + (pan < 0 ? pan * .7f : pan * .3f)) * volume;
 
-            while (!done) {
+            while (!done) 
+            {
                 uint32_t decodedFrames = 0;
-                const int16_t* src = source->fetch(frameCount - totalFrames, &decodedFrames);
+                uint32_t requestedFrames = frameCount - totalFrames;
+
+                const float* src = source->fetch(requestedFrames, &decodedFrames);
                 totalFrames += decodedFrames;
 
                 // Now 'buffer' is the source. Apply the volume and copy to 'pSamples'
-                for (uint32_t i = 0; i < decodedFrames; ++i) {
-                    int32_t val = *target + *src * coeffL / 1024;
-                    if (val < SHRT_MIN) val = SHRT_MIN;
-                    if (val > SHRT_MAX) val = SHRT_MAX;
-                    *target = val;
+                for (uint32_t i = 0; i < decodedFrames; ++i) 
+                {   
+                    *target += *src * coeffL;
                     ++target;
                     ++src;
 
-                    val = *target + *src * coeffR / 1024;
-                    if (val < SHRT_MIN) val = SHRT_MIN;
-                    if (val > SHRT_MAX) val = SHRT_MAX;
-                    *target = val;
+                    *target += *src * coeffR;
                     ++target;
                     ++src;
                 }
 
                 done = true;
-                if (source->loop() && totalFrames < frameCount) {
+                if (source->loop() && totalFrames < frameCount) 
+                {
                     done = false;
                     source->rewind();
                 }
             }
         }
     }
+
+    // Find the maximum sample in this buffer.
+    float maxSampleInBuffer = 1.0f;
+    for (int i = 0; i < frameCount*2; i++)
+    {
+        maxSampleInBuffer = mixBuffer[i] > maxSampleInBuffer ? mixBuffer[i] : maxSampleInBuffer;
+        maxSampleInBuffer = mixBuffer[i] < -1.0f*maxSampleInBuffer ? -1.0f*mixBuffer[i] : maxSampleInBuffer;
+    }
+
+    // Check if we need to increase our global max sample, based on the values in our most recent buffer.
+    maxSample = maxSampleInBuffer > maxSample ? maxSampleInBuffer : maxSample;
+
+    // Apply our float-to-short conversion and limiter factors together.
+    float conversionAndLimiterFactor = maxSample > 1.0f ? SHRT_MAX_FLOAT/maxSample : SHRT_MAX_FLOAT;
+    int16_t* pSamplesShort = (int16_t*)pSamples;
+    for (int i = 0; i < frameCount*2; i++)
+        pSamplesShort[i] = (int16_t)(mixBuffer[i] * conversionAndLimiterFactor);
+
+    // Tally up how many samples have passed since we were close to our max sample.
+    if (maxSampleInBuffer < maxSample-limiterHeadroom)
+        numFramesSinceMaxSample += frameCount;
+    else
+        numFramesSinceMaxSample = 0;
+
+    // If maxSample is being limited (over 1.0), and we have not seen a mixed output sample near the max sample in
+    // X frames, then start to reduce the limiter factor.
+    if ((maxSample > 1.0f) && (numFramesSinceMaxSample >= limiterWindowInFrames))
+    {
+        maxSample -= limiterHeadroom;
+        numFramesSinceMaxSample = 0;
+    }
+
+    audioOutputTimeInFrames += frameCount;
+
 #ifdef AUDIO_TIMER
-    auto start = baselib::high_precision_clock::now();
+    auto end = baselib::high_precision_clock::now();
 
     uint32_t tMicros = (uint32_t)std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
     if (tMicros < callbackShortest) callbackShortest = tMicros;
@@ -411,9 +489,8 @@ void sendFramesToDevice(ma_device* pDevice, void* pSamples, const void* pInput, 
     headerTotal += tHeader;
 
     if (nCallback == 256) {
-        printf("Callback: shortest=%d longest=%d ave=%d framecount=%d\n", callbackShortest, callbackLongest, callbackTotal / nCallback, frameCount);
-        printf("  Header: shortest=%d longest=%d ave=%d\n", headerShortest, headerLongest, headerTotal / nHeader);
-        fflush(stdout);
+        LOGE("Callback: shortest=%d longest=%d ave=%d framecount=%d\n", callbackShortest, callbackLongest, callbackTotal / nCallback, frameCount);
+        LOGE("  Header: shortest=%d longest=%d ave=%d\n", headerShortest, headerLongest, headerTotal / nHeader);
         callbackLongest = 0;
         callbackShortest = 0xffffffff;
         callbackTotal = 0;
@@ -424,9 +501,6 @@ void sendFramesToDevice(ma_device* pDevice, void* pSamples, const void* pInput, 
         nHeader = 0;
     }
 #endif
-
-    // Always returns a full buffer written, since we start the buffer with silence.
-    return;
 }
 
 
@@ -466,6 +540,10 @@ initAudio() {
             return;
         }
     }
+
+    if (mixBuffer == nullptr)
+        mixBuffer = (float*)unsafeutility_malloc(mixBufferSize, 16, Allocator::Persistent);
+
     LOGE("initAudio() okay");
     audioInitialized = true;
 }
@@ -480,10 +558,27 @@ destroyAudio() {
     }
     unsafeutility_free(maDevice, Allocator::Persistent);
     maDevice = 0;
+
+    unsafeutility_free(mixBuffer, Allocator::Persistent);
+    mixBuffer = nullptr;
+
     LOGE("destroyAudio() okay");
     audioInitialized = false;
 }
 
+DOTS_EXPORT(void)
+reinitAudio()
+{   
+    LOGE("reinitAudio()");
+    if (audioInitialized) {
+        ma_device_uninit(maDevice);
+    }
+    unsafeutility_free(maDevice, Allocator::Persistent);
+    maDevice = 0;
+    audioInitialized = false;
+
+    initAudio();
+}
 
 DOTS_EXPORT(uint32_t)
 playSource(uint32_t clipID, float volume, float pan, bool loop)

@@ -22,7 +22,10 @@ namespace Unity.Tiny.Animation.Editor
         {
             Entities.ForEach((UnityEngine.Animation animationComponent) =>
             {
-                var animationClips = ConversionUtils.GetAllAnimationClips(animationComponent);
+                if (!TinyAnimationConversionState.ValidateGameObjectAndWarn(animationComponent.gameObject))
+                    return;
+
+                var animationClips = TinyAnimationConversionState.GetAllAnimationClips(animationComponent);
                 if (animationClips.Length == 0)
                     return;
 
@@ -30,13 +33,29 @@ namespace Unity.Tiny.Animation.Editor
 
                 foreach (var clip in animationClips)
                 {
-                    if (clip != null)
-                        Convert(animationComponent.gameObject, clip);
+                    Convert(clip);
+                }
+            });
+
+            Entities.ForEach((TinyAnimationAuthoring animationComponent) =>
+            {
+                if (!TinyAnimationConversionState.ValidateGameObjectAndWarn(animationComponent.gameObject))
+                    return;
+
+                var animationClips = TinyAnimationConversionState.GetAllAnimationClips(animationComponent);
+                if (animationClips.Length == 0)
+                    return;
+
+                ConversionUtils.WarnAboutUnsupportedFeatures(animationComponent.GetComponent<Animator>());
+
+                foreach (var clip in animationClips)
+                {
+                    Convert(clip);
                 }
             });
         }
 
-        void Convert(GameObject rootGameObject, AnimationClip clip)
+        void Convert(AnimationClip clip)
         {
             if (clip == null || clip.empty)
                     return;
@@ -52,7 +71,7 @@ namespace Unity.Tiny.Animation.Editor
             ConversionUtils.WarnAboutUnsupportedFeatures(clip);
 
             var floatCurvesInfo = ConvertFloatCurves(clip);
-            var pPtrCurvesInfo = ConvertPPtrCurves(clip, rootGameObject);
+            var pPtrCurvesInfo = ConvertPPtrCurves(clip);
 
             DstEntityManager.AddComponentData(entity, new BakedAnimationClip
             {
@@ -232,24 +251,8 @@ namespace Unity.Tiny.Animation.Editor
             return blobAssetRef;
         }
 
-        static string GetConvertedName(Type type, string bindingPropertyName)
-        {
-            var propertyPath = $"{type.Name}.{bindingPropertyName}";
-
-            if (!BindingsStore.TryGetConvertedBindingName(propertyPath, out var convertedName))
-            {
-                convertedName = string.Empty;
-                Debug.LogWarning(
-                    $"Tiny Animation doesn't know how to handle binding to: \"{propertyPath}\". You can help it by declaring a remap manually " +
-                    "in a conversion system using BindingStore.CreateBindingNameRemap(). " +
-                    "Make sure your conversion system is tagged with [UpdateInGroup(typeof(GameObjectDeclareReferencedObjectsGroup))]");
-            }
-
-            return convertedName;
-        }
-
         // TODO: Lots of copy-paste from previous method, worth refactoring?
-        BlobAssetReference<CurvesInfo> ConvertPPtrCurves([NotNull] AnimationClip clip, GameObject rootGameObject)
+        BlobAssetReference<CurvesInfo> ConvertPPtrCurves([NotNull] AnimationClip clip)
         {
             var bindings = AnimationUtility.GetObjectReferenceCurveBindings(clip);
             var numBindings = bindings.Length;
@@ -259,6 +262,7 @@ namespace Unity.Tiny.Animation.Editor
                 return blobAssetRef;
 
             var targetPaths = new NativeString512[numBindings];
+            var animationBindingsConvertedNames = new NativeString512[numBindings];
             var keyframeCurves = new KeyframeCurve[numBindings];
             var animatedAssetGroupings = new Entity[numBindings];
 
@@ -272,6 +276,10 @@ namespace Unity.Tiny.Animation.Editor
                 var binding = bindings[bindingIndex];
                 targetPaths[bindingIndex] = string.IsNullOrEmpty(binding.path) ? string.Empty : binding.path;
 
+                var bindingPropertyName = binding.propertyName;
+                var convertedName = GetConvertedName(binding.type, bindingPropertyName);
+                animationBindingsConvertedNames[bindingIndex] = new NativeString512(convertedName);
+
                 foundObjects.Clear();
 
                 var curveData = AnimationUtility.GetObjectReferenceCurve(clip, binding);
@@ -283,15 +291,7 @@ namespace Unity.Tiny.Animation.Editor
 
                 DstEntityManager.SetName(assetGroupEntity, $"{clip.name} - Asset Group {bindingIndex.ToString(NumberFormatInfo.InvariantInfo)}");
 
-                // TODO: Maybe this should be a string instead (it would prevent the dumb type restriction)
-                var assetType = GetBoundAssetType(binding, rootGameObject);
-
-                DstEntityManager.AddComponentData(assetGroupEntity, new AnimatedAssetGrouping
-                {
-                    AssetTypeHash = TypeHash.CalculateStableTypeHash(assetType)
-                });
-
-                var assetRefBuffer = DstEntityManager.AddBuffer<AnimatedAssetReference>(assetGroupEntity);
+                var assetRefBuffer = DstEntityManager.AddBuffer<AnimationPPtrBindingSources>(assetGroupEntity);
 
                 animatedAssetGroupings[bindingIndex] = assetGroupEntity;
 
@@ -306,7 +306,7 @@ namespace Unity.Tiny.Animation.Editor
                     {
                         index = foundObjects.Count;
                         foundObjects.Add(referencedAsset);
-                        assetRefBuffer.Add(new AnimatedAssetReference { PrimaryEntity = GetPrimaryEntity(referencedAsset) });
+                        assetRefBuffer.Add(new AnimationPPtrBindingSources { Value = GetPrimaryEntity(referencedAsset) });
                     }
 
                     // Infinite tangents result in a stepped curve, which is an adequate representation for an integer curve
@@ -324,10 +324,8 @@ namespace Unity.Tiny.Animation.Editor
 
                 var keyframesBuilder = blobBuilder.Allocate(ref builderRoot.Keyframes, numKeys);
                 var curveOffsetsBuilder = blobBuilder.Allocate(ref builderRoot.CurveOffsets, numBindings);
+                var bindingNamesBuilder = blobBuilder.Allocate(ref builderRoot.BindingNames, numBindings);
                 var animatedAssetGroupingsBuilder = blobBuilder.Allocate(ref builderRoot.AnimatedAssetGroupings, numBindings);
-
-                // We don't care about that field in this case
-                blobBuilder.Allocate(ref builderRoot.BindingNames, 0);
 
                 var targetPathsBuilder = blobBuilder.Allocate(ref builderRoot.TargetGameObjectPaths, numBindings);
 
@@ -342,6 +340,7 @@ namespace Unity.Tiny.Animation.Editor
                     curveOffsetsBuilder[bindingIndex] = curveOffset;
                     curveOffset += keyframeCurve.Length;
                     targetPathsBuilder[bindingIndex] = targetPaths[bindingIndex];
+                    bindingNamesBuilder[bindingIndex] = animationBindingsConvertedNames[bindingIndex];
                     animatedAssetGroupingsBuilder[bindingIndex] = animatedAssetGroupings[bindingIndex];
                 }
 
@@ -358,47 +357,20 @@ namespace Unity.Tiny.Animation.Editor
             return blobAssetRef;
         }
 
-        // TODO: Maybe return a type string instead and let implementers use it for comparison?
-        static readonly Dictionary<string, Type> k_SupportedAssetTypes = new Dictionary<string, Type>
+        static string GetConvertedName(Type type, string bindingPropertyName)
         {
-            {"PPtr<Material>", typeof(Material)}, {"PPtr<Sprite>", typeof(Sprite)}
-        };
+            var propertyPath = $"{type.Name}.{bindingPropertyName}";
 
-        static readonly Dictionary<Type, Dictionary<string, Type>> k_AssetTypeCache = new Dictionary<Type, Dictionary<string, Type>>(32);
-        static Type GetBoundAssetType(EditorCurveBinding binding, GameObject hostGameObject)
-        {
-            if (!k_AssetTypeCache.ContainsKey(binding.type))
-                k_AssetTypeCache.Add(binding.type, new Dictionary<string, Type>(8));
-
-            if (!k_AssetTypeCache[binding.type].ContainsKey(binding.propertyName))
+            if (!BindingsStore.TryGetConvertedBindingName(propertyPath, out var convertedName))
             {
-                var target = hostGameObject.transform.Find(binding.path);
-                if (target == null || target.gameObject == null)
-                    return null;
-
-                var boundComponent = target.gameObject.GetComponent(binding.type);
-                if (boundComponent == null)
-                    return null;
-
-                k_AssetTypeCache[binding.type].Add(binding.propertyName, GetBoundAssetTypeInternal(binding, boundComponent));
+                convertedName = string.Empty;
+                Debug.LogWarning(
+                    $"Tiny Animation doesn't know how to handle binding to: \"{propertyPath}\". You can help it by declaring a remap manually " +
+                    "in a conversion system using BindingStore.CreateBindingNameRemap(). " +
+                    "Make sure your conversion system is tagged with [UpdateInGroup(typeof(GameObjectDeclareReferencedObjectsGroup))]");
             }
 
-            return k_AssetTypeCache[binding.type][binding.propertyName];
-        }
-
-        static Type GetBoundAssetTypeInternal(EditorCurveBinding binding, Component boundComponent)
-        {
-            var serializedComponent = new SerializedObject(boundComponent);
-            var serializedProperty = serializedComponent.FindProperty(binding.propertyName);
-            if (serializedProperty == null)
-                return null;
-
-            if (k_SupportedAssetTypes.TryGetValue(serializedProperty.type, out var result))
-                return result;
-
-            Debug.LogWarning($"Curves for type: {serializedProperty.type} are not currently supported.");
-
-            return null;
+            return convertedName;
         }
     }
 }

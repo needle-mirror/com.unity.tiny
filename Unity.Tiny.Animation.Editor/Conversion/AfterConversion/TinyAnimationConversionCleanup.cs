@@ -13,7 +13,8 @@ namespace Unity.Tiny.Animation.Editor
                 All = new[]
                 {
                     ComponentType.ReadOnly<BakedAnimationClip>()
-                }
+                },
+                Options = EntityQueryOptions.IncludeDisabled | EntityQueryOptions.IncludePrefab
             });
 
             var commandBuffer = new EntityCommandBuffer(Allocator.TempJob);
@@ -22,33 +23,23 @@ namespace Unity.Tiny.Animation.Editor
             for (int entityIndex = 0; entityIndex < bakedAnimationEntities.Length; ++entityIndex)
                 commandBuffer.DestroyEntity(bakedAnimationEntities[entityIndex]);
 
-            var animatedAssetGroupingsQuery = DstEntityManager.CreateEntityQuery(new EntityQueryDesc
+            var animationBindingNameQuery = DstEntityManager.CreateEntityQuery(new EntityQueryDesc
             {
                 All = new[]
                 {
-                    ComponentType.ReadOnly<AnimatedAssetGrouping>()
-                }
+                    ComponentType.ReadOnly<AnimationBindingName>()
+                },
+                Options = EntityQueryOptions.IncludeDisabled | EntityQueryOptions.IncludePrefab
             });
 
-            var entityGroupingEntities = animatedAssetGroupingsQuery.ToEntityArray(Allocator.TempJob);
-            for (int entityIndex = 0; entityIndex < entityGroupingEntities.Length; ++entityIndex)
-                commandBuffer.DestroyEntity(entityGroupingEntities[entityIndex]);
-
-            var animatedAssetGroupingRefsQuery = DstEntityManager.CreateEntityQuery(new EntityQueryDesc
-            {
-                All = new[]
-                {
-                    ComponentType.ReadOnly<AnimatedAssetGroupingRef>()
-                }
-            });
-
-            commandBuffer.RemoveComponent(animatedAssetGroupingRefsQuery, new ComponentType(typeof(AnimatedAssetGroupingRef), ComponentType.AccessMode.ReadOnly));
+            commandBuffer.RemoveComponent<AnimationBindingName>(animationBindingNameQuery);
 
             commandBuffer.Playback(DstEntityManager);
             commandBuffer.Dispose();
 
             bakedAnimationEntities.Dispose();
-            entityGroupingEntities.Dispose();
+
+            TinyAnimationConversionState.Clear();
         }
     }
 }

@@ -1,5 +1,6 @@
 using JetBrains.Annotations;
 using Unity.Entities;
+using Unity.Jobs;
 
 namespace Unity.Tiny.Animation
 {
@@ -17,7 +18,7 @@ namespace Unity.Tiny.Animation
         protected override void OnUpdate()
         {
             var commandBuffer = m_ECBSystem.CreateCommandBuffer().ToConcurrent();
-            Dependency =
+            var floatBindingsDependency =
                 Entities
                    .WithoutBurst() // Burst does not support: TypeManager.GetTypeIndexFromStableTypeHash
                    .ForEach(
@@ -32,6 +33,24 @@ namespace Unity.Tiny.Animation
 
                             commandBuffer.RemoveComponent<AnimationBindingRetarget>(entityInQueryIndex, entity);
                         }).Schedule(Dependency);
+
+            var pPtrBindingsDependency =
+                Entities
+                   .WithoutBurst() // Burst does not support: TypeManager.GetTypeIndexFromStableTypeHash
+                   .ForEach(
+                        (Entity entity, int entityInQueryIndex, ref DynamicBuffer<AnimationPPtrBinding> bindings, in DynamicBuffer<AnimationBindingRetarget> bindingRetargetBuffer) =>
+                        {
+                            for (int i = 0; i < bindingRetargetBuffer.Length; ++i)
+                            {
+                                var binding = bindings[i];
+                                binding.TargetComponentTypeIndex = TypeManager.GetTypeIndexFromStableTypeHash(bindingRetargetBuffer[i].StableTypeHash);
+                                bindings[i] = binding;
+                            }
+
+                            commandBuffer.RemoveComponent<AnimationBindingRetarget>(entityInQueryIndex, entity);
+                        }).Schedule(Dependency);
+
+            Dependency = JobHandle.CombineDependencies(floatBindingsDependency, pPtrBindingsDependency);
 
             m_ECBSystem.AddJobHandleForProducer(Dependency);
         }

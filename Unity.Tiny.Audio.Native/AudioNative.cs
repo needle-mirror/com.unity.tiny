@@ -35,6 +35,16 @@ namespace Unity.Tiny.Audio
         [DllImport(DLL, EntryPoint = "destroyAudio")]
         public static extern void DestroyAudio();
 
+        [DllImport(DLL, EntryPoint = "reinitAudio")]
+        public static extern void ReinitAudio();
+
+        [DllImport(DLL, EntryPoint = "hasDefaultDeviceChanged")]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool HasDefaultDeviceChanged();
+
+        [DllImport(DLL, EntryPoint = "getAudioOutputTimeInFrames")]
+        public static extern ulong GetAudioOutputTimeInFrames();
+
         // Clip
         [DllImport(DLL, EntryPoint = "startLoad", CharSet = CharSet.Ansi)]
         public static extern uint StartLoad([MarshalAs(UnmanagedType.LPStr)]string imageFile);    // returns clipID
@@ -67,10 +77,16 @@ namespace Unity.Tiny.Audio
         public static extern void PauseAudio(bool doPause);    // returns success (or failure)
 
         [DllImport(DLL, EntryPoint = "setVolume")]
+        [return: MarshalAs(UnmanagedType.I1)]
         public static extern bool SetVolume(uint sourceId, float volume);    // returns success (or failure)
 
         [DllImport(DLL, EntryPoint = "setPan")]
+        [return: MarshalAs(UnmanagedType.I1)]
         public static extern bool SetPan(uint sourceId, float pan);    // returns success (or failure)
+
+        [DllImport(DLL, EntryPoint = "setPitch")]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool SetPitch(uint sourceId, float pitch);    // returns success (or failure)
 
         [DllImport(DLL, EntryPoint = "numSourcesAllocated")]
         public static extern int NumSourcesAllocated();          // Testing: number of SoundSources allocated.
@@ -148,6 +164,9 @@ namespace Unity.Tiny.Audio
     [UpdateInGroup(typeof(PresentationSystemGroup))]
     class AudioNativeSystem : AudioSystem
     {
+        private double lastWorldTimeAudioConsumed = 0.0;
+        private ulong lastAudioOutputTimeInFrames = 0;
+
         protected override void OnStartRunning()
         {
             PlatformEvents.OnSuspendResume += OnSuspendResume;
@@ -280,6 +299,41 @@ namespace Unity.Tiny.Audio
             return false;
         }
 
+        protected override bool SetPitch(Entity e, float pitch)
+        {
+            if (EntityManager.HasComponent<AudioNativeSource>(e))
+            {
+                AudioNativeSource audioNativeSource = EntityManager.GetComponentData<AudioNativeSource>(e);
+                if (audioNativeSource.sourceID > 0)
+                {
+                    return AudioNativeCalls.SetPitch(audioNativeSource.sourceID, pitch);
+                }
+            }
+
+            return false;
+        }
+
+        private void ReinitIfDefaultDeviceChanged()
+        {
+            if (AudioNativeCalls.HasDefaultDeviceChanged())
+                AudioNativeCalls.ReinitAudio();
+        }
+
+        private void ReinitIfNoAudioConsumed(bool paused)
+        {
+            const double reinitTime = 0.25;
+            double worldTime = World.Time.ElapsedTime;
+            ulong audioOutputTimeInFrames = AudioNativeCalls.GetAudioOutputTimeInFrames();
+            bool audioConsumed = audioOutputTimeInFrames != lastAudioOutputTimeInFrames;
+            bool audioNeedsReinit = worldTime - lastWorldTimeAudioConsumed >= reinitTime;
+            
+            if (!audioConsumed && !paused && audioNeedsReinit)
+                AudioNativeCalls.ReinitAudio();
+
+            lastAudioOutputTimeInFrames = audioOutputTimeInFrames;
+            lastWorldTimeAudioConsumed = (audioConsumed || paused || audioNeedsReinit) ? worldTime : lastWorldTimeAudioConsumed;
+        } 
+
         protected override void OnUpdate()
         {
             base.OnUpdate();
@@ -288,6 +342,9 @@ namespace Unity.Tiny.Audio
             TinyEnvironment env = World.TinyEnvironment();
             AudioConfig ac = env.GetConfigData<AudioConfig>();
             AudioNativeCalls.PauseAudio(ac.paused);
+
+            ReinitIfDefaultDeviceChanged();
+            ReinitIfNoAudioConsumed(ac.paused);
 
             Entities
                 .WithStructuralChanges()
