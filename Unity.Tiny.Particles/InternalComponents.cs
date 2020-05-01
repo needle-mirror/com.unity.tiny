@@ -3,48 +3,63 @@ using Unity.Entities;
 
 namespace Unity.Tiny.Particles
 {
-    // Modifies the position of the particle every frame.
+    /// <summary>
+    /// Modifies the position of the particle every frame.
+    /// </summary>
     struct ParticleVelocity : IComponentData
     {
-        public float3 velocity;
+        internal float3 velocity;
     }
 #if false
     // Modifies the rotation around z axis.
     struct ParticleAngularVelocity : IComponentData
     {
-        public float angularVelocity;
+        internal float angularVelocity;
     }
 
     struct ParticleLifetimeColor : IComponentData
     {
-       public Color initialColor;
+        internal Color initialColor;
     }
 
     struct ParticleLifetimeScale : IComponentData
     {
-        public float3 initialScale;
+        internal float3 initialScale;
     }
 #endif
     struct BurstEmissionInternal : IComponentData
     {
-        // If < 0.0, then the next burst should be emitted.
-       public float cooldown;
+        /// <summary> If 0.0, then the next burst should be emitted. </summary>
+        internal float cooldown;
 
-        // Current cycle number
-       public int cycle;
+        /// <summary> Current cycle number </summary>
+        internal int cycle;
     }
 
-    // Used to track initialization/cleanup of emitter
+    /// <remarks>
+    /// Used to track initialization/cleanup of emitter
+    /// </remarks>
     struct ParticleEmitterInternal : ISystemStateComponentData
     {
-        public Entity particleTemplate;
-        public float particleSpawnCooldown;
-        public uint numParticles;
+        internal Entity particleTemplate;
+        internal float particleSpawnCooldown;
+        internal uint numParticles;
+        internal Entity particleRenderer;
     }
 
-    // Reference to the emitter that emitted this particle.
-    struct ParticleEmitterReference : ISharedComponentData
+    /// <summary>
+    /// Reference to particle emitter. Shared across all particles that were emitted by the referenced emitter.
+    /// </summary>
+    struct EmitterReferenceForParticles : ISharedComponentData
     {
-        public Entity emitter;
+        internal Entity emitter;
+    }
+
+    /// <summary>
+    /// Reference to particle emitter from particle renderer.
+    /// </summary>
+    struct EmitterReferenceForRenderer : IComponentData
+    {
+        internal Entity emitter;
     }
 }

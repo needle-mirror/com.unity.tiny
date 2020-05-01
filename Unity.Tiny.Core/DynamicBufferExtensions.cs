@@ -19,7 +19,7 @@ namespace Unity.Tiny
                 return;
             }
 
-            fixed (char* ptr = name)
+            fixed(char* ptr = name)
             {
                 var array = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<char>(ptr, name.Length, Allocator.None);
 #if ENABLE_UNITY_COLLECTIONS_CHECKS

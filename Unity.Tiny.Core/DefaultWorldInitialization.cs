@@ -9,7 +9,7 @@ namespace Unity.Entities
     public static class DefaultWorldInitialization
     {
         /// <summary>
-        /// Initializes the default world or runs ICustomBootstrap if one is available. 
+        /// Initializes the default world or runs ICustomBootstrap if one is available.
         /// ComponentSystems will be created and sorted into the high level ComponentSystemGroups.
         /// </summary>
         /// <param name="defaultWorldName">The name of the world that will be created unless there is a custom bootstrap.</param>
@@ -51,7 +51,7 @@ namespace Unity.Entities
             world.GetOrCreateSystem<InitializationSystemGroup>();
             world.GetOrCreateSystem<SimulationSystemGroup>();
             world.GetOrCreateSystem<PresentationSystemGroup>();
-            
+
             if (systems == null)
                 systems = GetAllSystems(WorldSystemFilterFlags.Default);
 

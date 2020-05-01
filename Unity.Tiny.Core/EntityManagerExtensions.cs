@@ -42,21 +42,23 @@ namespace Unity.Tiny
         {
             var typeIndex = TypeManager.GetTypeIndex<T>();
 
+            var access = manager.GetCheckedEntityDataAccess();
 #if ENABLE_UNITY_COLLECTIONS_CHECKS
-            manager.EntityComponentStore->AssertEntityHasComponent(entity, typeIndex);
+
+            access->EntityComponentStore->AssertEntityHasComponent(entity, typeIndex);
             if (!TypeManager.IsBuffer(typeIndex))
                 throw new ArgumentException(
                     $"GetBuffer<{typeof(T)}> may not be IComponentData or ISharedComponentData; currently {TypeManager.GetTypeInfo<T>().Category}");
 #endif
 
-            manager.DependencyManager->CompleteReadAndWriteDependency(typeIndex);
+            access->DependencyManager->CompleteReadAndWriteDependency(typeIndex);
 
-            BufferHeader* header = (BufferHeader*) manager.EntityComponentStore->GetComponentDataWithTypeRO(entity, typeIndex);
+            BufferHeader* header = (BufferHeader*)access->EntityComponentStore->GetComponentDataWithTypeRO(entity, typeIndex);
             int internalCapacity = TypeManager.GetTypeInfo(typeIndex).BufferCapacity;
 
 #if ENABLE_UNITY_COLLECTIONS_CHECKS
             var isReadOnly = false; // @TODO FIXME! we need DynamicBuffer<T>.GetUnsafeReadOnlyPtr();
-            return new DynamicBuffer<T>(header, manager.SafetyHandles->GetSafetyHandle(typeIndex, isReadOnly), manager.SafetyHandles->GetBufferSafetyHandle(typeIndex), isReadOnly, false, 0, internalCapacity);
+            return new DynamicBuffer<T>(header, access->DependencyManager->Safety.GetSafetyHandle(typeIndex, isReadOnly), access->DependencyManager->Safety.GetBufferSafetyHandle(typeIndex), isReadOnly, false, 0, internalCapacity);
 #else
             return new DynamicBuffer<T>(header, internalCapacity);
 #endif

@@ -1,4 +1,4 @@
-// using System;
+using Unity.Entities;
 using Unity.Mathematics;
 
 namespace Unity.Tiny.Particles
@@ -22,6 +22,11 @@ namespace Unity.Tiny.Particles
         public static float RandomRange(Range range)
         {
             return m_rand.NextFloat(range.start, range.end);
+        }
+
+        internal static bool EmitterIsValid(EntityManager mgr, Entity eEmitter)
+        {
+            return eEmitter != Entity.Null && mgr.Exists(eEmitter) && mgr.HasComponent<ParticleEmitter>(eEmitter) && mgr.HasComponent<ParticleEmitterInternal>(eEmitter);
         }
     }
 }

@@ -2,10 +2,11 @@
     "name": "Unity.Tiny.Particles",
     "references": [
         "Unity.Entities",
+        "Unity.Collections",
         "Unity.Mathematics",
+        "Unity.Mathematics.Extensions",
         "Unity.Transforms",
         "Unity.Tiny.Core",
-        "Unity.Tiny.Interpolation",
         "Unity.Tiny.Rendering",
         "Unity.Tiny.RendererExtras"
     ],

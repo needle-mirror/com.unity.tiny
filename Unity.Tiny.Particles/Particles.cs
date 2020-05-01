@@ -116,7 +116,6 @@ namespace Unity.Tiny.Particles
     /// </summary>
     public struct EmitterCircleSource : IComponentData
     {
-
         /// <summary>The radius of the circle.</summary>
         public float radius;
 
@@ -158,7 +157,7 @@ namespace Unity.Tiny.Particles
     ///  Sets the initial rotations on the X, Y, and Z axes for particles to a random values in the ranges
     ///  specified by <see cref="angleX"/>, <see cref="angleX"/>, and <see cref="angleX"/> respectively
     /// </summary>
-    public struct EmitterInitialNonUniformRotation: IComponentData
+    public struct EmitterInitialNonUniformRotation : IComponentData
     {
         public Range angleX;
         public Range angleY;
@@ -264,12 +263,23 @@ namespace Unity.Tiny.Particles
     /// <summary>
     /// An emitter with this component has billboarded particles
     /// </summary>
-    public struct Billboarded : IComponentData { }
+    public struct Billboarded : IComponentData {}
+
+    public struct ParticleMesh : IComponentData
+    {
+        public Entity mesh;
+    }
+
+    public struct ParticleMaterial : IComponentData
+    {
+        public Entity material;
+    }
 
     /// <summary>
     ///  A system that updates all particle emitters
     /// </summary>
     [UpdateInGroup(typeof(SimulationSystemGroup))]
+    [UpdateBefore(typeof(TransformSystemGroup))]
     public class EmitterSystem : SystemBase
     {
         private void UpdateNewEmitters(EntityManager mgr)
@@ -280,41 +290,128 @@ namespace Unity.Tiny.Particles
                 .ForEach((Entity e, ref ParticleEmitter particleEmitter) =>
                 {
                     // Initialize new emitters and particle templates
-                    MeshRenderer meshRenderer = mgr.GetComponentData<MeshRenderer>(particleEmitter.particle);
-
-                    if (mgr.HasComponent<Billboarded>(e))
-                    {
-                        Assert.IsTrue(meshRenderer.mesh == Entity.Null);
-
-                        // 1x1 quad
-                        LitMeshRenderData lmrd;
-                        MeshBounds mb;
-                        MeshHelper.CreatePlaneLit(new float3(0, 0, 0), new float3(1, 0, 0), new float3(0, 1, 0), out mb, out lmrd);
-                        meshRenderer.mesh = mgr.CreateEntity();
-                        mgr.AddComponentData(meshRenderer.mesh, lmrd);
-                        mgr.AddComponentData(meshRenderer.mesh, mb);
-                        meshRenderer.startIndex = 0;
-                        meshRenderer.indexCount = lmrd.Mesh.Value.Indices.Length;
-                        mgr.SetComponentData(particleEmitter.particle, meshRenderer);
-                    }
-
                     var emitterInternal = new ParticleEmitterInternal();
 
                     if (!mgr.HasComponent<Disabled>(particleEmitter.particle))
                         mgr.AddComponentData(particleEmitter.particle, new Disabled());
                     emitterInternal.particleTemplate = mgr.Instantiate(particleEmitter.particle);
-
                     mgr.AddComponentData(emitterInternal.particleTemplate, new Particle());
-
                     var position = new Translation { Value = float3.zero };
                     mgr.AddComponentData(emitterInternal.particleTemplate, position);
+                    mgr.AddSharedComponentData(emitterInternal.particleTemplate, new EmitterReferenceForParticles { emitter = e });
 
-                    mgr.AddSharedComponentData(emitterInternal.particleTemplate, new ParticleEmitterReference { emitter = e });
+                    emitterInternal.particleRenderer = CreateParticleRenderer(mgr, e, particleEmitter);
+
                     mgr.AddComponentData(e, emitterInternal);
                 }).Run();
 
             CleanupBurstEmitters(mgr);
             InitBurstEmitters(mgr);
+        }
+
+        private static Entity CreateParticleRenderer(EntityManager mgr, Entity eEmitter, ParticleEmitter particleEmitter)
+        {
+            Entity eParticleRenderer = mgr.CreateEntity(typeof(MeshRenderer), typeof(EmitterReferenceForRenderer), typeof(LocalToWorld), typeof(DynamicMeshData));
+            var material = mgr.GetComponentData<ParticleMaterial>(eEmitter).material;
+            Assert.IsTrue(material != Entity.Null);
+            mgr.AddComponentData(eParticleRenderer, new MeshRenderer
+            {
+                mesh = eParticleRenderer,
+                material = material,
+                startIndex = 0,
+                indexCount = 0
+            });
+            mgr.AddComponentData(eParticleRenderer, new EmitterReferenceForRenderer { emitter = eEmitter });
+            mgr.AddComponentData(eParticleRenderer, new LocalToWorld { Value = float4x4.identity });
+
+            bool isLit = mgr.HasComponent<LitMaterial>(material);
+            if (isLit)
+                mgr.AddComponentData(eParticleRenderer, new LitMeshRenderer());
+            else
+            {
+                Assert.IsTrue(mgr.HasComponent<SimpleMaterial>(material));
+                mgr.AddComponentData(eParticleRenderer, new SimpleMeshRenderer());
+            }
+
+            // Particle mesh
+            ParticleMesh particleMesh;
+            if (mgr.HasComponent<Billboarded>(eEmitter))
+            {
+                Assert.IsTrue(!mgr.HasComponent<ParticleMesh>(eEmitter));
+
+                // Add mesh for 1x1 quad centered at the origin
+                Entity mesh;
+                if (isLit)
+                {
+                    LitMeshRenderData lmrd;
+                    MeshBounds mb;
+                    MeshHelper.CreatePlaneLit(new float3(-0.5f, -0.5f, 0), new float3(1, 0, 0), new float3(0, 1, 0), out mb, out lmrd);
+                    mesh = mgr.CreateEntity(typeof(LitMeshRenderData), typeof(MeshBounds));
+                    mgr.SetComponentData(mesh, lmrd);
+                    mgr.SetComponentData(mesh, mb);
+                    var litMaterial = mgr.GetComponentData<LitMaterial>(material);
+                    litMaterial.billboarded = true;
+                    mgr.SetComponentData(material, litMaterial);
+                }
+                else
+                {
+                    SimpleMeshRenderData smrd;
+                    MeshBounds mb;
+                    MeshHelper.CreatePlane(new float3(-0.5f, -0.5f, 0), new float3(1, 0, 0), new float3(0, 1, 0), out mb, out smrd);
+                    mesh = mgr.CreateEntity(typeof(SimpleMeshRenderData), typeof(MeshBounds));
+                    mgr.SetComponentData(mesh, smrd);
+                    mgr.SetComponentData(mesh, mb);
+                    var simpleMaterial = mgr.GetComponentData<SimpleMaterial>(material);
+                    simpleMaterial.billboarded = true;
+                    mgr.SetComponentData(material, simpleMaterial);
+                }
+                particleMesh = new ParticleMesh { mesh = mesh };
+                mgr.AddComponentData(eEmitter, particleMesh);
+            }
+            else
+            {
+                Assert.IsTrue(mgr.HasComponent<ParticleMesh>(eEmitter));
+                particleMesh = mgr.GetComponentData<ParticleMesh>(eEmitter);
+                Assert.IsTrue(particleMesh.mesh != Entity.Null);
+            }
+
+            // Setup dynamic vertex/index buffers
+            int vertexCapacity, indexCapacity;
+            if (isLit)
+            {
+                ref LitMeshData lmd = ref mgr.GetComponentData<LitMeshRenderData>(particleMesh.mesh).Mesh.Value;
+                vertexCapacity = (int)(lmd.Vertices.Length * particleEmitter.maxParticles);
+                indexCapacity = (int)(lmd.Indices.Length * particleEmitter.maxParticles);
+                mgr.AddBuffer<DynamicLitVertex>(eParticleRenderer);
+                var vBuffer = mgr.GetBuffer<DynamicLitVertex>(eParticleRenderer);
+                vBuffer.Capacity = vertexCapacity;
+            }
+            else
+            {
+                ref SimpleMeshData smd = ref mgr.GetComponentData<SimpleMeshRenderData>(particleMesh.mesh).Mesh.Value;
+                vertexCapacity = (int)(smd.Vertices.Length * particleEmitter.maxParticles);
+                indexCapacity = (int)(smd.Indices.Length * particleEmitter.maxParticles);
+                mgr.AddBuffer<DynamicSimpleVertex>(eParticleRenderer);
+                var vBuffer = mgr.GetBuffer<DynamicSimpleVertex>(eParticleRenderer);
+                vBuffer.Capacity = vertexCapacity;
+            }
+
+            mgr.AddBuffer<DynamicIndex>(eParticleRenderer);
+            var iBuffer = mgr.GetBuffer<DynamicIndex>(eParticleRenderer);
+            iBuffer.Capacity = indexCapacity;
+
+            DynamicMeshData dmd = new DynamicMeshData
+            {
+                VertexCapacity = vertexCapacity,
+                IndexCapacity = indexCapacity,
+                NumVertices = 0,
+                NumIndices = 0,
+                UseDynamicGPUBuffer = true
+            };
+            mgr.AddComponentData(eParticleRenderer, dmd);
+            mgr.AddComponent<MeshBounds>(eParticleRenderer);
+
+            return eParticleRenderer;
         }
 
         private void CleanupBurstEmitters(EntityManager mgr)
@@ -326,9 +423,9 @@ namespace Unity.Tiny.Particles
                 .WithNone<BurstEmission>()
                 .WithAll<ParticleEmitter, BurstEmissionInternal>()
                 .ForEach((Entity e) =>
-            {
-                ecb.RemoveComponent<BurstEmissionInternal>(e);
-            }).Run();
+                {
+                    ecb.RemoveComponent<BurstEmissionInternal>(e);
+                }).Run();
 
             ecb.Playback(mgr);
             ecb.Dispose();
@@ -354,7 +451,8 @@ namespace Unity.Tiny.Particles
 
             Entities.WithoutBurst().WithNone<ParticleEmitter>().WithAll<ParticleEmitterInternal>().ForEach((Entity e) =>
             {
-                DestroyParticlesForEmitter(mgr, ecb, e);
+                DestroyParticlesForEmitter(ecb, e);
+                ecb.DestroyEntity(mgr.GetComponentData<ParticleEmitterInternal>(e).particleRenderer);
                 ecb.RemoveComponent<ParticleEmitterInternal>(e);
             }).Run();
 
@@ -362,17 +460,15 @@ namespace Unity.Tiny.Particles
             ecb.Dispose();
         }
 
-        private void DestroyParticlesForEmitter(EntityManager mgr, EntityCommandBuffer ecb, Entity emitter)
+        private void DestroyParticlesForEmitter(EntityCommandBuffer ecb, Entity emitter)
         {
+            EmitterReferenceForParticles emitterReference = new EmitterReferenceForParticles { emitter = emitter };
             Entities
-                .WithoutBurst()
-                .WithAll<Particle>()
                 .WithEntityQueryOptions(EntityQueryOptions.IncludeDisabled) // needed for proto particle
-                .ForEach((Entity e, ParticleEmitterReference cEmitterRef) =>
-            {
-                if (cEmitterRef.emitter == emitter)
+                .WithSharedComponentFilter(emitterReference).ForEach((Entity e) =>
+                {
                     ecb.DestroyEntity(e);
-            }).Run();
+                }).Run();
         }
 
         protected override void OnUpdate()
@@ -387,6 +483,7 @@ namespace Unity.Tiny.Particles
     /// </summary>
     [UpdateInGroup(typeof(SimulationSystemGroup))]
     [UpdateAfter(typeof(EmitterSystem))]
+    [UpdateBefore(typeof(TransformSystemGroup))]
     public class ParticleSpawnSystem : SystemBase
     {
         private void SpawnParticles(EntityManager mgr, float deltaTime)
@@ -503,7 +600,6 @@ namespace Unity.Tiny.Particles
                 var particleVelocity = new ParticleVelocity { velocity = velocity };
                 foreach (var particle in newParticles)
                     ecb.AddComponent(particle, particleVelocity);
-
             }
             else if (mgr.HasComponent<LifetimeVelocity>(emitter))
             {
@@ -557,7 +653,7 @@ namespace Unity.Tiny.Particles
             }
         }
 
-        private void InitScale(EntityManager mgr, EntityCommandBuffer ecb, Entity emitter, NativeArray<Entity> newParticles)
+        private static void InitScale(EntityManager mgr, EntityCommandBuffer ecb, Entity emitter, NativeArray<Entity> newParticles)
         {
 #if false
             bool hasInitialUniformScale = mgr.HasComponent<EmitterInitialScale>(emitter);
@@ -624,6 +720,7 @@ namespace Unity.Tiny.Particles
                 }
             }
         }
+
 #if false
         private void InitColor(EntityManager mgr, EntityCommandBuffer ecb, Entity emitter, NativeArray<Entity> newParticles)
         {
@@ -682,8 +779,9 @@ namespace Unity.Tiny.Particles
                 }
             }
         }
+
 #endif
-        private void InitRotation(EntityManager mgr, EntityCommandBuffer ecb, Entity emitter, NativeArray<Entity> newParticles)
+        private static void InitRotation(EntityManager mgr, EntityCommandBuffer ecb, Entity emitter, NativeArray<Entity> newParticles)
         {
             if (mgr.HasComponent<EmitterInitialRotation>(emitter))
             {
@@ -736,27 +834,50 @@ namespace Unity.Tiny.Particles
     [UpdateInGroup(typeof(SimulationSystemGroup))]
     [UpdateAfter(typeof(EmitterSystem))]
     [UpdateAfter(typeof(ParticleSpawnSystem))]
+    [UpdateBefore(typeof(TransformSystemGroup))]
     public class ParticleSystem : SystemBase
     {
-        private void UpdateParticleLife(EntityManager mgr, ParticleEmitterReference emitterReference, float deltaTime)
+        private void UpdateParticleLife(EntityManager mgr, EmitterReferenceForParticles emitterReference, float deltaTime)
         {
             EntityCommandBuffer ecb = new EntityCommandBuffer(Allocator.Temp);
 
             var emitterInternal = mgr.GetComponentData<ParticleEmitterInternal>(emitterReference.emitter);
+            var emitter = mgr.GetComponentData<ParticleEmitter>(emitterReference.emitter);
 
             // Reset particle counter for this emitter
             emitterInternal.numParticles = 0;
             uint numParticles = 0;
 
-            Entities.WithSharedComponentFilter(emitterReference).ForEach((Entity e, ref Particle particle) =>
+            if (emitter.attachToEmitter)
             {
-                particle.time += deltaTime;
-                if (particle.time >= particle.lifetime)
-                    ecb.DestroyEntity(e);
-                else
-                    numParticles++;
+                Entities.WithSharedComponentFilter(emitterReference).ForEach((Entity e, ref Particle particle) =>
+                {
+                    particle.time += deltaTime;
+                    if (particle.time >= particle.lifetime)
+                        ecb.DestroyEntity(e);
+                    else
+                        numParticles++;
+                }).Run();
+            }
+            else
+            {
+                Entities.WithSharedComponentFilter(emitterReference).ForEach((Entity e, ref Particle particle) =>
+                {
+                    particle.time += deltaTime;
+                    if (particle.time >= particle.lifetime)
+                    {
+                        ecb.DestroyEntity(e);
 
-            }).Run();
+                        // This assumes that we still own this parent, which is the dummy one created during particle spawning!
+                        if (mgr.HasComponent<Parent>(e))
+                            ecb.DestroyEntity(mgr.GetComponentData<Parent>(e).Value);
+                    }
+                    else
+                    {
+                        numParticles++;
+                    }
+                }).Run();
+            }
 
             emitterInternal.numParticles = numParticles;
             mgr.SetComponentData(emitterReference.emitter, emitterInternal);
@@ -765,7 +886,7 @@ namespace Unity.Tiny.Particles
             ecb.Dispose();
         }
 
-        private void UpdateParticlePosition(EntityManager mgr, ParticleEmitterReference emitterReference, float deltaTime)
+        private void UpdateParticlePosition(EntityManager mgr, EmitterReferenceForParticles emitterReference, float deltaTime)
         {
             Entities.WithSharedComponentFilter(emitterReference).ForEach((Entity e, ref Particle cParticle, ref ParticleVelocity cVelocity, ref Translation cLocalPos) =>
             {
@@ -794,7 +915,7 @@ namespace Unity.Tiny.Particles
                 else if (hasLifetimeSpeed)
                 {
                     var lifetimeSpeed = mgr.GetComponentData<LifetimeSpeedMultiplier>(emitterReference.emitter);
-                
+
                     var speed = InterpolationService.EvaluateCurveFloat(mgr, normalizedLife, lifetimeSpeed.curve);
                     cLocalPos.Value += cVelocity.velocity * speed * deltaTime;
                 }
@@ -805,6 +926,7 @@ namespace Unity.Tiny.Particles
                 }
             }).Run();
         }
+
 #if false
         private void UpdateParticleScale(EntityManager mgr, EntityCommandBuffer ecb, ParticleEmitterReference emitterReference, float deltaTime)
         {
@@ -860,19 +982,17 @@ namespace Unity.Tiny.Particles
                     }
                 }).Run();
         }
-#endif
-        private static bool EmitterIsValid(EntityManager mgr, Entity eEmitter) => mgr.Exists(eEmitter) && mgr.HasComponent<ParticleEmitter>(eEmitter) && mgr.HasComponent<ParticleEmitterInternal>(eEmitter);
 
+#endif
         protected override void OnUpdate()
         {
             float deltaTime = Time.DeltaTime;
-            var emitterReferences = new List<ParticleEmitterReference>();
+            var emitterReferences = new List<EmitterReferenceForParticles>();
             EntityManager.GetAllUniqueSharedComponentData(emitterReferences);
-            foreach (ParticleEmitterReference emitterReference in emitterReferences)
+            foreach (var emitterReference in emitterReferences)
             {
-                if (emitterReference.emitter == Entity.Null
-                    // In some cases it takes an extra frame for the particle entities that reference a destroyed emitter to be destroyed, most likely because of system state components
-                    || !EmitterIsValid(EntityManager, emitterReference.emitter))
+                // In some cases it takes an extra frame for the particle entities that reference a destroyed emitter to be destroyed, most likely because of system state components
+                if (!ParticlesUtil.EmitterIsValid(EntityManager, emitterReference.emitter))
                     continue;
 
                 UpdateParticleLife(EntityManager, emitterReference, deltaTime);

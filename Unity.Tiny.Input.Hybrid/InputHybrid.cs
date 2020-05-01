@@ -20,7 +20,7 @@ namespace Unity.Tiny.Hybrid
             {
                 var keycode = Event.current.keyCode;
                 m_KeyEventList.Add(new HybridInputSystem.KeyEvent() {
-                    KeyCode = (Unity.Tiny.Input.KeyCode) keycode,
+                    KeyCode = (Unity.Tiny.Input.KeyCode)keycode,
                     Down = type == EventType.KeyDown
                 });
             }
@@ -88,8 +88,8 @@ namespace Unity.Tiny.Hybrid
 
             if (!m_MouseInitDelta)
             {
-                m_inputState.mouseDeltaX = (int) mouse.x - m_inputState.mouseX;
-                m_inputState.mouseDeltaY = (int) mouse.y - m_inputState.mouseY;
+                m_inputState.mouseDeltaX = (int)mouse.x - m_inputState.mouseX;
+                m_inputState.mouseDeltaY = (int)mouse.y - m_inputState.mouseY;
             }
             else
             {
@@ -98,8 +98,8 @@ namespace Unity.Tiny.Hybrid
                 m_MouseInitDelta = false;
             }
 
-            m_inputState.mouseX = (int) mouse.x;
-            m_inputState.mouseY = (int) mouse.y;
+            m_inputState.mouseX = (int)mouse.x;
+            m_inputState.mouseY = (int)mouse.y;
             for (int i = 0; i < 3; ++i)
             {
                 if (UnityInput.GetMouseButtonUp(i))
@@ -107,6 +107,10 @@ namespace Unity.Tiny.Hybrid
                 if (UnityInput.GetMouseButtonDown(i))
                     m_inputState.MouseDown(i);
             }
+
+            m_inputState.scrollDeltaX = (int)UnityInput.mouseScrollDelta.x;
+            m_inputState.scrollDeltaY = (int)UnityInput.mouseScrollDelta.y;
+            Debug.Log(m_inputState.scrollDeltaX + " " + m_inputState.scrollDeltaY);
         }
     }
 }

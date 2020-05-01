@@ -97,13 +97,12 @@ namespace Unity.Tiny
         /// </summary>
         public float2 Center
         {
-            get => new float2(x + width / 2f, y + height/ 2f);
+            get => new float2(x + width / 2f, y + height / 2f);
             set
             {
                 x = value.x - width / 2f;
                 y = value.y - height / 2f;
             }
         }
-
     }
 }

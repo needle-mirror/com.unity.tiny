@@ -12,15 +12,15 @@ namespace Unity.Tiny.Animation
     {
         protected override void OnUpdate()
         {
-            var entityComponentStore = EntityManager.EntityComponentStore;
+            var entityComponentStore = EntityManager.GetCheckedEntityDataAccess()->EntityComponentStore;
             var globalVersion = entityComponentStore->GlobalSystemVersion;
 
             Dependency =
                 Entities
-                   .WithNativeDisableUnsafePtrRestriction(entityComponentStore)
-                   .WithBurst(FloatMode.Fast)
-                   .WithAll<ApplyAnimationResultTag>()
-                   .ForEach(
+                    .WithNativeDisableUnsafePtrRestriction(entityComponentStore)
+                    .WithBurst(FloatMode.Fast)
+                    .WithAll<ApplyAnimationResultTag>()
+                    .ForEach(
                         (in DynamicBuffer<AnimationBinding> bindings, in TinyAnimationTime animationTime) =>
                         {
                             var time = animationTime.Value;

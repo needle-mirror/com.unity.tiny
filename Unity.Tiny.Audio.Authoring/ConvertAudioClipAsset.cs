@@ -21,7 +21,7 @@ namespace Unity.TinyConversion
             });
         }
     }
-    
+
     [UpdateInGroup(typeof(GameObjectExportGroup))]
     internal class AudioClipAsset : GameObjectConversionSystem
     {

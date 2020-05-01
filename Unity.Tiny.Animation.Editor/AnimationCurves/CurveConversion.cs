@@ -42,4 +42,3 @@ namespace Unity.Tiny.Animation.Editor
         }
     }
 }
-

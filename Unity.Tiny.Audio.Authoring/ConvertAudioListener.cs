@@ -2,7 +2,7 @@ using Unity.Entities;
 using Unity.Tiny.Audio;
 
 namespace Unity.TinyConversion
-{   
+{
     internal class ConvertAudioListener : GameObjectConversionSystem
     {
         protected override void OnUpdate()

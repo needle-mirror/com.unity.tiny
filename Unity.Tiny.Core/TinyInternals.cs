@@ -14,5 +14,4 @@ namespace Unity.Tiny
             FixedRateUtils.EnableFixedRateWithCatchUp(sim, rate);
         }
     }
-
 }

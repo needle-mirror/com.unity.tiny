@@ -161,8 +161,8 @@ namespace Unity.Tiny.Scenes
         /// <returns></returns>
         static public bool AreStartupScenesLoaded(World world)
         {
-             using (var startupScenes = world.TinyEnvironment().GetConfigBufferData<StartupScenes>().ToNativeArray(Allocator.Temp))
-             {
+            using (var startupScenes = world.TinyEnvironment().GetConfigBufferData<StartupScenes>().ToNativeArray(Allocator.Temp))
+            {
                 bool bAllLoaded = true;
                 var em = world.EntityManager;
                 for (var i = 0; i < startupScenes.Length; ++i)
@@ -181,8 +181,8 @@ namespace Unity.Tiny.Scenes
                     }
                 }
                 return bAllLoaded;
-             }
-        }   
+            }
+        }
     }
 
     /// <summary>

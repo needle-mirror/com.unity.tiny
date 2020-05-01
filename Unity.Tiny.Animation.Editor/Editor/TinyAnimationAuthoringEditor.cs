@@ -25,7 +25,7 @@ namespace Unity.Tiny.Animation.Editor
 
         void OnEnable()
         {
-            m_TinyAnimationAuthoring = (TinyAnimationAuthoring) target;
+            m_TinyAnimationAuthoring = (TinyAnimationAuthoring)target;
             m_Animator = m_TinyAnimationAuthoring.GetComponent<Animator>();
             m_CurrentController = TinyAnimationEditorBridge.GetEffectiveAnimatorController(m_Animator);
 
@@ -102,7 +102,7 @@ namespace Unity.Tiny.Animation.Editor
             EditorGUILayout.Space();
 
             EditorGUILayout.HelpBox($"The following clips will be converted (in that order, starting at index {m_NonNullUserClipsCount.ToString(CultureInfo.InvariantCulture)}) from the Animator.\n" +
-                                    "Note that the Animator's state machine will not get converted; only the clips.", MessageType.Info, true);
+                "Note that the Animator's state machine will not get converted; only the clips.", MessageType.Info, true);
 
             using (new EditorGUI.DisabledScope(true))
             {

@@ -58,7 +58,7 @@ namespace Unity.Tiny.Animation.Editor
         void Convert(AnimationClip clip)
         {
             if (clip == null || clip.empty)
-                    return;
+                return;
 
             var entity = TryGetPrimaryEntity(clip);
 
@@ -112,8 +112,8 @@ namespace Unity.Tiny.Animation.Editor
                             throw new InvalidDataException($"Euler rotation curve for {binding.type.Name}.{binding.propertyName} is malformed");
 
                         var xBinding = binding;
-                        var yBinding = bindings[i+1];
-                        var zBinding = bindings[i+2];
+                        var yBinding = bindings[i + 1];
+                        var zBinding = bindings[i + 2];
 
                         var xCurveOriginal = AnimationUtility.GetEditorCurve(clip, xBinding);
                         var yCurveOriginal = AnimationUtility.GetEditorCurve(clip, yBinding);

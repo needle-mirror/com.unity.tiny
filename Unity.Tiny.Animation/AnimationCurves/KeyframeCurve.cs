@@ -78,7 +78,7 @@ namespace Unity.Tiny.Animation
         public BlobArray<Keyframe> Keyframes;
     }
 
-    struct KeyframeCurve: IDisposable
+    struct KeyframeCurve : IDisposable
     {
         internal NativeArray<Keyframe> m_Keyframes;
 
@@ -115,6 +115,7 @@ namespace Unity.Tiny.Animation
                 m_KeyframeData = new OffsetPtr<Keyframe>((Keyframe*)curve.m_Keyframes.GetUnsafeReadOnlyPtr(), curve.Length)
             };
         }
+
         unsafe public static KeyframeCurveAccessor Create(BlobAssetReference<KeyframeCurveBlob> curve)
         {
             return new KeyframeCurveAccessor()

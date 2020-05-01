@@ -39,7 +39,7 @@ namespace Unity.Tiny.Audio
         public static extern void ReinitAudio();
 
         [DllImport(DLL, EntryPoint = "hasDefaultDeviceChanged")]
-        [return: MarshalAs(UnmanagedType.I1)]
+        [return : MarshalAs(UnmanagedType.I1)]
         public static extern bool HasDefaultDeviceChanged();
 
         [DllImport(DLL, EntryPoint = "getAudioOutputTimeInFrames")]
@@ -47,7 +47,7 @@ namespace Unity.Tiny.Audio
 
         // Clip
         [DllImport(DLL, EntryPoint = "startLoad", CharSet = CharSet.Ansi)]
-        public static extern uint StartLoad([MarshalAs(UnmanagedType.LPStr)]string imageFile);    // returns clipID
+        public static extern uint StartLoad([MarshalAs(UnmanagedType.LPStr)] string imageFile);    // returns clipID
 
         [DllImport(DLL, EntryPoint = "freeAudio")]
         public static extern void FreeAudio(uint clipID);
@@ -56,7 +56,7 @@ namespace Unity.Tiny.Audio
         public static extern void AbortLoad(uint clipID);
 
         [DllImport(DLL, EntryPoint = "checkLoading")]
-        public static extern int CheckLoading(uint clipID );    // 0=still working, 1=ok, 2=fail
+        public static extern int CheckLoading(uint clipID);     // 0=still working, 1=ok, 2=fail
 
         [DllImport(DLL, EntryPoint = "finishedLoading")]
         public static extern void FinishedLoading(uint clipID);
@@ -66,26 +66,26 @@ namespace Unity.Tiny.Audio
         public static extern uint Play(uint clipID, float volume, float pan, bool loop);    // returns sourceID (>0) or 0 or failure.
 
         [DllImport(DLL, EntryPoint = "isPlaying")]
-        [return: MarshalAs(UnmanagedType.I1)]
+        [return : MarshalAs(UnmanagedType.I1)]
         public static extern bool IsPlaying(uint sourceID);
 
         [DllImport(DLL, EntryPoint = "stopSource")]
-        [return: MarshalAs(UnmanagedType.I1)]
+        [return : MarshalAs(UnmanagedType.I1)]
         public static extern bool Stop(uint sourceID);    // returns success (or failure)
 
         [DllImport(DLL, EntryPoint = "pauseAudio")]
         public static extern void PauseAudio(bool doPause);    // returns success (or failure)
 
         [DllImport(DLL, EntryPoint = "setVolume")]
-        [return: MarshalAs(UnmanagedType.I1)]
+        [return : MarshalAs(UnmanagedType.I1)]
         public static extern bool SetVolume(uint sourceId, float volume);    // returns success (or failure)
 
         [DllImport(DLL, EntryPoint = "setPan")]
-        [return: MarshalAs(UnmanagedType.I1)]
+        [return : MarshalAs(UnmanagedType.I1)]
         public static extern bool SetPan(uint sourceId, float pan);    // returns success (or failure)
 
         [DllImport(DLL, EntryPoint = "setPitch")]
-        [return: MarshalAs(UnmanagedType.I1)]
+        [return : MarshalAs(UnmanagedType.I1)]
         public static extern bool SetPitch(uint sourceId, float pitch);    // returns success (or failure)
 
         [DllImport(DLL, EntryPoint = "numSourcesAllocated")]
@@ -98,7 +98,7 @@ namespace Unity.Tiny.Audio
         public static extern int SourcePoolID();                 // Testing: the next ID that will be assigned to a source. (Useful to tell if a source changed.)
     }
 
-    class AudioNativeSystemLoadFromFile : IGenericAssetLoader< AudioClip, AudioNativeClip, AudioClipLoadFromFile, AudioNativeLoading >
+    class AudioNativeSystemLoadFromFile : IGenericAssetLoader<AudioClip, AudioNativeClip, AudioClipLoadFromFile, AudioNativeLoading>
     {
         public void StartLoad(
             EntityManager entityManager,
@@ -129,7 +129,7 @@ namespace Unity.Tiny.Audio
             Entity e,
             ref AudioClip audioClip, ref AudioNativeClip audioNativeClip, ref AudioClipLoadFromFile param, ref AudioNativeLoading nativeLoading)
         {
-            LoadResult result = (LoadResult) AudioNativeCalls.CheckLoading(audioNativeClip.clipID);
+            LoadResult result = (LoadResult)AudioNativeCalls.CheckLoading(audioNativeClip.clipID);
 
             if (result == LoadResult.success)
                 audioClip.status = AudioClipStatus.Loaded;
@@ -141,7 +141,7 @@ namespace Unity.Tiny.Audio
 
         public void FreeNative(EntityManager man, Entity e, ref AudioNativeClip audioNativeClip)
         {
-           	AudioNativeCalls.FreeAudio(audioNativeClip.clipID);
+            AudioNativeCalls.FreeAudio(audioNativeClip.clipID);
         }
 
         public void FinishLoading(EntityManager man, Entity e, ref AudioClip audioClip, ref AudioNativeClip audioNativeClip, ref AudioNativeLoading nativeLoading)
@@ -152,7 +152,7 @@ namespace Unity.Tiny.Audio
 
     [UpdateInGroup(typeof(PresentationSystemGroup))]
     [UpdateBefore(typeof(AudioNativeSystem))]
-    class AudioIONativeSystem : GenericAssetLoader< AudioClip, AudioNativeClip, AudioClipLoadFromFile, AudioNativeLoading >
+    class AudioIONativeSystem : GenericAssetLoader<AudioClip, AudioNativeClip, AudioClipLoadFromFile, AudioNativeLoading>
     {
         protected override void OnCreate()
         {
@@ -218,7 +218,7 @@ namespace Unity.Tiny.Audio
                         float volume = audioSource.volume;
                         float pan = mgr.HasComponent<Audio2dPanning>(e) ? mgr.GetComponentData<Audio2dPanning>(e).pan : 0.0f;
 
-                        // For 3d sounds, we start at volume zero because we don't know if this sound is close or far from the listener. 
+                        // For 3d sounds, we start at volume zero because we don't know if this sound is close or far from the listener.
                         // It is much smoother to ramp up volume from zero than the alternative.
                         if (mgr.HasComponent<Audio3dPanning>(e))
                             volume = 0.0f;
@@ -326,13 +326,13 @@ namespace Unity.Tiny.Audio
             ulong audioOutputTimeInFrames = AudioNativeCalls.GetAudioOutputTimeInFrames();
             bool audioConsumed = audioOutputTimeInFrames != lastAudioOutputTimeInFrames;
             bool audioNeedsReinit = worldTime - lastWorldTimeAudioConsumed >= reinitTime;
-            
+
             if (!audioConsumed && !paused && audioNeedsReinit)
                 AudioNativeCalls.ReinitAudio();
 
             lastAudioOutputTimeInFrames = audioOutputTimeInFrames;
             lastWorldTimeAudioConsumed = (audioConsumed || paused || audioNeedsReinit) ? worldTime : lastWorldTimeAudioConsumed;
-        } 
+        }
 
         protected override void OnUpdate()
         {
@@ -360,6 +360,5 @@ namespace Unity.Tiny.Audio
         {
             AudioNativeCalls.PauseAudio(evt.Suspend);
         }
-
     }
 }

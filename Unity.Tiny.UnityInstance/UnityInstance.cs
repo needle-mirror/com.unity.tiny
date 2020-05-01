@@ -74,7 +74,7 @@ namespace Unity.Tiny
         public bool Update()
         {
             var shouldContinue = true;
-            
+
             if (m_BootPhase == BootPhase.Running)
             {
 #if UNITY_DOTSPLAYER
@@ -120,7 +120,7 @@ namespace Unity.Tiny
 
             m_BootPhase = BootPhase.LoadingConfig;
         }
-        
+
         private void UpdateLoadingConfig()
         {
             // Tick this world specifically to ensure our load requests are handled

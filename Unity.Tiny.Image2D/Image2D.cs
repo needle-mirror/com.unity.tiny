@@ -28,11 +28,11 @@ namespace Unity.Tiny
     }
 
     /// <summary>
-    /// Memory backed cpu image data. 
+    /// Memory backed cpu image data.
     /// This component is incompatible with Image2DLoadFromFile.
     /// It contains raw rgba data that must match the size and flags in the Image2D header.
     /// This component is intended for uploading cpu generated textures.
-    /// This memory is NOT released after texture uploads because it can not easily be re-created. 
+    /// This memory is NOT released after texture uploads because it can not easily be re-created.
     /// However, it can be manually removed and rendering will still work until a device reset happens.
     /// </summary>
     public struct Image2DMemorySource : IBufferElementData
@@ -59,7 +59,7 @@ namespace Unity.Tiny
     /// The red channel will be used as
     /// the mask (the alpha channel is ignored);
     /// efficient compression can be used (e.g. a single channel PNG or palleted PNG8).
-    /// Tag with Image2DLoadFromFile to start a load 
+    /// Tag with Image2DLoadFromFile to start a load
     /// </remarks>
     public struct Image2DLoadFromFileMaskFile : IBufferElementData
     {
@@ -78,7 +78,8 @@ namespace Unity.Tiny
         public Guid maskAsset;
     }
 
-    public enum RenderToTextureFormat {
+    public enum RenderToTextureFormat
+    {
         RGBA,
         Depth,
         DepthStencil,
@@ -175,7 +176,7 @@ namespace Unity.Tiny
     /// <summary>
     /// Tag component that needs to be next to be placed next to an <see cref="Image2D"/> component
     /// if it is intended to be used as a render to texture target.
-    /// An image can not be loaded and a texture target at the same time. 
+    /// An image can not be loaded and a texture target at the same time.
     /// </summary>
     public struct Image2DRenderToTexture : IComponentData
     {

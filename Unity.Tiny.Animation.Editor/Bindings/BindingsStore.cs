@@ -38,6 +38,7 @@ namespace Unity.Tiny.Animation.Editor
             // TODO: Add safety measures in case of overwrites, since this is now user-facing?
             k_BindingNameRemap[authoringName] = convertedName;
         }
+
         /// <summary>
         /// Use this method to tell Tiny Animation that an authoring-time binding is not supported at runtime.
         /// </summary>

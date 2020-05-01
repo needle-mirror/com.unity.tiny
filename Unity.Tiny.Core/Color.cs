@@ -29,27 +29,27 @@ namespace Unity.Tiny
             Value = new float4(red, green, blue, alpha);
         }
 
-        public static bool operator ==(Color cl, Color cr)
+        public static bool operator==(Color cl, Color cr)
         {
             return cl.r == cr.r && cl.g == cr.g && cl.b == cr.b && cl.a == cr.a;
         }
 
-        public static Color operator +(Color cl, Color cr)
+        public static Color operator+(Color cl, Color cr)
         {
             return new Color(cl.r + cr.r, cl.g + cr.g, cl.b + cr.b, cl.a + cr.a);
         }
 
-        public static Color operator *(Color cl, Color cr)
+        public static Color operator*(Color cl, Color cr)
         {
             return new Color(cl.r * cr.r, cl.g * cr.g, cl.b * cr.b, cl.a * cr.a);
         }
 
-        public static Color operator *(Color cl, float v)
+        public static Color operator*(Color cl, float v)
         {
             return new Color(cl.r * v, cl.g * v, cl.b * v, cl.a * v);
         }
 
-        public static bool operator !=(Color cl, Color cr)
+        public static bool operator!=(Color cl, Color cr)
         {
             return !(cl == cr);
         }
@@ -124,20 +124,20 @@ namespace Unity.Tiny
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static float3 LinearToSRGB(float3 rgb)
         {
-            return new float3 (
+            return new float3(
                 LinearToSRGB(rgb.x),
                 LinearToSRGB(rgb.y),
-                LinearToSRGB(rgb.z) );
+                LinearToSRGB(rgb.z));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static float4 LinearToSRGB(float4 rgba)
         {
-            return new float4 (
+            return new float4(
                 LinearToSRGB(rgba.x),
                 LinearToSRGB(rgba.y),
                 LinearToSRGB(rgba.z),
-                rgba.w );
+                rgba.w);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

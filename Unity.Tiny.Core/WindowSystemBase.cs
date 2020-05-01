@@ -14,6 +14,7 @@ namespace Unity.Tiny
             // returning actual orientation for platforms where orientation cannot be controlled
             return GetOrientation();
         }
+
         public ScreenOrientation GetOrientation()
         {
             var env = World.TinyEnvironment();
@@ -21,5 +22,4 @@ namespace Unity.Tiny
             return config.orientation;
         }
     }
-
 }

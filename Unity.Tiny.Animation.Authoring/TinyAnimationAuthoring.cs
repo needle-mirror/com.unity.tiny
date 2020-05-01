@@ -10,14 +10,14 @@ namespace Unity.Tiny.Animation
     [RequireComponent(typeof(Animator))] //Uses Animator component as an in-editor previewer
     public class TinyAnimationAuthoring : MonoBehaviour, IAnimationClipSource
     {
-        public List<AnimationClip> animationClips = new List<AnimationClip>{null};
+        public List<AnimationClip> animationClips = new List<AnimationClip> {null};
 
         [Tooltip("Should this animation start playing automatically upon creation?")]
         public bool playAutomatically = true;
 
         [Space]
         [Tooltip("An entity whose scale is (1, 1, 1) at conversion will not get any scaling components.\n" +
-                 "By setting this value to true, you allow the system to add the missing scaling components if the animation affects the scale of the Entity.")]
+            "By setting this value to true, you allow the system to add the missing scaling components if the animation affects the scale of the Entity.")]
         public bool patchMissingScaleIfNeeded = true;
 
         [SerializeField]

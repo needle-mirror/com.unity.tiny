@@ -34,22 +34,22 @@ namespace Unity.Tiny.Scenes
             base.OnCreate();
 
             m_EntityGuidQuery = EntityManager.CreateEntityQuery
-            (
-                new EntityQueryDesc
-                {
-                    All = new[] {ComponentType.ReadOnly<EntityGuid>()},
-                    Options = EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabled
-                }
-            );
+                (
+                    new EntityQueryDesc
+                    {
+                        All = new[] {ComponentType.ReadOnly<EntityGuid>()},
+                        Options = EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabled
+                    }
+                );
 
             m_EntityReferenceRemapQuery = EntityManager.CreateEntityQuery
-            (
-                new EntityQueryDesc
-                {
-                    All = new[] {ComponentType.ReadOnly<EntityReferenceRemap>()},
-                    Options = EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabled
-                }
-            );
+                (
+                    new EntityQueryDesc
+                    {
+                        All = new[] {ComponentType.ReadOnly<EntityReferenceRemap>()},
+                        Options = EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabled
+                    }
+                );
         }
 
         protected override unsafe void OnUpdate()
@@ -118,13 +118,13 @@ namespace Unity.Tiny.Scenes
                                 if (TypeManager.IsBuffer(typeIndex))
                                 {
                                     // Patch buffer component reference
-                                    var ptr = (BufferHeader*) EntityManager.GetComponentDataRawRW(entity, typeIndex);
-                                    *(Entity*) (BufferHeader.GetElementPointer(ptr) + remap.Offset) = target;
+                                    var ptr = (BufferHeader*)EntityManager.GetComponentDataRawRW(entity, typeIndex);
+                                    *(Entity*)(BufferHeader.GetElementPointer(ptr) + remap.Offset) = target;
                                     continue;
                                 }
 
                                 // Patch standard component reference
-                                *(Entity*) ((byte*) EntityManager.GetComponentDataRawRW(entity, typeIndex) + remap.Offset) = target;
+                                *(Entity*)((byte*)EntityManager.GetComponentDataRawRW(entity, typeIndex) + remap.Offset) = target;
                             }
                         }
                     }
@@ -143,13 +143,13 @@ namespace Unity.Tiny.Scenes
             base.OnCreate();
 
             m_EntityReferenceRemapQuery = EntityManager.CreateEntityQuery
-            (
-                new EntityQueryDesc
-                {
-                    All = new[] {ComponentType.ReadOnly<EntityReferenceRemap>()},
-                    Options = EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabled
-                }
-            );
+                (
+                    new EntityQueryDesc
+                    {
+                        All = new[] {ComponentType.ReadOnly<EntityReferenceRemap>()},
+                        Options = EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabled
+                    }
+                );
         }
 
         protected override unsafe void OnUpdate()
@@ -202,13 +202,13 @@ namespace Unity.Tiny.Scenes
                             if (TypeManager.IsBuffer(typeIndex))
                             {
                                 // Patch buffer component reference
-                                var ptr = (BufferHeader*) EntityManager.GetComponentDataRawRW(entity, typeIndex);
-                                *(Entity*) (BufferHeader.GetElementPointer(ptr) + remap.Offset) = Entity.Null;
+                                var ptr = (BufferHeader*)EntityManager.GetComponentDataRawRW(entity, typeIndex);
+                                *(Entity*)(BufferHeader.GetElementPointer(ptr) + remap.Offset) = Entity.Null;
                                 continue;
                             }
 
                             // Patch standard component reference
-                            *(Entity*) ((byte*) EntityManager.GetComponentDataRawRW(entity, typeIndex) + remap.Offset) = Entity.Null;
+                            *(Entity*)((byte*)EntityManager.GetComponentDataRawRW(entity, typeIndex) + remap.Offset) = Entity.Null;
                         }
                     }
                 }
@@ -229,7 +229,7 @@ namespace Unity.Tiny.Scenes
                 .WithStructuralChanges()
                 .WithEntityQueryOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabled)
                 .WithStoreEntityQueryInField(ref m_EntityReferenceRemapQuery)
-                .ForEach((Entity e) => 
+                .ForEach((Entity e) =>
                 {
                     EntityManager.RemoveComponent<EntityReferenceRemap>(e);
                 }).Run();

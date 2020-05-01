@@ -12,9 +12,9 @@ namespace Unity.TinyConversion
             {
                 DeclareReferencedAsset(audioSource.clip);
             });
-        }  
+        }
     }
-    
+
     internal class ConvertAudioSource : GameObjectConversionSystem
     {
         protected override void OnUpdate()
@@ -41,16 +41,16 @@ namespace Unity.TinyConversion
                         rolloffMode = (AudioRolloffMode)audioSource.rolloffMode,
                         minDistance = audioSource.minDistance,
                         maxDistance = audioSource.maxDistance
-                    });    
+                    });
                 }
                 else
                 {
                     DstEntityManager.AddComponentData(primaryEntity, new Audio2dPanning()
                     {
                         pan = audioSource.panStereo
-                    });   
+                    });
                 }
-                    
+
                 if ((audioSource.pitch > 0.0f) && (audioSource.pitch != 1.0f))
                 {
                     DstEntityManager.AddComponentData(primaryEntity, new AudioPitch()

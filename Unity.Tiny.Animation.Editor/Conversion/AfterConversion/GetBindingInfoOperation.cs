@@ -52,8 +52,8 @@ namespace Unity.Tiny.Animation.Editor
         protected override bool IsExcluded<TContainer, TValue>(Property<TContainer, TValue> property, ref TContainer container, ref TValue value)
         {
             return m_OperationComplete ||
-                   k_SkipVisiting.Contains(property.DeclaredValueType()) ||
-                   k_SkipVisiting.Contains(container.GetType());
+                k_SkipVisiting.Contains(property.DeclaredValueType()) ||
+                k_SkipVisiting.Contains(container.GetType());
         }
 
         protected override void VisitProperty<TContainer, TValue>(Property<TContainer, TValue> property, ref TContainer container, ref TValue value)
@@ -64,7 +64,7 @@ namespace Unity.Tiny.Animation.Editor
             m_CurrentPropertyPath.PushProperty(property);
 
             var t = value.GetType();
-            
+
             // TODO: Do we support more types?
             if (typeof(IComponentData).IsAssignableFrom(t))
             {
@@ -80,7 +80,7 @@ namespace Unity.Tiny.Animation.Editor
             {
                 property.Visit(this, ref value);
             }
-            
+
             m_CurrentPropertyPath.Pop();
         }
 
@@ -94,8 +94,8 @@ namespace Unity.Tiny.Animation.Editor
             if (TryGetOffsetOfField(m_TargetComponentType, m_CurrentPropertyPath, m_PropertyNameStartIndex, out var offset))
             {
                 m_Success = true;
-                m_FieldOffset = (ushort) offset;
-                m_FieldSize = (ushort) UnsafeUtility.SizeOf(value.GetType());
+                m_FieldOffset = (ushort)offset;
+                m_FieldSize = (ushort)UnsafeUtility.SizeOf(value.GetType());
                 m_StableTypeHash = TypeHash.CalculateStableTypeHash(m_TargetComponentType);
             }
 
@@ -107,12 +107,12 @@ namespace Unity.Tiny.Animation.Editor
             offset = 0;
 
             var currentType = rootType;
-            
+
             for (var i = startIndex; i < propertyPath.PartsCount; i++)
             {
                 if (!currentType.IsValueType)
                     return false;
-                
+
                 var part = propertyPath[i];
 
                 if (part.IsIndex || part.IsKey)
@@ -121,10 +121,10 @@ namespace Unity.Tiny.Animation.Editor
                 }
 
                 var f = currentType.GetField(propertyPath[i].Name, BindingFlags.Instance | BindingFlags.Public);
-                    
+
                 if (f == null)
                     return false;
-                
+
                 offset += UnsafeUtility.GetFieldOffset(f);
                 currentType = f.FieldType;
             }

@@ -336,6 +336,14 @@ namespace Unity.Tiny.Input
         }
 
         /// <summary>
+        /// Returns the current input scroll delta in screen pixels for this frame.
+        /// </summary>
+        public float2 GetInputScrollDelta()
+        {
+            return new float2(m_inputState.scrollDeltaX, m_inputState.scrollDeltaY);
+        }
+
+        /// <summary>
         ///  Convenience function that returns the value from GetInputPosition transformed
         ///  into world space. World space includes the camera transform of the camera
         ///  closest to the input position.
@@ -384,9 +392,8 @@ namespace Unity.Tiny.Input
                     }
                 }
             });
-           return result;
+            return result;
 #endif
-
         }
 
         protected override void OnUpdate()
@@ -417,7 +424,8 @@ namespace Unity.Tiny.Input
 
         private Sensor FindSensor(System.Type type)
         {
-            for (int i = 0; i < m_Sensors.Count; ++i) {
+            for (int i = 0; i < m_Sensors.Count; ++i)
+            {
                 var sensor = m_Sensors[i];
                 if (sensor.ComponentType == type)
                     return sensor;
@@ -524,6 +532,8 @@ namespace Unity.Tiny.Input
         public int mouseY;
         public int mouseDeltaX;
         public int mouseDeltaY;
+        public float scrollDeltaX;
+        public float scrollDeltaY;
 
         public bool hasTouch;
         public NativeList<Touch> touches = new NativeList<Touch>(Allocator.Persistent);

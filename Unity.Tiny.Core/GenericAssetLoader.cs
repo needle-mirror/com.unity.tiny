@@ -19,7 +19,7 @@ namespace Unity.Tiny.GenericAssetLoading
         where L : struct, IComponentData, ISystemStateComponentData
     {
         void StartLoad(EntityManager man, Entity e, ref T thing, ref TN native, ref TS source, ref L loading);
-        LoadResult CheckLoading(IntPtr cppwrapper,EntityManager man, Entity e, ref T thing, ref TN native, ref TS source, ref L loading);
+        LoadResult CheckLoading(IntPtr cppwrapper, EntityManager man, Entity e, ref T thing, ref TN native, ref TS source, ref L loading);
         void FreeNative(EntityManager man, Entity e, ref TN native);
         void FinishLoading(EntityManager man, Entity e, ref T thing, ref TN native, ref L loading);
     }

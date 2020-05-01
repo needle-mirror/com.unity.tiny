@@ -1,4 +1,4 @@
-﻿using UnityEditor;
+using UnityEditor;
 using Unity.Entities.Runtime.Build;
 using Unity.Entities;
 using Unity.Entities.Runtime;
@@ -21,17 +21,17 @@ namespace Unity.Tiny.Authoring
             var startupScenes = EntityManager.AddBuffer<StartupScenes>(configEntity);
 
             var subScenes = projectScene.GetRootGameObjects()
-                       .Select(go => go.GetComponent<Unity.Scenes.SubScene>())
-                       .Where(g => g != null && g);
+                .Select(go => go.GetComponent<Unity.Scenes.SubScene>())
+                .Where(g => g != null && g);
 
             // Add this root scene to StartupScenes
             var projSceneGuid = new GUID(AssetDatabase.AssetPathToGUID(projectScene.path));
 #if false
-                    startupScenes.Add(new StartupScenes()
-                    {
-                        SceneReference = new Unity.Tiny.Scenes.SceneReference()
-                            {SceneGuid = new System.Guid(projSceneGuid.ToString())}
-                    });
+            startupScenes.Add(new StartupScenes()
+            {
+                SceneReference = new Unity.Tiny.Scenes.SceneReference()
+                {SceneGuid = new System.Guid(projSceneGuid.ToString())}
+            });
 #endif
             // Add all our subscenes with AutoLoadScene to StartupScenes
             // (technically not necessary?)
@@ -40,7 +40,7 @@ namespace Unity.Tiny.Authoring
                 .Select(s => new System.Guid(s.SceneGUID.ToString()));
             foreach (var guid in subSceneGuids)
                 startupScenes.Add(new StartupScenes()
-                { SceneReference = new Unity.Entities.Runtime.SceneReference() { SceneGuid = guid } });
+                    { SceneReference = new Unity.Entities.Runtime.SceneReference() { SceneGuid = guid } });
         }
     }
 }

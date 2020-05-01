@@ -20,8 +20,8 @@ namespace Unity.Tiny.Animation
             var commandBuffer = m_ECBSystem.CreateCommandBuffer().ToConcurrent();
             var floatBindingsDependency =
                 Entities
-                   .WithoutBurst() // Burst does not support: TypeManager.GetTypeIndexFromStableTypeHash
-                   .ForEach(
+                    .WithoutBurst() // Burst does not support: TypeManager.GetTypeIndexFromStableTypeHash
+                    .ForEach(
                         (Entity entity, int entityInQueryIndex, ref DynamicBuffer<AnimationBinding> bindings, in DynamicBuffer<AnimationBindingRetarget> bindingRetargetBuffer) =>
                         {
                             for (int i = 0; i < bindingRetargetBuffer.Length; ++i)
@@ -36,8 +36,8 @@ namespace Unity.Tiny.Animation
 
             var pPtrBindingsDependency =
                 Entities
-                   .WithoutBurst() // Burst does not support: TypeManager.GetTypeIndexFromStableTypeHash
-                   .ForEach(
+                    .WithoutBurst() // Burst does not support: TypeManager.GetTypeIndexFromStableTypeHash
+                    .ForEach(
                         (Entity entity, int entityInQueryIndex, ref DynamicBuffer<AnimationPPtrBinding> bindings, in DynamicBuffer<AnimationBindingRetarget> bindingRetargetBuffer) =>
                         {
                             for (int i = 0; i < bindingRetargetBuffer.Length; ++i)

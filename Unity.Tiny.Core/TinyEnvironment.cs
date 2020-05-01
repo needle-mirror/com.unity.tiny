@@ -30,7 +30,7 @@ namespace Unity.Tiny
         {
             // do the cast in here so that if we need to, we can detect
             // precision loss in a single place
-            float deltaTime = (float) deltaTimeDouble;
+            float deltaTime = (float)deltaTimeDouble;
             // update
             float frameDeltaTime;
             if (fixedFrameRateEnabled)

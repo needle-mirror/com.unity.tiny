@@ -118,16 +118,16 @@ namespace Unity.Tiny.IO
     public static class IOService
     {
         #if UNITY_PLATFORM_WINDOWS
-            public const string PathSeparator = "\\";
+        public const string PathSeparator = "\\";
         #else
-            public const string PathSeparator = "/";
+        public const string PathSeparator = "/";
         #endif
-                
+
         [DllImport("lib_unity_tiny_io", EntryPoint = "RequestAsyncRead", CharSet = CharSet.Ansi)]
-        static extern unsafe int RequestAsyncReadImpl([MarshalAs(UnmanagedType.LPStr)]string path);
+        static extern unsafe int RequestAsyncReadImpl([MarshalAs(UnmanagedType.LPStr)] string path);
 
         /// <summary>
-        /// Issues an asynchronous request to read all data from the given filepath or URI. 
+        /// Issues an asynchronous request to read all data from the given filepath or URI.
         /// </summary>
         /// <param name="path"></param>
         /// <returns></returns>
@@ -137,4 +137,3 @@ namespace Unity.Tiny.IO
         }
     }
 }
-

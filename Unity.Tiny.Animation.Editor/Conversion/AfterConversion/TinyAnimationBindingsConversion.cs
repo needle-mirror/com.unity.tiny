@@ -124,7 +124,7 @@ namespace Unity.Tiny.Animation.Editor
                     });
 
                 var clipReferences = DstEntityManager.GetBuffer<TinyAnimationClipRef>(gameObjectEntity);
-                clipReferences.Add(new TinyAnimationClipRef { Value = clipEntity} );
+                clipReferences.Add(new TinyAnimationClipRef { Value = clipEntity});
             }
 
             return anythingToAnimate;

@@ -23,9 +23,9 @@ namespace Unity.Tiny.Animation.Editor
         {
             return Success
                 ? "Successful binding - " +
-                  $"{nameof(StableTypeHash)} = {StableTypeHash.ToString(NumberFormatInfo.InvariantInfo)} - " +
-                  $"{nameof(FieldOffset)} = {FieldOffset.ToString(NumberFormatInfo.InvariantInfo)} - " +
-                  $"{nameof(FieldSize)} = {FieldSize.ToString(NumberFormatInfo.InvariantInfo)}"
+                $"{nameof(StableTypeHash)} = {StableTypeHash.ToString(NumberFormatInfo.InvariantInfo)} - " +
+                $"{nameof(FieldOffset)} = {FieldOffset.ToString(NumberFormatInfo.InvariantInfo)} - " +
+                $"{nameof(FieldSize)} = {FieldSize.ToString(NumberFormatInfo.InvariantInfo)}"
                 : "Binding unsuccessful";
         }
     }

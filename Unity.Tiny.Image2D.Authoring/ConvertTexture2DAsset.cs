@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using Unity.Entities;
 using UnityEditor;
@@ -89,7 +89,7 @@ namespace Unity.TinyConversion
                     break;
             }
 
-            switch(texture.wrapModeU)
+            switch (texture.wrapModeU)
             {
                 case UnityEngine.TextureWrapMode.Clamp:
                     flags |= TextureFlags.UClamp;
@@ -128,8 +128,8 @@ namespace Unity.TinyConversion
             {
                 if ((flags & TextureFlags.MimapEnabled) == TextureFlags.MimapEnabled)
                     throw new ArgumentException($"Mipmapping is incompatible with NPOT textures. Update texture: {texture.name} to be power of two or disable mipmaps on it.");
-                else if((flags & TextureFlags.UClamp) != TextureFlags.UClamp ||
-                    (flags & TextureFlags.VClamp) != TextureFlags.VClamp)
+                else if ((flags & TextureFlags.UClamp) != TextureFlags.UClamp ||
+                         (flags & TextureFlags.VClamp) != TextureFlags.VClamp)
                     throw new ArgumentException($"NPOT textures must use clamp wrap mode. Update texture: {texture.name} to be power of two or use clamp mode on it.");
             }
 
@@ -172,13 +172,13 @@ namespace Unity.TinyConversion
         internal static bool HasAlpha(UnityEngine.TextureFormat format)
         {
             return format == UnityEngine.TextureFormat.Alpha8 ||
-                   format == UnityEngine.TextureFormat.ARGB4444 ||
-                   format == UnityEngine.TextureFormat.ARGB32 ||
-                   format == UnityEngine.TextureFormat.RGBA32 ||
-                   format == UnityEngine.TextureFormat.DXT5 ||
-                   format == UnityEngine.TextureFormat.PVRTC_RGBA2 ||
-                   format == UnityEngine.TextureFormat.PVRTC_RGBA4 ||
-                   format == UnityEngine.TextureFormat.ETC2_RGBA8;
+                format == UnityEngine.TextureFormat.ARGB4444 ||
+                format == UnityEngine.TextureFormat.ARGB32 ||
+                format == UnityEngine.TextureFormat.RGBA32 ||
+                format == UnityEngine.TextureFormat.DXT5 ||
+                format == UnityEngine.TextureFormat.PVRTC_RGBA2 ||
+                format == UnityEngine.TextureFormat.PVRTC_RGBA4 ||
+                format == UnityEngine.TextureFormat.ETC2_RGBA8;
         }
 
         internal static TextureFormatType RealFormatType(UnityEngine.Texture2D texture, TextureSettings settings)
@@ -309,4 +309,3 @@ namespace Unity.TinyConversion
         public uint WebPCompressionQuality;
     }
 }
-

@@ -18,7 +18,7 @@ namespace Unity.TinyConversion
             Assert.AreEqual(sizeof(char), TypeManager.GetTypeInfo<T>().ElementSize);
 
             buf.ResizeUninitialized(s.Length);
-            fixed (char* ptr = s)
+            fixed(char* ptr = s)
             {
                 UnsafeUtility.MemCpy(buf.GetUnsafePtr(), ptr, s.Length * sizeof(char));
             }

@@ -25,12 +25,12 @@ namespace Unity.Tiny.Scenes
             return Guid.GetHashCode();
         }
 
-        public static bool operator ==(SceneGuid left, SceneGuid right)
+        public static bool operator==(SceneGuid left, SceneGuid right)
         {
             return left.Equals(right);
         }
 
-        public static bool operator !=(SceneGuid left, SceneGuid right)
+        public static bool operator!=(SceneGuid left, SceneGuid right)
         {
             return !left.Equals(right);
         }

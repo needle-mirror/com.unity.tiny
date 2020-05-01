@@ -16,11 +16,13 @@ namespace Unity.Tiny.Utils
             if (double.IsPositiveInfinity(value))
                 return "Inf";
             string result = "";
-            if (value < 0.0) {
+            if (value < 0.0)
+            {
                 result += "-";
                 value = -value;
             }
-            if (double.IsNaN(value)) {
+            if (double.IsNaN(value))
+            {
                 result += "NaN";
                 return result;
             }
@@ -30,12 +32,13 @@ namespace Unity.Tiny.Utils
             result += ".";
             value -= dec;
             // remove leading zeros
-            while ((int)(value*10.0) == 0) {
+            while ((int)(value * 10.0) == 0)
+            {
                 value *= 10.0;
                 result += "0";
-                if (value==0.0)
+                if (value == 0.0)
                     return result;
-            } 
+            }
             value *= Math.Pow(10, precision);
             result += ((int)value).ToString();
             return result;

@@ -5,7 +5,7 @@ namespace Unity.Tiny
         /// <summary>
         ///  The value is looped. It goes from the min to the max value. When the value reaches the max value, it starts
         ///  from the beginning. It works in both directions.
-        /// </summary> 
+        /// </summary>
         Loop,
 
         /// <summary>

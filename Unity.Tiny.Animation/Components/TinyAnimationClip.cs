@@ -2,8 +2,8 @@ using Unity.Entities;
 
 namespace Unity.Tiny.Animation
 {
-    public struct UpdateAnimationTimeTag : IComponentData { }
-    public struct ApplyAnimationResultTag : IComponentData { }
+    public struct UpdateAnimationTimeTag : IComponentData {}
+    public struct ApplyAnimationResultTag : IComponentData {}
     public struct TinyAnimationTime : IComponentData
     {
         public float InternalWorkTime;

@@ -22,7 +22,7 @@ namespace Unity.Tiny.Utils
 
             public void Append(string source)
             {
-                fixed (char* sourcePtr = source)
+                fixed(char* sourcePtr = source)
                 {
                     Append(sourcePtr, source.Length);
                 }
@@ -145,6 +145,7 @@ namespace Unity.Tiny.Utils
                 index++;
             }
         }
+
         private unsafe static void ResolveParam(object param, ref StringBuilder builder)
         {
             if (param is int intParam)
@@ -191,7 +192,6 @@ namespace Unity.Tiny.Utils
                 desc = "Entity";
 #endif
                 Format("[{0} {1}:{2}]", new object[] { desc, entity.Index, entity.Version }, ref builder);
-
             }
             else if (param is float2 float2Param)
             {

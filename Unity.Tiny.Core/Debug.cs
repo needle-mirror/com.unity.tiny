@@ -14,7 +14,8 @@ namespace Unity.Tiny
 
         public bool Contains(string s)
         {
-            foreach(var d in data) {
+            foreach (var d in data)
+            {
                 // Temporary fix by validating d != null to bypass IL2CPP bug where string equality does not handle null strings
                 if (d != null && d == s)
                     return true;
@@ -22,7 +23,7 @@ namespace Unity.Tiny
             return false;
         }
 
-        public void Add(string s) 
+        public void Add(string s)
         {
             data[nextIndex] = s;
             nextIndex++;

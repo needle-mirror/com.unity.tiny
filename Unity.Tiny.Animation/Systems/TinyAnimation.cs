@@ -191,7 +191,7 @@ namespace Unity.Tiny.Animation
             var currentClip = world.EntityManager.GetComponentData<TinyAnimationPlayer>(entity).CurrentClip;
 
             return world.EntityManager.HasComponent<UpdateAnimationTimeTag>(currentClip) && // Time is updating
-                   world.EntityManager.HasComponent<ApplyAnimationResultTag>(currentClip);  // Values are applied
+                world.EntityManager.HasComponent<ApplyAnimationResultTag>(currentClip);     // Values are applied
         }
 
         [PublicAPI]
@@ -202,7 +202,7 @@ namespace Unity.Tiny.Animation
             var currentClip = world.EntityManager.GetComponentData<TinyAnimationPlayer>(entity).CurrentClip;
 
             return !world.EntityManager.HasComponent<UpdateAnimationTimeTag>(currentClip) && // Time is not updated
-                   world.EntityManager.HasComponent<ApplyAnimationResultTag>(currentClip);   // Values are still applied
+                world.EntityManager.HasComponent<ApplyAnimationResultTag>(currentClip);      // Values are still applied
         }
 
         [PublicAPI]
@@ -213,7 +213,7 @@ namespace Unity.Tiny.Animation
             var currentClip = world.EntityManager.GetComponentData<TinyAnimationPlayer>(entity).CurrentClip;
 
             return !world.EntityManager.HasComponent<UpdateAnimationTimeTag>(currentClip) && // Time is not updated
-                   !world.EntityManager.HasComponent<ApplyAnimationResultTag>(currentClip);  // Values are not applied
+                !world.EntityManager.HasComponent<ApplyAnimationResultTag>(currentClip);     // Values are not applied
         }
 
         [PublicAPI]

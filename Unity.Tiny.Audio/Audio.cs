@@ -68,7 +68,7 @@ namespace Unity.Tiny.Audio
     /// <summary>
     /// Location of the audio file. <seealso cref="AudioClip"/>
     /// </summary>
-    public struct AudioClipLoadFromFileAudioFile: IBufferElementData
+    public struct AudioClipLoadFromFileAudioFile : IBufferElementData
     {
         public char s;
     }
@@ -153,7 +153,7 @@ namespace Unity.Tiny.Audio
                     .WithAll<AudioSource>()
                     .ForEach((Entity e, ref AudioSourceStart tag) =>
                     {
-                        if(PlaySource(e))
+                        if (PlaySource(e))
                             mgr.RemoveComponent<AudioSourceStart>(e);
                     }).Run();
             }
@@ -162,102 +162,102 @@ namespace Unity.Tiny.Audio
             Entities
                 .WithoutBurst()
                 .ForEach((Entity e, ref AudioSource source) =>
-            {
-                source.isPlaying = IsPlaying(e);
-            }).Run();
+                {
+                    source.isPlaying = IsPlaying(e);
+                }).Run();
 
             // Update volume for sources that are not distance-attenuated.
             Entities
                 .WithoutBurst()
                 .WithNone<AudioDistanceAttenuation>()
                 .ForEach((Entity e, ref AudioSource source) =>
-            {
-                SetVolume(e, source.volume);
-            }).Run();
+                {
+                    SetVolume(e, source.volume);
+                }).Run();
 
             // Update volume for sources that are distance-attenuated.
             Entities
                 .WithoutBurst()
                 .ForEach((Entity e, ref AudioSource source, ref AudioDistanceAttenuation distanceAttenuation) =>
-            {
-                float distanceAttenuationVolume = 0.0f;
-
-                if (foundListener && HasComponent<LocalToWorld>(e))
                 {
-                    LocalToWorld localToWorld = GetComponent<LocalToWorld>(e);
-                    float xDist = localToWorld.Position.x - listenerLocalToWorld.Position.x;
-                    float yDist = localToWorld.Position.y - listenerLocalToWorld.Position.y;
-                    float zDist = localToWorld.Position.z - listenerLocalToWorld.Position.z;
-                    float distanceToListener = math.sqrt(xDist*xDist + yDist*yDist + zDist*zDist);
+                    float distanceAttenuationVolume = 0.0f;
 
-                    if (distanceToListener <= distanceAttenuation.minDistance)
+                    if (foundListener && HasComponent<LocalToWorld>(e))
                     {
-                        distanceAttenuationVolume = 1.0f;
-                    }
-                    else if (distanceToListener > distanceAttenuation.maxDistance)
-                    {
-                        distanceAttenuationVolume = 0.0f;
-                    }
-                    else
-                    {
-                        // Reduce distanceToListener by minDistance because, in our simulation, we start lowering the volume after a sound is min distance away from the listener.
-                        distanceToListener -= distanceAttenuation.minDistance;
+                        LocalToWorld localToWorld = GetComponent<LocalToWorld>(e);
+                        float xDist = localToWorld.Position.x - listenerLocalToWorld.Position.x;
+                        float yDist = localToWorld.Position.y - listenerLocalToWorld.Position.y;
+                        float zDist = localToWorld.Position.z - listenerLocalToWorld.Position.z;
+                        float distanceToListener = math.sqrt(xDist * xDist + yDist * yDist + zDist * zDist);
 
-                        if (distanceAttenuation.rolloffMode == AudioRolloffMode.Linear)
-                        {   
-                            float attenuationRange = distanceAttenuation.maxDistance - distanceAttenuation.minDistance;
-                            distanceAttenuationVolume = 1.0f - (distanceToListener / attenuationRange);
-                        }
-                        else if (distanceAttenuation.rolloffMode == AudioRolloffMode.Logarithmic)
+                        if (distanceToListener <= distanceAttenuation.minDistance)
                         {
-                            // In Unity's original implementation of logarithmic attenuation, the volume is halved every minDistance units. We are copying that approach here.
-                            float volumeHalfLives = distanceToListener / distanceAttenuation.minDistance;
-                            distanceAttenuationVolume = 1.0f / math.pow(2.0f, volumeHalfLives);
+                            distanceAttenuationVolume = 1.0f;
+                        }
+                        else if (distanceToListener > distanceAttenuation.maxDistance)
+                        {
+                            distanceAttenuationVolume = 0.0f;
+                        }
+                        else
+                        {
+                            // Reduce distanceToListener by minDistance because, in our simulation, we start lowering the volume after a sound is min distance away from the listener.
+                            distanceToListener -= distanceAttenuation.minDistance;
+
+                            if (distanceAttenuation.rolloffMode == AudioRolloffMode.Linear)
+                            {
+                                float attenuationRange = distanceAttenuation.maxDistance - distanceAttenuation.minDistance;
+                                distanceAttenuationVolume = 1.0f - (distanceToListener / attenuationRange);
+                            }
+                            else if (distanceAttenuation.rolloffMode == AudioRolloffMode.Logarithmic)
+                            {
+                                // In Unity's original implementation of logarithmic attenuation, the volume is halved every minDistance units. We are copying that approach here.
+                                float volumeHalfLives = distanceToListener / distanceAttenuation.minDistance;
+                                distanceAttenuationVolume = 1.0f / math.pow(2.0f, volumeHalfLives);
+                            }
                         }
                     }
-                }
 
-                distanceAttenuation.volume = distanceAttenuationVolume;
-                SetVolume(e, source.volume * distanceAttenuationVolume);
-            }).Run();
+                    distanceAttenuation.volume = distanceAttenuationVolume;
+                    SetVolume(e, source.volume * distanceAttenuationVolume);
+                }).Run();
 
             // Update 2d panning.
             Entities
                 .WithoutBurst()
                 .ForEach((Entity e, ref AudioSource source, ref Audio2dPanning panning) =>
-            {
-                SetPan(e, panning.pan);
-            }).Run();
+                {
+                    SetPan(e, panning.pan);
+                }).Run();
 
             // Update 3d panning.
             Entities
                 .WithoutBurst()
                 .ForEach((Entity e, ref AudioSource source, ref Audio3dPanning panning) =>
-            {
-                float pan = 0.0f;
-
-                if (foundListener && HasComponent<LocalToWorld>(e))
                 {
-                    LocalToWorld localToWorld = GetComponent<LocalToWorld>(e);
-                    float3 listenerRight = math.normalize(listenerLocalToWorld.Right);
-                    float3 listenerToSound = math.normalize(localToWorld.Position - listenerLocalToWorld.Position);
-                    pan = math.dot(listenerRight, listenerToSound);
-                }
+                    float pan = 0.0f;
 
-                panning.pan = pan;
-                SetPan(e, pan);
-            }).Run();
+                    if (foundListener && HasComponent<LocalToWorld>(e))
+                    {
+                        LocalToWorld localToWorld = GetComponent<LocalToWorld>(e);
+                        float3 listenerRight = math.normalize(listenerLocalToWorld.Right);
+                        float3 listenerToSound = math.normalize(localToWorld.Position - listenerLocalToWorld.Position);
+                        pan = math.dot(listenerRight, listenerToSound);
+                    }
+
+                    panning.pan = pan;
+                    SetPan(e, pan);
+                }).Run();
 
             // Update pitch.
             Entities
                 .WithoutBurst()
                 .ForEach((Entity e, ref AudioSource source, ref AudioPitch pitchEffect) =>
-            {
-                if (pitchEffect.pitch > 0.0f)
-                    SetPitch(e, pitchEffect.pitch);
-                else
-                    SetPitch(e, 1.0f);
-            }).Run();
+                {
+                    if (pitchEffect.pitch > 0.0f)
+                        SetPitch(e, pitchEffect.pitch);
+                    else
+                        SetPitch(e, 1.0f);
+                }).Run();
         }
     }
 
@@ -298,7 +298,7 @@ namespace Unity.Tiny.Audio
     }
 
     /// <summary>
-    ///  Attach an AudioListener component to an entity with a LocalToWorld component. 3d 
+    ///  Attach an AudioListener component to an entity with a LocalToWorld component. 3d
     ///  audio panning and distance-attenuation will be calculated relative to this entity's
     ///  position and orientation.
     /// </summary>
@@ -410,7 +410,7 @@ namespace Unity.Tiny.Audio
     /// </code>
     /// </example>
     /// </remarks>
-    public struct Audio2dPanning: IComponentData
+    public struct Audio2dPanning : IComponentData
     {
         /// <summary>
         ///  Specifies the audio clip's playback stereo pan. Values can range from -1..1.
@@ -419,16 +419,16 @@ namespace Unity.Tiny.Audio
     }
 
     /// <summary>
-    ///  An Audio3dPanning component controls an AudioSource's 3d panning. 
+    ///  An Audio3dPanning component controls an AudioSource's 3d panning.
     /// </summary>
     /// <remarks>
-    ///  The AudioSystem automatically adjusts the associated AudioSource's stereo panning 
+    ///  The AudioSystem automatically adjusts the associated AudioSource's stereo panning
     ///  value based on the AudioSource's position relative to the AudioListener.
     /// </remarks>
     public struct Audio3dPanning : IComponentData
-    { 
+    {
         /// <summary>
-        /// Specifies the audio clip's playback stereo pan. Values can range from -1..1. 
+        /// Specifies the audio clip's playback stereo pan. Values can range from -1..1.
         /// This value is set automatically by the AudioSystem.
         /// </summary>
         public float pan { get; internal set; }
@@ -438,12 +438,12 @@ namespace Unity.Tiny.Audio
     ///  An AudioDistanceAttenuation component adjusts an AudioSource's volume.
     /// </summary>
     /// <remarks>
-    ///  The AudioSystem automatically adjusts the associated AudioSource's volume 
+    ///  The AudioSystem automatically adjusts the associated AudioSource's volume
     ///  based on the AudioSource's distance from the AudioListener and the properties
-    ///  in this component. When an AudioSource is less than minDistance away from the 
+    ///  in this component. When an AudioSource is less than minDistance away from the
     ///  AudioListener, the volume is not changed. When an AudioSource is further than
     ///  maxDistance away from the AudioListener, the volume is zero. The volume parameter
-    ///  is set internally by the AudioSystem and is the last calculated distance-attenuation 
+    ///  is set internally by the AudioSystem and is the last calculated distance-attenuation
     ///  volume.
     /// <example>
     /// Minimal code to play an AudioClip with 3d panning and distance-attenuation:
@@ -491,7 +491,7 @@ namespace Unity.Tiny.Audio
     /// </example>
     /// </remarks>
     public struct AudioPitch : IComponentData
-    {     
+    {
         public float pitch;
     }
 }

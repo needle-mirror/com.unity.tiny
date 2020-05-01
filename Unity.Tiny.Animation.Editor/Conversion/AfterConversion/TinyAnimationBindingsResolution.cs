@@ -17,7 +17,7 @@ namespace Unity.Tiny.Animation.Editor
                     ComponentType.ReadOnly<AnimationBindingName>(),
                     ComponentType.ReadWrite<AnimationBindingRetarget>()
                 },
-                Any = new []
+                Any = new[]
                 {
                     ComponentType.ReadWrite<AnimationBinding>(),
                     ComponentType.ReadWrite<AnimationPPtrBinding>()
@@ -36,7 +36,7 @@ namespace Unity.Tiny.Animation.Editor
 
                     var isFloatAnimation = DstEntityManager.HasComponent<AnimationBinding>(entity);
                     var floatBindingBuffer = isFloatAnimation ? DstEntityManager.GetBuffer<AnimationBinding>(entity)     : default;
-                    var pPtrBindingBuffer = !isFloatAnimation ? DstEntityManager.GetBuffer<AnimationPPtrBinding>(entity) : default;
+                    var pPtrBindingBuffer = !isFloatAnimation? DstEntityManager.GetBuffer<AnimationPPtrBinding>(entity) : default;
 
                     for (int i = bindingNameBuffer.Length - 1; i >= 0; --i)
                     {

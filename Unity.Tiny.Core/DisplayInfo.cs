@@ -127,17 +127,17 @@ namespace Unity.Tiny
         ///  The default and recommended color space is Linear, where shader math and belnding is correct.
         ///  In linear space srgb encodings are properly handled, and the backbuffer is srgb.
         ///  Gamma space disables all srgb de and encoding.
-        ///  Using gamma space is required to run on older devices and some web browsers that do not 
-        ///  support srgb textures. 
+        ///  Using gamma space is required to run on older devices and some web browsers that do not
+        ///  support srgb textures.
         /// </summary>
         public ColorSpace colorSpace;
 
         /// <summary>
-        /// Color to clear the background when rendering at fixed aspect 
+        /// Color to clear the background when rendering at fixed aspect
         /// This color is the "black bars" where there is no rendering and the rendering aspect is not the same
-        /// as the display aspect. 
+        /// as the display aspect.
         /// Cameras still clear with their own color
         /// </summary>
-        public Color backgroundBorderColor;  // linear color 
+        public Color backgroundBorderColor;  // linear color
     }
 }
