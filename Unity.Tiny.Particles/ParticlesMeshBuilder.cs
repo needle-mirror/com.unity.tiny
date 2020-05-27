@@ -34,6 +34,7 @@ namespace Unity.Tiny.Particles
         {
             EntityCommandBuffer ecb = new EntityCommandBuffer(Allocator.TempJob);
             ComponentDataFromEntity<LocalToWorld> localToWorldGetter = GetComponentDataFromEntity<LocalToWorld>(true);
+            ComponentDataFromEntity<ParticleColor> colorGetter = GetComponentDataFromEntity<ParticleColor>(true);
 
             NativeArray<Entity> entities = particleRenderersQuery.ToEntityArray(Allocator.TempJob);
             foreach (var entity in entities)
@@ -73,6 +74,7 @@ namespace Unity.Tiny.Particles
                         .WithSharedComponentFilter(emitterReferenceForParticles)
                         .ForEach((Entity eParticle, Particle particle) =>
                         {
+                            var color = colorGetter[eParticle].color;
                             var localToWorld = localToWorldGetter[eParticle].Value;
                             var localToWorldRS = new float3x3(localToWorld.c0.xyz, localToWorld.c1.xyz, localToWorld.c2.xyz);
                             float3x3 modelInverseTransposeRS = math.transpose(math.inverse(localToWorldRS));
@@ -89,6 +91,7 @@ namespace Unity.Tiny.Particles
                                 vertex.Normal = math.transform(modelInverseTranspose, vertex.Normal);
                                 vertex.Tangent = math.transform(modelInverseTranspose, vertex.Tangent);
                                 vertex.BillboardPos = billboarded ? localToWorld.c3.xyz : float3.zero;
+                                vertex.Albedo_Opacity = color;
                                 vertices[vertexOffset + i] = vertex;
                                 minMaxAABB.Encapsulate(vertex.Position + vertex.BillboardPos);
                             }
@@ -127,6 +130,7 @@ namespace Unity.Tiny.Particles
                         .WithSharedComponentFilter(emitterReferenceForParticles)
                         .ForEach((Entity eParticle, Particle particle) =>
                         {
+                            var color = colorGetter[eParticle].color;
                             var localToWorld = localToWorldGetter[eParticle].Value;
                             var localToWorldRS = new float3x3(localToWorld.c0.xyz, localToWorld.c1.xyz, localToWorld.c2.xyz);
 
@@ -138,6 +142,7 @@ namespace Unity.Tiny.Particles
                             {
                                 SimpleVertex vertex = particleVertices[i];
                                 vertex.Position = math.transform(model, vertex.Position);
+                                vertex.Color = color;
                                 vertex.BillboardPos = billboarded ? localToWorld.c3.xyz : float3.zero;
                                 vertices[vertexOffset + i] = vertex;
                                 minMaxAABB.Encapsulate(vertex.Position + vertex.BillboardPos);

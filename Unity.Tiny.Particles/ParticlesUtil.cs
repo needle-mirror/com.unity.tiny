@@ -3,25 +3,16 @@ using Unity.Mathematics;
 
 namespace Unity.Tiny.Particles
 {
-    public static class ParticlesUtil
+    internal static class ParticlesUtil
     {
-        private static Random m_rand = new Random(1);
-
-        public static float Random01()
+        internal static float Random01(this ref Random rand)
         {
-            return m_rand.NextFloat(0.0f, 1.0f);
+            return rand.NextFloat(0.0f, 1.0f);
         }
 
-        public static float2 RandomPointInRect(Rect rect)
+        internal static float RandomRange(this ref Random rand, Range range)
         {
-            return m_rand.NextFloat2(
-                new float2(rect.x, rect.y),
-                new float2(rect.x + rect.width, rect.y + rect.height));
-        }
-
-        public static float RandomRange(Range range)
-        {
-            return m_rand.NextFloat(range.start, range.end);
+            return rand.NextFloat(range.start, range.end);
         }
 
         internal static bool EmitterIsValid(EntityManager mgr, Entity eEmitter)

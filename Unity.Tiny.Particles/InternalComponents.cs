@@ -6,6 +6,9 @@ namespace Unity.Tiny.Particles
     /// <summary>
     /// Modifies the position of the particle every frame.
     /// </summary>
+    /// <remarks>
+    /// Should be placed next to <see cref="Particle"/>
+    /// </remarks>
     struct ParticleVelocity : IComponentData
     {
         internal float3 velocity;
@@ -17,16 +20,20 @@ namespace Unity.Tiny.Particles
         internal float angularVelocity;
     }
 
-    struct ParticleLifetimeColor : IComponentData
-    {
-        internal Color initialColor;
-    }
-
     struct ParticleLifetimeScale : IComponentData
     {
         internal float3 initialScale;
     }
 #endif
+
+    /// <remarks>
+    /// Should be placed next to <see cref="Particle"/>
+    /// </remarks>
+    struct ParticleColor : IComponentData
+    {
+        internal float4 color;
+    }
+
     struct BurstEmissionInternal : IComponentData
     {
         /// <summary> If 0.0, then the next burst should be emitted. </summary>
@@ -45,6 +52,23 @@ namespace Unity.Tiny.Particles
         internal float particleSpawnCooldown;
         internal uint numParticles;
         internal Entity particleRenderer;
+
+        /// <summary> Fractional value for current progress through duration </summary>
+        internal float t;
+
+        /// <summary> Current remainder of start delay in seconds </summary>
+        internal float remainingDelay;
+    }
+
+    /// <summary>
+    /// For generating random values for an emitter
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Random"/> maintains internal state so this component must be set on the emitter entity any time it is used
+    /// </remarks>
+    struct Rng : IComponentData
+    {
+        internal Random rand;
     }
 
     /// <summary>

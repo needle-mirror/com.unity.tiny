@@ -4,6 +4,11 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [0.26.0] - 2020-05-15
+* Fixes issue where `ICustomBootstrap` instances would not be used while setting up the `UnityInstance`.
+* Removed expired type `DefaultTinyWorldInitialization`.
+* Updated minimum Unity Editor version to 2019.3.12f1 (84b23722532d)
+
 ## [0.25.0] - 2020-04-30
 * Added profiler marker integration to Tiny renderer and enable support in other DOTS packages through ENABLE_PROFILER define.
 * Fix entity leak with particle emitters with non-attached particles

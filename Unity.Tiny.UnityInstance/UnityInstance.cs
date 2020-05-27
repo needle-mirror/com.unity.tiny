@@ -35,15 +35,14 @@ namespace Unity.Tiny
 
         private UnityInstance()
         {
-            m_World = DefaultWorldInitialization.InitializeWorld("Default World");
-            DefaultWorldInitialization.AddSystemsToRootLevelSystemGroups(m_World);
+            m_World = DefaultWorldInitialization.Initialize("Default World");
 #if UNITY_DOTSPLAYER_EXPERIMENTAL_FIXED_SIM
             TinyInternals.SetSimFixedRate(m_World, 1.0f / 60.0f);
 #endif
             m_BootPhase = BootPhase.Booting;
             m_Environment = m_World.GetOrCreateSystem<TinyEnvironment>();
             m_EntityManager = m_World.EntityManager;
-            m_SceneStreamingSystem = m_World.GetExistingSystem<SceneStreamingSystem>();
+            m_SceneStreamingSystem = m_World.GetOrCreateSystem<SceneStreamingSystem>();
         }
 
         public static UnityInstance Initialize()

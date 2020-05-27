@@ -417,6 +417,57 @@ namespace Unity.Tiny.Input
             }
         }
 
+        private int m_firstTouch = -1;
+        private bool m_mouseInitDelta = true;
+        protected void MouseEmulateReset()
+        {
+            m_firstTouch = -1;
+            m_mouseInitDelta = true;
+        }
+
+        protected void ProcessTouch(int id, TouchState state, int x, int y)
+        {
+            m_inputState.TouchEvent(id, state, x, y);
+            // simulate mouse from touch as well
+            if (!m_inputState.hasMouse)
+            {
+                if (state == TouchState.Began)
+                {
+                    if (m_firstTouch == -1)
+                    {
+                        m_firstTouch = id;
+                        m_inputState.MouseDown(0);
+                    }
+                }
+                else if (state == TouchState.Ended || state == TouchState.Canceled)
+                {
+                    if (m_firstTouch == id)
+                    {
+                        m_inputState.MouseUp(0);
+                        m_firstTouch = -1;
+                        m_mouseInitDelta = true;
+                    }
+                }
+
+                if (m_firstTouch == id)
+                {
+                    if (m_mouseInitDelta)
+                    {
+                        m_inputState.mouseDeltaX = 0;
+                        m_inputState.mouseDeltaY = 0;
+                        m_mouseInitDelta = false;
+                    }
+                    else
+                    {
+                        m_inputState.mouseDeltaX += x - m_inputState.mouseX;
+                        m_inputState.mouseDeltaY += y - m_inputState.mouseY;
+                    }
+                    m_inputState.mouseX = x;
+                    m_inputState.mouseY = y;
+                }
+            }
+        }
+
         // update this structure in implementations
         protected InputData m_inputState;
 

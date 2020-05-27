@@ -18872,7 +18872,7 @@ ma_result ma_context_init__coreaudio(const ma_context_config* pConfig, ma_contex
         AVAudioSession* pAudioSession = [AVAudioSession sharedInstance];
         ma_assert(pAudioSession != NULL);
 
-        [pAudioSession setCategory: AVAudioSessionCategoryPlayAndRecord error:nil];
+        [pAudioSession setCategory: AVAudioSessionCategorySoloAmbient error:nil];
         
         /* By default we want miniaudio to use the speakers instead of the receiver. In the future this may be customizable. */
         ma_bool32 useSpeakers = MA_TRUE;

@@ -24,6 +24,9 @@ using Unity.Tiny.Rendering;
 /// </summary>
 namespace Unity.Tiny.Particles
 {
+    /// <summary>
+    /// An inclusive range of values. <see cref="start"/> should be less than or equal to <see cref="end"/>.
+    /// </summary>
     public struct Range
     {
         public float start;
@@ -57,6 +60,9 @@ namespace Unity.Tiny.Particles
         /// </summary>
         public Entity particle;
 
+        /// <summary>The length of time the system runs in seconds.</summary>
+        public float duration;
+
         /// <summary>Maximum number of particles to emit.</summary>
         public uint maxParticles;
 
@@ -80,62 +86,95 @@ namespace Unity.Tiny.Particles
     }
 
     /// <summary>
-    ///  Spawns particles inside of a rectangular area on the X/Y plane.
+    ///  Spawns particles inside of a unit rectangle centered at the origin on the X/Y plane.
     /// </summary>
-    public struct EmitterRectangleSource : IComponentData
-    {
-        /// <summary>
-        ///  Particles are emitted from a random spot inside this rectangle, with
-        ///  0,0 of the rect at the Emitter's position.
-        /// </summary>
-        public Rect rect;
-
-        /// <summary>The initial speed of the particles.</summary>
-        public Range speed;
-    }
+    /// <remarks>
+    /// Should be placed next to <see cref="ParticleEmitter"/>
+    /// </remarks>
+    public struct EmitterRectangleSource : IComponentData {}
 
     /// <summary>
-    ///  Spawns particles in a cone. Particles are emitted from the base of the cone,
-    ///  which is a circle on the X/Z plane. The angle and speed parameters define
-    ///  the initial particle velocity.
+    ///  Spawns particles in a cone. Particles are emitted from the base of the cone, which is a circle on the X/Z plane.
     /// </summary>
+    /// <remarks>
+    /// Should be placed next to <see cref="ParticleEmitter"/>
+    /// </remarks>
     public struct EmitterConeSource : IComponentData
     {
         /// <summary>The radius in which the particles are being spawned.</summary>
         public float radius;
 
-        /// <summary>The angle of the cone in degrees.</summary>
+        /// <summary>The angle of the cone in degrees. The angle value will be clamped to range [0, 90].</summary>
         public float angle;
-
-        /// <summary>The initial speed of the particles.</summary>
-        public Range speed;
     }
 
     /// <summary>
     ///  Spawns particles inside a circle on the X/Y plane.
     /// </summary>
+    /// <remarks>
+    /// Should be placed next to <see cref="ParticleEmitter"/>
+    /// </remarks>
     public struct EmitterCircleSource : IComponentData
     {
         /// <summary>The radius of the circle.</summary>
         public float radius;
+    }
 
-        /// <summary>The initial speed of the particles.</summary>
+    /// <summary>
+    /// Spawns particles inside a sphere volume.
+    /// </summary>
+    /// <remarks>
+    /// Should be placed next to <see cref="ParticleEmitter"/>
+    /// </remarks>
+    public struct EmitterSphereSource : IComponentData
+    {
+        /// <summary>The radius of the sphere.</summary>
+        public float radius;
+    }
+
+    /// <summary>
+    /// Spawns particles inside a hemisphere volume.
+    /// </summary>
+    /// <remarks>
+    /// Should be placed next to <see cref="ParticleEmitter"/>
+    /// </remarks>
+    public struct EmitterHemisphereSource : IComponentData
+    {
+        /// <summary>The radius of the hemisphere.</summary>
+        public float radius;
+    }
+
+    /// <summary>
+    /// Sets the initial speed of the source particle by a random value in the range
+    /// specified by <see cref="speed"/>
+    /// </summary>
+    /// <remarks>
+    /// Should be placed next to <see cref="ParticleEmitter"/>
+    /// </remarks>
+    public struct EmitterInitialSpeed : IComponentData
+    {
         public Range speed;
     }
 
     /// <summary>
-    ///  Multiplies the scale of the source particle by a random value in the range
-    ///  specified by <see cref="scale"/>
+    /// Multiplies the scale of the source particle by a random value in the range
+    /// specified by <see cref="scale"/>
     /// </summary>
+    /// <remarks>
+    /// Should be placed next to <see cref="ParticleEmitter"/>
+    /// </remarks>
     public struct EmitterInitialScale : IComponentData
     {
         public Range scale;
     }
 
     /// <summary>
-    ///  Multiplies the X, Y, and Z scales of the source particle by a random values in the ranges
-    ///  specified by <see cref="scaleX"/>, <see cref="scaleY"/>, and <see cref="scaleZ"/> respectively
+    /// Multiplies the X, Y, and Z scales of the source particle by random values in the ranges
+    /// specified by <see cref="scaleX"/>, <see cref="scaleY"/>, and <see cref="scaleZ"/> respectively
     /// </summary>
+    /// <remarks>
+    /// Should be placed next to <see cref="ParticleEmitter"/>
+    /// </remarks>
     public struct EmitterInitialNonUniformScale : IComponentData
     {
         public Range scaleX;
@@ -145,47 +184,109 @@ namespace Unity.Tiny.Particles
 
 
     /// <summary>
-    ///  Sets the initial rotation on the Z axis for particles to a random value
-    ///  in the range specified by <see cref="angle"/>
+    /// Sets the initial rotation for particles to a random value in the range specified by <see cref="angle"/>.
+    /// This axis of rotation is determined from the particle's direction of travel.
     /// </summary>
+    /// <remarks>
+    /// Should be placed next to <see cref="ParticleEmitter"/>
+    /// </remarks>
     public struct EmitterInitialRotation : IComponentData
     {
+        /// <summary>Angle of rotation in radians.</summary>
         public Range angle;
     }
 
     /// <summary>
-    ///  Sets the initial rotations on the X, Y, and Z axes for particles to a random values in the ranges
-    ///  specified by <see cref="angleX"/>, <see cref="angleX"/>, and <see cref="angleX"/> respectively
+    /// Sets the initial rotations on the X, Y, and Z axes for particles to a random values in the ranges
+    /// specified by <see cref="angleX"/>, <see cref="angleX"/>, and <see cref="angleX"/> respectively
     /// </summary>
+    /// <remarks>
+    /// Should be placed next to <see cref="ParticleEmitter"/>
+    /// </remarks>
     public struct EmitterInitialNonUniformRotation : IComponentData
     {
+        /// <summary>Angle of rotation about the X axis in radians.</summary>
         public Range angleX;
+
+        /// <summary>Angle of rotation about the Y axis in radians.</summary>
         public Range angleY;
+
+        /// <summary>Angle of rotation about the Z axis in radians.</summary>
         public Range angleZ;
     }
+
+    /// <summary>
+    /// Moves particle spawn position by a random amount, up to <see cref="Value"/>.
+    /// When <see cref="Value"/> is 0, this has no effect.
+    /// </summary>
+    /// <remarks>
+    /// Should be placed next to <see cref="ParticleEmitter"/>
+    /// </remarks>
+    public struct RandomizePosition : IComponentData
+    {
+        /// <summary>Must be in range [0.0, 1.0].</summary>
+        public float Value;
+    }
+
+    /// <summary>
+    /// Blends particle directions of travel towards a random direction using <see cref="Value"/>.
+    /// When <see cref="Value"/> is 0, this has no effect.
+    /// When <see cref="Value"/> is 1, the particle direction is completely random.
+    /// </summary>
+    /// <remarks>
+    /// Should be placed next to <see cref="ParticleEmitter"/>
+    /// </remarks>
+    public struct RandomizeDirection : IComponentData
+    {
+        /// <summary>Must be in range [0.0, 1.0].</summary>
+        public float Value;
+    }
+
+    /// <summary>
+    /// An emitter with this component repeats its particle simulation each time it reaches the end of its duration time.
+    /// </summary>
+    /// <remarks>
+    /// Should be placed next to <see cref="ParticleEmitter"/>
+    /// </remarks>
+    public struct Looping : IComponentData {}
+
+    /// <summary>
+    /// Delays the particle system from starting emission by a random value in the range specified by <see cref="delay"/>.
+    /// </summary>
+    /// <remarks>
+    /// Should be placed next to <see cref="ParticleEmitter"/>
+    /// </remarks>
+    public struct StartDelay : IComponentData
+    {
+        /// <summary>Delay time in seconds.</summary>
+        public Range delay;
+    }
+
+    /// <summary>
+    /// Sets the initial color of the particles by linearly interpolating between <see cref="colorMin"/> and <see cref="colorMax"/>
+    /// by a random value between 0.0 and 1.0
+    /// </summary>
+    /// <remarks>
+    /// Should be placed next to <see cref="ParticleEmitter"/>
+    /// </remarks>
+    public struct InitialColor : IComponentData
+    {
+        public float4 colorMin;
+        public float4 colorMax;
+    }
+
+    /// <summary>
+    /// Allows for specifying the seed for all randomness used in the emitter's particle simulation so unique, repeatable effects can be created.
+    /// </summary>
+    /// <remarks>
+    /// Should be placed next to <see cref="ParticleEmitter"/>
+    /// </remarks>
+    public struct RandomSeed : IComponentData
+    {
+        public uint seed;
+    }
+
 #if false
-    /// <summary>
-    ///  Sets the initial velocity for particles.
-    /// </summary>
-    public struct EmitterInitialVelocity : IComponentData
-    {
-        public float3 velocity;
-    }
-
-    /// <summary>
-    ///  Sets the initial color of the particles by multiplying the color of the
-    ///  source particle by a random value obtained by sampling curve between time
-    ///  0.0 and 1.0.
-    /// </summary>
-    public struct EmitterInitialColor : IComponentData
-    {
-        /// <summary>
-        /// Entity with the [Bezier|Linear|Step]CurveColor component.
-        /// The color is choosen randomly by sampling the curve between time 0.0 and 1.0.
-        /// </summary>
-        public Entity curve;
-    }
-
     /// <summary>
     ///  Modifies the SpriteRenderer's color by multiplying it's initial color by
     ///  curve. The value of curve at time 0.0 defines the particle's color at the
@@ -248,6 +349,9 @@ namespace Unity.Tiny.Particles
     ///  event where a number of particles are all emitted at the same time. A cycle
     ///  is a single occurrence of a burst.
     /// </summary>
+    /// <remarks>
+    /// Should be placed next to <see cref="ParticleEmitter"/>
+    /// </remarks>
     public struct BurstEmission : IComponentData
     {
         /// <summary> How many particles in every cycle. </summary>
@@ -261,27 +365,44 @@ namespace Unity.Tiny.Particles
     }
 
     /// <summary>
-    /// An emitter with this component has billboarded particles
+    /// An emitter with this component has particles that always face the camera.
     /// </summary>
+    /// <remarks>
+    /// Should be placed next to <see cref="ParticleEmitter"/>
+    /// </remarks>
     public struct Billboarded : IComponentData {}
 
+    /// <summary>
+    /// Mesh used for each particle.
+    /// </summary>
+    /// <remarks>
+    /// Should be placed next to <see cref="ParticleEmitter"/>
+    /// </remarks>
     public struct ParticleMesh : IComponentData
     {
         public Entity mesh;
     }
 
+    /// <summary>
+    /// Material used to render the particles.
+    /// </summary>
+    /// <remarks>
+    /// Should be placed next to <see cref="ParticleEmitter"/>
+    /// </remarks>
     public struct ParticleMaterial : IComponentData
     {
         public Entity material;
     }
 
     /// <summary>
-    ///  A system that updates all particle emitters
+    /// System that updates all particle emitters
     /// </summary>
     [UpdateInGroup(typeof(SimulationSystemGroup))]
     [UpdateBefore(typeof(TransformSystemGroup))]
     public class EmitterSystem : SystemBase
     {
+        static Random m_rand = new Random(1);
+
         private void UpdateNewEmitters(EntityManager mgr)
         {
             Entities
@@ -298,11 +419,25 @@ namespace Unity.Tiny.Particles
                     mgr.AddComponentData(emitterInternal.particleTemplate, new Particle());
                     var position = new Translation { Value = float3.zero };
                     mgr.AddComponentData(emitterInternal.particleTemplate, position);
+                    mgr.AddComponentData(emitterInternal.particleTemplate, new ParticleColor { color = new float4(1) });
                     mgr.AddSharedComponentData(emitterInternal.particleTemplate, new EmitterReferenceForParticles { emitter = e });
 
                     emitterInternal.particleRenderer = CreateParticleRenderer(mgr, e, particleEmitter);
 
+                    // if duration is invalid then set to default
+                    if (particleEmitter.duration <= 0.0f)
+                        particleEmitter.duration = 5.0f;
+
+                    uint seed = mgr.HasComponent<RandomSeed>(e) ? mgr.GetComponentData<RandomSeed>(e).seed : m_rand.NextUInt();
+                    if (seed == 0) // Zero seed is invalid
+                        seed = 1;
+                    Random rand = new Random(seed);
+
+                    if (mgr.HasComponent<StartDelay>(e))
+                        emitterInternal.remainingDelay = rand.RandomRange(mgr.GetComponentData<StartDelay>(e).delay);
+
                     mgr.AddComponentData(e, emitterInternal);
+                    mgr.AddComponentData(e, new Rng { rand = rand });
                 }).Run();
 
             CleanupBurstEmitters(mgr);
@@ -479,34 +614,19 @@ namespace Unity.Tiny.Particles
     }
 
     /// <summary>
-    ///  A system that handles spawning new particles for all emitters
+    ///  System that handles spawning new particles for all emitters
     /// </summary>
     [UpdateInGroup(typeof(SimulationSystemGroup))]
     [UpdateAfter(typeof(EmitterSystem))]
     [UpdateBefore(typeof(TransformSystemGroup))]
     public class ParticleSpawnSystem : SystemBase
     {
-        private void SpawnParticles(EntityManager mgr, float deltaTime)
-        {
-            EntityCommandBuffer ecb = new EntityCommandBuffer(Allocator.Temp);
-
-            Entities
-                .WithoutBurst()
-                .WithAll<ParticleEmitter, ParticleEmitterInternal>()
-                .ForEach((Entity emitter) =>
-                {
-                    SpawnParticles(mgr, ecb, deltaTime, emitter);
-                }).Run();
-
-            ecb.Playback(mgr);
-            ecb.Dispose();
-        }
-
         const int kCycleInfinitely = 0;
         private void SpawnParticles(EntityManager mgr, EntityCommandBuffer ecb, float deltaTime, Entity emitter)
         {
             var particleEmitter = mgr.GetComponentData<ParticleEmitter>(emitter);
             var particleEmitterInternal = mgr.GetComponentData<ParticleEmitterInternal>(emitter);
+            Random rand = mgr.GetComponentData<Rng>(emitter).rand;
 
             // For debug
             //Debug.LogFormatAlways("Emitter: {0}, Particles: {1}, Max: {2}, Emit Rate: {3}, Lifetime: {4}", emitter.Index, (int)particleEmitterInternal.numParticles, (int)particleEmitter.maxParticles, particleEmitter.emitRate.end, particleEmitter.lifetime.end);
@@ -523,7 +643,7 @@ namespace Unity.Tiny.Particles
                     burstEmissionInternal.cooldown -= deltaTime;
                     if (burstEmissionInternal.cooldown < 0.0f)
                     {
-                        burstParticleCount = (uint)m_rand.NextInt((int)burstEmission.count.start, (int)burstEmission.count.end);
+                        burstParticleCount = (uint)rand.NextInt((int)burstEmission.count.start, (int)burstEmission.count.end);
                         if (burstEmission.cycles != kCycleInfinitely)
                             burstEmissionInternal.cycle++;
                         burstEmissionInternal.cooldown = burstEmission.interval;
@@ -538,7 +658,7 @@ namespace Unity.Tiny.Particles
             if (particleEmitter.emitRate.start >= 0.0f && particleEmitter.emitRate.end > 0.0f)
             {
                 particleEmitterInternal.particleSpawnCooldown += deltaTime;
-                float particleSpawnDelay = 1.0f / ParticlesUtil.RandomRange(particleEmitter.emitRate);
+                float particleSpawnDelay = 1.0f / rand.RandomRange(particleEmitter.emitRate);
 
                 particlesToSpawn = (uint)(particleEmitterInternal.particleSpawnCooldown / particleSpawnDelay);
 
@@ -554,7 +674,10 @@ namespace Unity.Tiny.Particles
                 particlesToSpawn = maxParticlesToSpawn;
 
             if (particlesToSpawn == 0)
+            {
+                mgr.SetComponentData(emitter, new Rng { rand = rand });
                 return;
+            }
 
             var newParticles = new NativeArray<Entity>((int)particlesToSpawn, Allocator.Persistent);
 
@@ -566,7 +689,7 @@ namespace Unity.Tiny.Particles
 
             ecb.AddComponent(particleEmitterInternal.particleTemplate, new Disabled());
 
-            InitTime(mgr, ecb, deltaTime, particleEmitter.lifetime, newParticles);
+            InitTime(ecb, deltaTime, particleEmitter.lifetime, newParticles, ref rand);
 
             Parent parent;
             if (particleEmitter.attachToEmitter)
@@ -606,30 +729,43 @@ namespace Unity.Tiny.Particles
                 foreach (var particle in newParticles)
                     ecb.AddComponent(particle, new ParticleVelocity { velocity = float3.zero });
             }
-
-            InitColor(mgr, ecb, emitter, newParticles);
 #endif
-            InitScale(mgr, ecb, emitter, newParticles);
-            InitRotation(mgr, ecb, emitter, newParticles);
+            InitColor(mgr, ecb, emitter, newParticles, ref rand);
+            InitScale(mgr, ecb, emitter, newParticles, ref rand);
 
             // Init particle's position and the velocity based on the source
+            Range speed = mgr.GetComponentData<EmitterInitialSpeed>(emitter).speed;
+            float randomizePos = mgr.HasComponent<RandomizePosition>(emitter) ? mgr.GetComponentData<RandomizePosition>(emitter).Value : 0.0f;
+            float randomizeDir = mgr.HasComponent<RandomizeDirection>(emitter) ? mgr.GetComponentData<RandomizeDirection>(emitter).Value : 0.0f;
             if (mgr.HasComponent<EmitterRectangleSource>(emitter))
             {
-                ParticlesSource.InitEmitterRectangleSource(mgr, ecb, emitter, newParticles);
+                ParticlesSource.InitEmitterRectangleSource(mgr, ecb, emitter, newParticles, speed, randomizePos, randomizeDir, ref rand);
             }
             else if (mgr.HasComponent<EmitterCircleSource>(emitter))
             {
-                ParticlesSource.InitEmitterCircleSource(mgr, ecb, emitter, newParticles);
+                ParticlesSource.InitEmitterCircleSource(mgr, ecb, emitter, newParticles, speed, randomizePos, randomizeDir, ref rand);
             }
             else if (mgr.HasComponent<EmitterConeSource>(emitter))
             {
-                ParticlesSource.InitEmitterConeSource(mgr, ecb, emitter, newParticles);
+                ParticlesSource.InitEmitterConeSource(mgr, ecb, emitter, newParticles, speed, randomizePos, randomizeDir, ref rand);
             }
+            else if (mgr.HasComponent<EmitterSphereSource>(emitter))
+            {
+                var radius = mgr.GetComponentData<EmitterSphereSource>(emitter).radius;
+                ParticlesSource.InitEmitterSphereSource(mgr, ecb, emitter, newParticles, radius, false, speed, randomizePos, randomizeDir, ref rand);
+            }
+            else if (mgr.HasComponent<EmitterHemisphereSource>(emitter))
+            {
+                var radius = mgr.GetComponentData<EmitterHemisphereSource>(emitter).radius;
+                ParticlesSource.InitEmitterSphereSource(mgr, ecb, emitter, newParticles, radius, true, speed, randomizePos, randomizeDir, ref rand);
+            }
+
+            mgr.SetComponentData(emitter, new Rng { rand = rand });
 
             newParticles.Dispose();
         }
 
-        static void InitTime(EntityManager mgr, EntityCommandBuffer ecb, float deltaTime, Range lifetime, NativeArray<Entity> newParticles)
+        static void InitTime(EntityCommandBuffer ecb, float deltaTime, Range lifetime, NativeArray<Entity> newParticles, ref Random rand)
         {
             // The time is evenly distributted from 0.0 to deltaTime.
 
@@ -647,13 +783,13 @@ namespace Unity.Tiny.Particles
             {
                 ecb.AddComponent(eParticle, new Particle
                 {
-                    lifetime = ParticlesUtil.RandomRange(lifetime),
+                    lifetime = rand.RandomRange(lifetime),
                     time = time
                 });
             }
         }
 
-        private static void InitScale(EntityManager mgr, EntityCommandBuffer ecb, Entity emitter, NativeArray<Entity> newParticles)
+        private static void InitScale(EntityManager mgr, EntityCommandBuffer ecb, Entity emitter, NativeArray<Entity> newParticles, ref Random rand)
         {
 #if false
             bool hasInitialUniformScale = mgr.HasComponent<EmitterInitialScale>(emitter);
@@ -705,7 +841,7 @@ namespace Unity.Tiny.Particles
                     var initialScale = mgr.GetComponentData<EmitterInitialScale>(emitter);
                     foreach (var particle in newParticles)
                     {
-                        float scale = ParticlesUtil.RandomRange(initialScale.scale);
+                        float scale = rand.RandomRange(initialScale.scale);
                         ecb.AddComponent(particle, new Scale { Value = scale });
                     }
                 }
@@ -714,16 +850,16 @@ namespace Unity.Tiny.Particles
                     var initialScale = mgr.GetComponentData<EmitterInitialNonUniformScale>(emitter);
                     foreach (var particle in newParticles)
                     {
-                        float3 scale = new float3(ParticlesUtil.RandomRange(initialScale.scaleX), ParticlesUtil.RandomRange(initialScale.scaleY), ParticlesUtil.RandomRange(initialScale.scaleZ));
+                        float3 scale = new float3(rand.RandomRange(initialScale.scaleX), rand.RandomRange(initialScale.scaleY), rand.RandomRange(initialScale.scaleZ));
                         ecb.AddComponent(particle, new NonUniformScale { Value = scale });
                     }
                 }
             }
         }
 
-#if false
-        private void InitColor(EntityManager mgr, EntityCommandBuffer ecb, Entity emitter, NativeArray<Entity> newParticles)
+        private void InitColor(EntityManager mgr, EntityCommandBuffer ecb, Entity emitter, NativeArray<Entity> newParticles, ref Random rand)
         {
+#if false
             bool hasInitialColor = mgr.HasComponent<EmitterInitialColor>(emitter);
             bool hasLifetimeColor = mgr.HasComponent<LifetimeColor>(emitter);
 
@@ -764,72 +900,66 @@ namespace Unity.Tiny.Particles
                     }
                 }
             }
-            else if (hasInitialColor)
+#endif
+            if (mgr.HasComponent<InitialColor>(emitter))
             {
-                // Only EmitterInitialColor is present.
-
-                var initialColor = mgr.GetComponentData<EmitterInitialColor>(emitter);
-
+                // Only InitialColor is present.
+                var initialColor = mgr.GetComponentData<InitialColor>(emitter);
                 foreach (var particle in newParticles)
                 {
-                    var renderer = mgr.GetComponentData<SpriteRenderer>(particle);
-                    var randomColor = InterpolationService.EvaluateCurveColor(mgr, m_rand.NextFloat(), initialColor.curve);
-                    renderer.Color = renderer.Color * randomColor;
-                    mgr.SetComponentData(particle, renderer);
+                    float4 color = math.lerp(initialColor.colorMin, initialColor.colorMax, rand.Random01());
+                    ecb.SetComponent(particle, new ParticleColor { color = color });
                 }
             }
         }
-
-#endif
-        private static void InitRotation(EntityManager mgr, EntityCommandBuffer ecb, Entity emitter, NativeArray<Entity> newParticles)
-        {
-            if (mgr.HasComponent<EmitterInitialRotation>(emitter))
-            {
-                var initialRotation = mgr.GetComponentData<EmitterInitialRotation>(emitter);
-                foreach (var particle in newParticles)
-                {
-                    ecb.AddComponent(particle, new Rotation
-                    {
-                        Value = quaternion.RotateZ(ParticlesUtil.RandomRange(initialRotation.angle))
-                    });
-                }
-            }
-            else if (mgr.HasComponent<EmitterInitialNonUniformRotation>(emitter))
-            {
-                var initialRotation = mgr.GetComponentData<EmitterInitialNonUniformRotation>(emitter);
-                foreach (var particle in newParticles)
-                {
-                    ecb.AddComponent(particle, new Rotation
-                    {
-                        Value = quaternion.Euler(
-                            ParticlesUtil.RandomRange(initialRotation.angleX),
-                            ParticlesUtil.RandomRange(initialRotation.angleY),
-                            ParticlesUtil.RandomRange(initialRotation.angleZ))
-                    });
-                }
-            }
-#if false
-            if (mgr.HasComponent<LifetimeAngularVelocity>(emitter))
-            {
-                foreach (var particle in newParticles)
-                {
-                    ecb.AddComponent(particle, new ParticleAngularVelocity());
-                }
-            }
-#endif
-        }
-
-        // TODO: Random() throws exception, so we need to use seed for now.
-        private Random m_rand = new Random(1);
 
         protected override void OnUpdate()
         {
-            SpawnParticles(EntityManager, Time.DeltaTime);
+            EntityCommandBuffer ecb = new EntityCommandBuffer(Allocator.Temp);
+            Entities
+                .WithoutBurst()
+                .ForEach((Entity e, ParticleEmitter emitter, ref ParticleEmitterInternal emitterInternal) =>
+                {
+                    float deltaTime = Time.DeltaTime;
+                    bool looping = EntityManager.HasComponent<Looping>(e);
+                    if (emitterInternal.remainingDelay < deltaTime)
+                    {
+                        // Update t
+                        emitterInternal.t += deltaTime - emitterInternal.remainingDelay;
+                        if (looping)
+                        {
+                            while (emitterInternal.t >= emitter.duration)
+                                emitterInternal.t -= emitter.duration;
+                        }
+                        else
+                            emitterInternal.t = math.min(emitterInternal.t, emitter.duration);
+                    }
+                    else
+                    {
+                        emitterInternal.remainingDelay -= deltaTime;
+                        deltaTime = math.max(-emitterInternal.remainingDelay, 0.0f);
+                        emitterInternal.remainingDelay = math.max(emitterInternal.remainingDelay, 0.0f);
+                    }
+
+                    if (!looping && emitterInternal.t >= emitter.duration)
+                    {
+                        // Destroy emitter once all existing particles have reached the end of their lifetime
+                        if (emitterInternal.numParticles == 0)
+                            ecb.DestroyEntity(e);
+                    }
+                    else
+                    {
+                        SpawnParticles(EntityManager, ecb, deltaTime, e);
+                    }
+                }).Run();
+
+            ecb.Playback(EntityManager);
+            ecb.Dispose();
         }
     }
 
     /// <summary>
-    ///  A system that updates all particles
+    ///  System that updates all particles
     /// </summary>
     [UpdateInGroup(typeof(SimulationSystemGroup))]
     [UpdateAfter(typeof(EmitterSystem))]
