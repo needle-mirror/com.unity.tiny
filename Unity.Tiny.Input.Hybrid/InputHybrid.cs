@@ -112,5 +112,36 @@ namespace Unity.Tiny.Hybrid
             m_inputState.scrollDeltaY = (int)UnityInput.mouseScrollDelta.y;
             Debug.Log(m_inputState.scrollDeltaX + " " + m_inputState.scrollDeltaY);
         }
+
+        public override void SetMouseMode(PointerModeType type)
+        {
+            switch (type) {
+                case PointerModeType.Normal:
+                    Cursor.visible = true;
+                    Cursor.lockState = CursorLockMode.None;
+                    break;
+                case PointerModeType.Locked:
+                    Cursor.visible = false;
+                    Cursor.lockState = CursorLockMode.Locked;
+                    break;
+                case PointerModeType.Hidden:
+                    Cursor.visible = false;
+                    Cursor.lockState = CursorLockMode.None;
+                    break;
+            }
+        }
+
+        public override PointerModeType GetMouseMode()
+        {
+            if (Cursor.lockState == CursorLockMode.Locked)
+            {
+                return PointerModeType.Locked;
+            }
+            if (!Cursor.visible)
+            {
+                return PointerModeType.Hidden;
+            }
+            return PointerModeType.Normal;
+        }
     }
 }

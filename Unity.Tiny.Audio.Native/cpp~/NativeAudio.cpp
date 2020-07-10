@@ -6,7 +6,7 @@
 
 // Using baselib for now since we need realloc and we currently don't support it in Unity::LowLevel
 #include <Baselib.h>
-#include <C/Baselib_Memory.h>
+#include <C/Baselib_Timer.h>
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -28,50 +28,42 @@
 #define STB_VORBIS_HEADER_ONLY
 #include "./miniaudio/extras/stb_vorbis.c"  /* Enables OGG decoding. */
 
-static void FreeWrapped(void* p)
-{
-    if (!p)
-        return;
-    Baselib_Memory_AlignedFree(p);
-}
-
-#define MA_MALLOC(sz)           Baselib_Memory_AlignedAllocate(sz,16)
-#define MA_REALLOC(p, sz)       Baselib_Memory_AlignedReallocate(p,sz,16)
-#define MA_FREE(p)              FreeWrapped(p)
+#define MA_MALLOC(sz)           unsafeutility_malloc(sz,16,Unity::LowLevel::Allocator::Persistent)
+#define MA_REALLOC(p, sz)       unsafeutility_realloc(p,sz,16,Unity::LowLevel::Allocator::Persistent)
+#define MA_FREE(p)              unsafeutility_free(p,Unity::LowLevel::Allocator::Persistent)
 #define MINIAUDIO_IMPLEMENTATION
 #include "./miniaudio/miniaudio.h"
 
 using namespace Unity::LowLevel;
 
-// #define AUDIO_TIMER
-
 // Need a mutex to protect access to the SoundSources 
 // that are used by the callback. The SoundClips are
 // refCounted; so they are safe.
-baselib::Lock soundSourceMutex;
-uint32_t clipIDPool = 0;
-std::map<uint32_t, SoundClip*> clipMap;
-uint32_t sourceIDPool = 0;
-std::map<uint32_t, SoundSource*> sourceMap;
+static baselib::Lock soundSourceMutex;
+static uint32_t clipIDPool = 0;
+static std::map<uint32_t, SoundClip*> clipMap;
+static uint32_t sourceIDPool = 0;
+static std::map<uint32_t, SoundSource*> sourceMap;
 
-ma_device_config maConfig;
-ma_device* maDevice;
+static ma_device_config maConfig;
+static ma_device* maDevice;
 struct UserData
 {
     void* dummy;
 };
-UserData userData;
+static UserData userData;
 
-bool audioInitialized = false;
-bool audioPaused = false;
-uint64_t audioOutputTimeInFrames = 0;
-float *mixBuffer = nullptr;
-float maxSample = 0.9f;
-uint32_t numFramesSinceMaxSample = 0;
+static bool audioInitialized = false;
+static bool audioPaused = false;
+static bool audioMuted = false;
+static uint64_t audioOutputTimeInFrames = 0;
+static float *mixBuffer = nullptr;
+static float maxSample = 0.9f;
+static uint32_t numFramesSinceMaxSample = 0;
 // Our mix buffer is 8K frames, 2 samples/frame (stereo), and each sample is a float ranging from -1.0f to 1.0f.
-const uint32_t mixBufferSize = 8192*2*sizeof(float);
-const float limiterHeadroom = 0.1f;
-const uint32_t limiterWindowInFrames = 22050;
+static const uint32_t mixBufferSize = 8192*2*sizeof(float);
+static const float limiterHeadroom = 0.1f;
+static const uint32_t limiterWindowInFrames = 22050;
 
 void flushMemory()
 {
@@ -116,6 +108,8 @@ void freeAllSources()
         delete source;
         sourceMap.erase(it);
     }
+
+    sourceIDPool = 0;
 }
 
 void freeAllClips()
@@ -126,8 +120,9 @@ void freeAllClips()
     }
     flushMemory();
     assert(clipMap.empty());
-}
 
+    clipIDPool = 0;
+}
 
 DOTS_EXPORT(void)
 freeAudio(uint32_t clipID)
@@ -145,7 +140,6 @@ freeAudio(uint32_t clipID)
     }
     flushMemory();
 }
-
 
 void* createTestWAV(const char* name, size_t* size)
 {
@@ -238,6 +232,13 @@ sourcePoolID()
     return sourceIDPool;
 }
 
+DOTS_EXPORT(int32_t)
+clipPoolID()
+{
+    flushMemory();
+    LOGE("clipPoolID=%d", (int)clipPoolID);
+    return clipIDPool;
+}
 
 DOTS_EXPORT(int)
 checkLoading(uint32_t id)
@@ -347,15 +348,18 @@ setPitch(uint32_t sourceID, float pitch)
     return true;
 }
 
-#ifdef AUDIO_TIMER
-uint32_t callbackLongest = 0,
-         callbackShortest = 0xffffffff,
-         callbackTotal = 0,
-         nCallback = 0,
-         headerLongest = 0,
-         headerShortest = 0xffffffff,
-         headerTotal = 0,
-         nHeader = 0;
+DOTS_EXPORT(void)
+setIsMuted(bool muted)
+{
+    audioMuted = muted;
+}
+
+#ifdef ENABLE_PROFILER
+static Baselib_Timer_Ticks callbackTicksLastEnd = 0;
+
+static const int kCallbackCpuCount = 4;
+static int callbackCpuIndex = 0;
+static Baselib_Timer_Ticks callbackCpuPercent[kCallbackCpuCount] = { 0 };
 #endif
 
 // At 44,100 hz, stereo, 16-bit
@@ -364,8 +368,8 @@ uint32_t callbackLongest = 0,
 // ~0.005 seconds = 5ms = 5000 microseconds of data
 void sendFramesToDevice(ma_device* pDevice, void* pSamples, const void* pInput, ma_uint32 frameCount)
 {
-#ifdef AUDIO_TIMER
-    auto header = baselib::high_precision_clock::now();
+#ifdef ENABLE_PROFILER
+    Baselib_Timer_Ticks start = Baselib_Timer_GetHighPrecisionTimerTicks();
 #endif
 
     const uint32_t bytesPerSample = ma_get_bytes_per_sample(pDevice->playback.format);
@@ -388,9 +392,6 @@ void sendFramesToDevice(ma_device* pDevice, void* pSamples, const void* pInput, 
     UserData* pUser = (UserData*)(pDevice->pUserData);
 
     BaselibLock lock(soundSourceMutex);
-#ifdef AUDIO_TIMER
-    auto start = baselib::high_precision_clock::now();
-#endif
 
     for (auto it = sourceMap.begin(); it != sourceMap.end(); ++it) 
     {
@@ -405,12 +406,12 @@ void sendFramesToDevice(ma_device* pDevice, void* pSamples, const void* pInput, 
             // when pan is at center, setting both channels to .7 instead of .5 sounds more natural
             // this is an approximation to sqrt(2) = 45 degree angle on unit circle, and for now
             // we'll linearly interpolate to the extremes rather than rotate
-            float volume = source->volume();
+            float volume = audioMuted ? 0.0f : source->volume();
             float pan = source->pan();
             float coeffL = (.7f - (pan > 0 ? pan * .7f : pan * .3f)) * volume;
             float coeffR = (.7f + (pan < 0 ? pan * .7f : pan * .3f)) * volume;
 
-            while (!done) 
+            while (!done)
             {
                 uint32_t decodedFrames = 0;
                 uint32_t requestedFrames = frameCount - totalFrames;
@@ -473,36 +474,43 @@ void sendFramesToDevice(ma_device* pDevice, void* pSamples, const void* pInput, 
 
     audioOutputTimeInFrames += frameCount;
 
-#ifdef AUDIO_TIMER
-    auto end = baselib::high_precision_clock::now();
-
-    uint32_t tMicros = (uint32_t)std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-    if (tMicros < callbackShortest) callbackShortest = tMicros;
-    if (tMicros > callbackLongest) callbackLongest = tMicros;
-    nCallback++;
-    callbackTotal += tMicros;
-
-    uint32_t tHeader = (uint32_t)std::chrono::duration_cast<std::chrono::microseconds>(header - start).count();
-    if (tHeader < headerShortest) headerShortest = tHeader;
-    if (tHeader > headerLongest) headerLongest = tHeader;
-    nHeader++;
-    headerTotal += tHeader;
-
-    if (nCallback == 256) {
-        LOGE("Callback: shortest=%d longest=%d ave=%d framecount=%d\n", callbackShortest, callbackLongest, callbackTotal / nCallback, frameCount);
-        LOGE("  Header: shortest=%d longest=%d ave=%d\n", headerShortest, headerLongest, headerTotal / nHeader);
-        callbackLongest = 0;
-        callbackShortest = 0xffffffff;
-        callbackTotal = 0;
-        nCallback = 0;
-        headerLongest = 0;
-        headerShortest = 0xffffffff;
-        headerTotal = 0;
-        nHeader = 0;
+#ifdef ENABLE_PROFILER
+    Baselib_Timer_Ticks end = Baselib_Timer_GetHighPrecisionTimerTicks();
+    if (callbackTicksLastEnd != 0)
+    {
+        callbackCpuPercent[callbackCpuIndex] = (end - start) * 1000 / (end - callbackTicksLastEnd);
+        callbackCpuIndex = (callbackCpuIndex + 1) % kCallbackCpuCount;
     }
+    callbackTicksLastEnd = end;
 #endif
 }
 
+#ifdef ENABLE_PROFILER
+DOTS_EXPORT(float)
+getCpuUsage()
+{
+    Baselib_Timer_Ticks total = 0;
+    for (int i = 0; i < kCallbackCpuCount; i++)
+        total += callbackCpuPercent[i];
+    return (float)(total / kCallbackCpuCount) / 10.0f;
+}
+
+DOTS_EXPORT(int)
+getRequiredMemory(uint32_t clipID)
+{
+    if (!audioInitialized) return 0;
+
+    LOGE("getRequiredMemory(%d)", clipID);
+    auto it = clipMap.find(clipID);
+    if (it != clipMap.end()) {
+        SoundClip* clip = it->second;
+        return (int)(ma_get_bytes_per_frame(maConfig.playback.format, maConfig.playback.channels) * clip->numFrames());
+    }
+
+    LOGE("getRequiredMemory(%d) not found.", clipID);
+    return 0;
+}
+#endif
 
 DOTS_EXPORT(void)
 initAudio() {

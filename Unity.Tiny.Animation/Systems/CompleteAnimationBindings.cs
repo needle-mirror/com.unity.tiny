@@ -17,8 +17,8 @@ namespace Unity.Tiny.Animation
 
         protected override void OnUpdate()
         {
-            var commandBuffer = m_ECBSystem.CreateCommandBuffer().ToConcurrent();
-            var floatBindingsDependency =
+            var commandBuffer = m_ECBSystem.CreateCommandBuffer().AsParallelWriter();
+            Dependency =
                 Entities
                     .WithoutBurst() // Burst does not support: TypeManager.GetTypeIndexFromStableTypeHash
                     .ForEach(
@@ -34,7 +34,7 @@ namespace Unity.Tiny.Animation
                             commandBuffer.RemoveComponent<AnimationBindingRetarget>(entityInQueryIndex, entity);
                         }).Schedule(Dependency);
 
-            var pPtrBindingsDependency =
+            Dependency =
                 Entities
                     .WithoutBurst() // Burst does not support: TypeManager.GetTypeIndexFromStableTypeHash
                     .ForEach(
@@ -49,8 +49,6 @@ namespace Unity.Tiny.Animation
 
                             commandBuffer.RemoveComponent<AnimationBindingRetarget>(entityInQueryIndex, entity);
                         }).Schedule(Dependency);
-
-            Dependency = JobHandle.CombineDependencies(floatBindingsDependency, pPtrBindingsDependency);
 
             m_ECBSystem.AddJobHandleForProducer(Dependency);
         }

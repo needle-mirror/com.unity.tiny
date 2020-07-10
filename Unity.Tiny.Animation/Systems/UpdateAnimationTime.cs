@@ -19,7 +19,7 @@ namespace Unity.Tiny.Animation
         protected override void OnUpdate()
         {
             var dt = Time.DeltaTime;
-            var commandBuffer = m_ECBSystem.CreateCommandBuffer().ToConcurrent();
+            var commandBuffer = m_ECBSystem.CreateCommandBuffer().AsParallelWriter();
             Dependency =
                 Entities
                     .WithBurst(FloatMode.Fast)

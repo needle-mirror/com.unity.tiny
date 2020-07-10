@@ -9,9 +9,9 @@ class TinyImage2DAuthoringTest
     public void TestTexture2D_Size()
     {
         var uTexture = new Texture2D(10, 10);
-        Assert.IsFalse(Texture2DExportUtils.IsPowerOfTwo(uTexture));
+        Assert.IsFalse(Texture2DConversionUtils.IsPowerOfTwo(uTexture));
         uTexture = new Texture2D(256, 256);
-        Assert.IsTrue(Texture2DExportUtils.IsPowerOfTwo(uTexture));
+        Assert.IsTrue(Texture2DConversionUtils.IsPowerOfTwo(uTexture));
     }
 
     [Test]
@@ -39,21 +39,21 @@ class TinyImage2DAuthoringTest
         {
             wrapModeU = TextureWrapMode.Clamp
         };
-        var flags = Texture2DExportUtils.GetTextureFlags(uTexture, null);
+        var flags = Texture2DConversionUtils.GetTextureFlags(uTexture, null);
         Assert.IsTrue((flags & TextureFlags.UClamp) == TextureFlags.UClamp);
 
         uTexture = new Texture2D(16, 16)
         {
             wrapModeU = TextureWrapMode.Mirror
         };
-        flags = Texture2DExportUtils.GetTextureFlags(uTexture, null);
+        flags = Texture2DConversionUtils.GetTextureFlags(uTexture, null);
         Assert.IsTrue((flags & TextureFlags.UMirror) == TextureFlags.UMirror);
 
         uTexture = new Texture2D(16, 16)
         {
             wrapModeU = TextureWrapMode.Repeat
         };
-        flags = Texture2DExportUtils.GetTextureFlags(uTexture, null);
+        flags = Texture2DConversionUtils.GetTextureFlags(uTexture, null);
         Assert.IsTrue((flags & TextureFlags.URepeat) == TextureFlags.URepeat);
     }
 
@@ -64,21 +64,21 @@ class TinyImage2DAuthoringTest
         {
             wrapModeV = TextureWrapMode.Clamp
         };
-        var flags = Texture2DExportUtils.GetTextureFlags(uTexture, null);
+        var flags = Texture2DConversionUtils.GetTextureFlags(uTexture, null);
         Assert.IsTrue((flags & TextureFlags.VClamp) == TextureFlags.VClamp);
 
         uTexture = new Texture2D(16, 16)
         {
             wrapModeV = TextureWrapMode.Mirror
         };
-        flags = Texture2DExportUtils.GetTextureFlags(uTexture, null);
+        flags = Texture2DConversionUtils.GetTextureFlags(uTexture, null);
         Assert.IsTrue((flags & TextureFlags.VMirror) == TextureFlags.VMirror);
 
         uTexture = new Texture2D(16, 16)
         {
             wrapModeV = TextureWrapMode.Repeat
         };
-        flags = Texture2DExportUtils.GetTextureFlags(uTexture, null);
+        flags = Texture2DConversionUtils.GetTextureFlags(uTexture, null);
         Assert.IsTrue((flags & TextureFlags.VRepeat) == TextureFlags.VRepeat);
     }
 
@@ -89,21 +89,21 @@ class TinyImage2DAuthoringTest
         {
             filterMode = FilterMode.Point
         };
-        var flags = Texture2DExportUtils.GetTextureFlags(uTexture, null);
+        var flags = Texture2DConversionUtils.GetTextureFlags(uTexture, null);
         Assert.IsTrue((flags & TextureFlags.Point) == TextureFlags.Point);
 
         uTexture = new Texture2D(16, 16)
         {
             filterMode = FilterMode.Bilinear
         };
-        flags = Texture2DExportUtils.GetTextureFlags(uTexture, null);
+        flags = Texture2DConversionUtils.GetTextureFlags(uTexture, null);
         Assert.IsTrue((flags & TextureFlags.Linear) == TextureFlags.Linear);
 
         uTexture = new Texture2D(16, 16)
         {
             filterMode = FilterMode.Trilinear
         };
-        flags = Texture2DExportUtils.GetTextureFlags(uTexture, null);
+        flags = Texture2DConversionUtils.GetTextureFlags(uTexture, null);
         Assert.IsTrue((flags & TextureFlags.Trilinear) == TextureFlags.Trilinear);
     }
 
@@ -111,11 +111,11 @@ class TinyImage2DAuthoringTest
     public void TestTexture2D_MipMap()
     {
         var uTexture = new Texture2D(16, 16, TextureFormat.RGB24, true);
-        var flags = Texture2DExportUtils.GetTextureFlags(uTexture, null);
+        var flags = Texture2DConversionUtils.GetTextureFlags(uTexture, null);
         Assert.IsTrue((flags & TextureFlags.MimapEnabled) == TextureFlags.MimapEnabled);
 
         uTexture = new Texture2D(16, 16, TextureFormat.RGB24, false);
-        flags = Texture2DExportUtils.GetTextureFlags(uTexture, null);
+        flags = Texture2DConversionUtils.GetTextureFlags(uTexture, null);
         Assert.IsFalse((flags & TextureFlags.MimapEnabled) == TextureFlags.MimapEnabled);
     }
 }

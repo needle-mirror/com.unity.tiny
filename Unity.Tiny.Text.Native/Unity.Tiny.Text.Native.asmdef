@@ -1,0 +1,30 @@
+{
+    "name": "Unity.Tiny.Text.Native",
+    "references": [
+        "Unity.Entities",
+        "Unity.Burst",
+        "Unity.Collections",
+        "Unity.Mathematics",
+        "Unity.Transforms",
+        "Unity.Tiny.Core",
+        "Unity.Tiny.Image2D",
+        "Unity.Tiny.Image2D.Native",
+        "Unity.Tiny.Image2D.Web",
+        "Unity.Tiny.GLFW",
+        "Unity.Tiny.Rendering",
+        "Unity.Tiny.Rendering.Native",
+        "Unity.Mathematics.Extensions",
+        "Unity.Tiny.Scenes",
+        "Unity.Tiny.Text",
+        "Unity.Platforms.Common"
+    ],
+    "optionalUnityReferences": [],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": []
+}

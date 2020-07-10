@@ -1,12 +1,5 @@
 using System;
-using Unity.Entities;
 using System.Runtime.InteropServices;
-using Unity.Collections.LowLevel.Unsafe;
-using Unity.Collections;
-using Unity.Entities.Serialization;
-using System.Collections.Generic;
-using Unity.Tiny;
-using System.Diagnostics;
 
 namespace Unity.Tiny.IO
 {
@@ -42,7 +35,7 @@ namespace Unity.Tiny.IO
             m_Handle = sysHandle;
         }
 
-        private int m_Handle;
+        public int m_Handle;
 
         /// <summary>
         /// Returns the current state of the AsyncOp
@@ -113,18 +106,18 @@ namespace Unity.Tiny.IO
     }
 
     /// <summary>
-    /// Provides utility functions for interating with the files
+    /// Provides utility functions for interacting with the files
     /// </summary>
     public static class IOService
     {
-        #if UNITY_PLATFORM_WINDOWS
+#if UNITY_WINDOWS
         public const string PathSeparator = "\\";
-        #else
+#else
         public const string PathSeparator = "/";
-        #endif
+#endif
 
         [DllImport("lib_unity_tiny_io", EntryPoint = "RequestAsyncRead", CharSet = CharSet.Ansi)]
-        static extern unsafe int RequestAsyncReadImpl([MarshalAs(UnmanagedType.LPStr)] string path);
+        static extern unsafe int RequestAsyncReadImpl([MarshalAs(UnmanagedType.LPStr)] string path, void* buffer = null, int bufferSize = 0);
 
         /// <summary>
         /// Issues an asynchronous request to read all data from the given filepath or URI.
@@ -133,7 +126,21 @@ namespace Unity.Tiny.IO
         /// <returns></returns>
         static public AsyncOp RequestAsyncRead(string path)
         {
-            return new AsyncOp(RequestAsyncReadImpl(path));
+            unsafe
+            {
+                return new AsyncOp(RequestAsyncReadImpl(path));
+            }
+        }
+
+        /// <summary>
+        /// Issues an asynchronous request to read all data from the given filepath or URI
+        /// and writes the returned data to the passed in buffer up to 'bufferSize' bytes
+        /// </summary>
+        /// <param name="path"></param>
+        /// <returns></returns>
+        static unsafe public AsyncOp RequestAsyncRead(string path, void* buffer, int bufferSize)
+        {
+            return new AsyncOp(RequestAsyncReadImpl(path, buffer, bufferSize));
         }
     }
 }

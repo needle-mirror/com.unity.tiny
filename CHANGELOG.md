@@ -4,10 +4,51 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [0.28.0] - 2020-07-10
+
+### Added
+
+* Stats collection for audio
+* Stats collection for textures
+* Sync scene view to game view in Tiny by pressing Shift + F
+
+### Changed
+
+* Updated minimum Unity Editor version to 2020.1.0b15 (40d9420e7de8)
+* TinyAnimation is now allowed to run in play mode
+* Change fov of debug camera with Shift + L
+
+### Deprecated
+
+
+### Removed
+
+
+### Fixed
+
+
+### Security
+
+
+
+
+## [0.27.0] - 2020-05-27
+
+### Added
+
+* Add "DisplayText" component for rendering text at runtime.  Functionality is limited and will be expanded in future
+  releases.
+
+### Changed
+* Updated minimum Unity Editor version to 2020.1.0b9 (9c0aec301c8d)
+
+
 ## [0.26.0] - 2020-05-15
+
+### Changed
+
 * Fixes issue where `ICustomBootstrap` instances would not be used while setting up the `UnityInstance`.
 * Removed expired type `DefaultTinyWorldInitialization`.
-* Updated minimum Unity Editor version to 2019.3.12f1 (84b23722532d)
 
 ## [0.25.0] - 2020-04-30
 * Added profiler marker integration to Tiny renderer and enable support in other DOTS packages through ENABLE_PROFILER define.

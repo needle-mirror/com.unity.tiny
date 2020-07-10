@@ -13,5 +13,5 @@
         "WebGL"
     ],
     "allowUnsafeCode": true,
-    "defineConstraints": ["UNITY_DOTSPLAYER"]
+    "defineConstraints": ["UNITY_DOTSRUNTIME"]
 }

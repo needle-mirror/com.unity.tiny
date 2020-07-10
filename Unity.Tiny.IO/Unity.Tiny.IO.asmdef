@@ -1,10 +1,7 @@
 {
     "name": "Unity.Tiny.IO",
     "references": [
-        "Unity.Burst",
-        "Unity.Collections",
-        "Unity.Entities",
-        "Unity.Tiny.Core",
+        "Unity.LowLevel",
         "Unity.Tiny.Thread.Native"
     ],
     "optionalUnityReferences": [],

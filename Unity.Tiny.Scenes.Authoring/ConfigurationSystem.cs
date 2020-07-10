@@ -3,6 +3,8 @@ using Unity.Entities.Runtime.Build;
 using Unity.Entities;
 using Unity.Entities.Runtime;
 using System.Linq;
+using Unity.Build;
+using Unity.Build.DotsRuntime;
 
 namespace Unity.Tiny.Authoring
 {
@@ -11,36 +13,27 @@ namespace Unity.Tiny.Authoring
     {
         protected override void OnUpdate()
         {
-            if (projectScene == null || !projectScene.IsValid())
+            if (ProjectScene == null || !ProjectScene.IsValid())
                 return;
 
             Entity configEntity;
             configEntity = EntityManager.CreateEntity();
-            EntityManager.AddComponent<Unity.Tiny.ConfigurationTag>(configEntity);
+            EntityManager.AddComponent<ConfigurationTag>(configEntity);
 
-            var startupScenes = EntityManager.AddBuffer<StartupScenes>(configEntity);
-
-            var subScenes = projectScene.GetRootGameObjects()
-                .Select(go => go.GetComponent<Unity.Scenes.SubScene>())
-                .Where(g => g != null && g);
-
-            // Add this root scene to StartupScenes
-            var projSceneGuid = new GUID(AssetDatabase.AssetPathToGUID(projectScene.path));
-#if false
-            startupScenes.Add(new StartupScenes()
+            if (BuildConfiguration.TryGetComponent<DotsRuntimeBuildProfile>(out var profile) && !profile.UseNewPipeline)
             {
-                SceneReference = new Unity.Tiny.Scenes.SceneReference()
-                {SceneGuid = new System.Guid(projSceneGuid.ToString())}
-            });
-#endif
-            // Add all our subscenes with AutoLoadScene to StartupScenes
-            // (technically not necessary?)
-            var subSceneGuids = subScenes
-                .Where(s => s != null && s.SceneAsset != null && s.AutoLoadScene)
-                .Select(s => new System.Guid(s.SceneGUID.ToString()));
-            foreach (var guid in subSceneGuids)
-                startupScenes.Add(new StartupScenes()
-                    { SceneReference = new Unity.Entities.Runtime.SceneReference() { SceneGuid = guid } });
+                var startupScenes = EntityManager.AddBuffer<StartupScenes>(configEntity);
+                var subScenes = ProjectScene.GetRootGameObjects()
+                    .Select(go => go.GetComponent<Unity.Scenes.SubScene>())
+                    .Where(g => g != null && g);
+                // Add all our subscenes with AutoLoadScene to StartupScenes
+                // (technically not necessary?)
+                var subSceneGuids = subScenes
+                    .Where(s => s != null && s.SceneAsset != null && s.AutoLoadScene);
+                foreach (var scene in subSceneGuids)
+                    startupScenes.Add(new StartupScenes()
+                        {SceneReference = new SceneReference() {SceneGUID = scene.SceneGUID}});
+            }
         }
     }
 }

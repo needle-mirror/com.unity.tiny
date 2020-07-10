@@ -3,6 +3,9 @@ using Unity.Entities;
 using Unity.Tiny;
 using Unity.Transforms;
 using Unity.Mathematics;
+#if ENABLE_DOTSRUNTIME_PROFILER
+using Unity.Development.Profiling;
+#endif
 
 namespace Unity.Tiny.Audio
 {
@@ -154,17 +157,34 @@ namespace Unity.Tiny.Audio
                     .ForEach((Entity e, ref AudioSourceStart tag) =>
                     {
                         if (PlaySource(e))
+                        {
                             mgr.RemoveComponent<AudioSourceStart>(e);
+                        }
                     }).Run();
             }
 
             // Update isPlaying.
+#if ENABLE_DOTSRUNTIME_PROFILER
+            ProfilerStats.GatheredStats |= ProfilerModes.ProfileAudio;
+            ProfilerStats.AccumStats.audioPlayingSources.value = 0;
+            ProfilerStats.AccumStats.audioPausedSources.value = 0;
+#endif
             Entities
                 .WithoutBurst()
                 .ForEach((Entity e, ref AudioSource source) =>
                 {
                     source.isPlaying = IsPlaying(e);
+#if ENABLE_DOTSRUNTIME_PROFILER
+                    if (source.isPlaying)
+                        ProfilerStats.AccumStats.audioPlayingSources.Accumulate(1);
+                    else
+                        ProfilerStats.AccumStats.audioPausedSources.Accumulate(1);
+#endif
                 }).Run();
+#if ENABLE_DOTSRUNTIME_PROFILER
+            // No concept of multiple clips playing per audio source in Tiny Audio
+            ProfilerStats.AccumStats.audioNumSoundChannelInstances = ProfilerStats.AccumStats.audioPlayingSources;
+#endif
 
             // Update volume for sources that are not distance-attenuated.
             Entities

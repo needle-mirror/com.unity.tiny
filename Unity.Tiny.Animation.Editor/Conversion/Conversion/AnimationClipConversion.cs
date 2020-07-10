@@ -89,8 +89,8 @@ namespace Unity.Tiny.Animation.Editor
             if (numBindings == 0)
                 return blobAssetRef;
 
-            var targetPaths = new List<NativeString512>(numBindings);
-            var animationBindingsConvertedNames = new List<NativeString512>(numBindings);
+            var targetPaths = new List<FixedString512>(numBindings);
+            var animationBindingsConvertedNames = new List<FixedString512>(numBindings);
             var keyframeCurves = new List<KeyframeCurve>(numBindings);
 
             var scaleRequired = false;
@@ -166,10 +166,10 @@ namespace Unity.Tiny.Animation.Editor
                         var zPropName = GetConvertedName(binding.type, TinyAnimationEditorBridge.CreateRawQuaternionsBindingName("z"));
                         var wPropName = GetConvertedName(binding.type, TinyAnimationEditorBridge.CreateRawQuaternionsBindingName("w"));
 
-                        animationBindingsConvertedNames.Add(new NativeString512(xPropName));
-                        animationBindingsConvertedNames.Add(new NativeString512(yPropName));
-                        animationBindingsConvertedNames.Add(new NativeString512(zPropName));
-                        animationBindingsConvertedNames.Add(new NativeString512(wPropName));
+                        animationBindingsConvertedNames.Add(new FixedString512(xPropName));
+                        animationBindingsConvertedNames.Add(new FixedString512(yPropName));
+                        animationBindingsConvertedNames.Add(new FixedString512(zPropName));
+                        animationBindingsConvertedNames.Add(new FixedString512(wPropName));
 
                         keyframeCurves.Add(xCurveNew.ToKeyframeCurve());
                         keyframeCurves.Add(yCurveNew.ToKeyframeCurve());
@@ -200,7 +200,7 @@ namespace Unity.Tiny.Animation.Editor
                     var bindingPropertyName = binding.propertyName;
                     var convertedName = GetConvertedName(binding.type, bindingPropertyName);
 
-                    animationBindingsConvertedNames.Add(new NativeString512(convertedName));
+                    animationBindingsConvertedNames.Add(new FixedString512(convertedName));
 
                     var animationCurve = AnimationUtility.GetEditorCurve(clip, binding);
                     var curve = animationCurve.ToKeyframeCurve();
@@ -261,8 +261,8 @@ namespace Unity.Tiny.Animation.Editor
             if (numBindings == 0)
                 return blobAssetRef;
 
-            var targetPaths = new NativeString512[numBindings];
-            var animationBindingsConvertedNames = new NativeString512[numBindings];
+            var targetPaths = new FixedString512[numBindings];
+            var animationBindingsConvertedNames = new FixedString512[numBindings];
             var keyframeCurves = new KeyframeCurve[numBindings];
             var animatedAssetGroupings = new Entity[numBindings];
 
@@ -278,7 +278,7 @@ namespace Unity.Tiny.Animation.Editor
 
                 var bindingPropertyName = binding.propertyName;
                 var convertedName = GetConvertedName(binding.type, bindingPropertyName);
-                animationBindingsConvertedNames[bindingIndex] = new NativeString512(convertedName);
+                animationBindingsConvertedNames[bindingIndex] = new FixedString512(convertedName);
 
                 foundObjects.Clear();
 

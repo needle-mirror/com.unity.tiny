@@ -21,7 +21,8 @@ namespace Unity.Tiny.Input
     {
         None = 0,
         Mouse = 1,
-        Touch = 2
+        Touch = 2,
+        Pen = 3
     };
 
     /// <summary>
@@ -288,6 +289,14 @@ namespace Unity.Tiny.Input
         /// </summary>
         public virtual void SetMouseMode(PointerModeType type)
         {
+        }
+
+        /// <summary>
+        ///  Returns the current mouse pointer type.
+        /// </summary>
+        public virtual PointerModeType GetMouseMode()
+        {
+            return PointerModeType.Normal;
         }
 
         /// <summary>

@@ -1,0 +1,31 @@
+{
+    "name": "Unity.Tiny.Text.Authoring",
+    "references": [
+        "Unity.Collections",
+        "Unity.Entities",
+        "Unity.Entities.Hybrid",
+        "Unity.Entities.Runtime.Build",
+        "Unity.Mathematics",
+        "Unity.Mathematics.Extensions",
+        "Unity.Build.DotsRuntime",
+        "Unity.Build",
+        "Unity.Tiny.Authoring",
+        "Unity.Tiny.Core",
+        "Unity.Tiny.Rendering",
+        "Unity.Tiny.Rendering.Authoring",
+        "Unity.Tiny.Rendering.Native",
+        "Unity.Transforms",
+        "Unity.Assertions",
+        "Unity.Burst",
+        "Unity.TextMeshPro",
+        "Unity.Tiny.Text"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": ["UNITY_EDITOR"],
+    "versionDefines": []
+}

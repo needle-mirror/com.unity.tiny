@@ -1,11 +1,17 @@
 using System;
 using Unity.Entities;
-using Unity.Tiny;
 using Unity.Tiny.GenericAssetLoading;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
-using Unity.Collections;
 using Unity.Platforms;
+
+#if ENABLE_PLAYERCONNECTION
+using UnityEngine.Networking.PlayerConnection;
+#endif
+
+#if ENABLE_DOTSRUNTIME_PROFILER
+using Unity.Development.Profiling;
+#endif
 
 [assembly: InternalsVisibleTo("Unity.Tiny.Audio.Tests")]
 namespace Unity.Tiny.Audio
@@ -61,6 +67,16 @@ namespace Unity.Tiny.Audio
         [DllImport(DLL, EntryPoint = "finishedLoading")]
         public static extern void FinishedLoading(uint clipID);
 
+#if ENABLE_DOTSRUNTIME_PROFILER
+        [DllImport(DLL, EntryPoint = "getCpuUsage")]
+        public static extern float GetCpuUsage();
+
+        [DllImport(DLL, EntryPoint = "getRequiredMemory")]
+        public static extern int GetRequiredMemory(uint clipID);
+#endif
+        [DllImport(DLL, EntryPoint = "clipPoolID")]
+        public static extern int ClipPoolID();      // Testing: the next ID that will be assigned to a clip.
+
         // Source
         [DllImport(DLL, EntryPoint = "playSource")]
         public static extern uint Play(uint clipID, float volume, float pan, bool loop);    // returns sourceID (>0) or 0 or failure.
@@ -87,6 +103,9 @@ namespace Unity.Tiny.Audio
         [DllImport(DLL, EntryPoint = "setPitch")]
         [return : MarshalAs(UnmanagedType.I1)]
         public static extern bool SetPitch(uint sourceId, float pitch);    // returns success (or failure)
+
+        [DllImport(DLL, EntryPoint = "setIsMuted")]
+        public static extern void SetIsMuted(bool isMuted);
 
         [DllImport(DLL, EntryPoint = "numSourcesAllocated")]
         public static extern int NumSourcesAllocated();          // Testing: number of SoundSources allocated.
@@ -132,7 +151,19 @@ namespace Unity.Tiny.Audio
             LoadResult result = (LoadResult)AudioNativeCalls.CheckLoading(audioNativeClip.clipID);
 
             if (result == LoadResult.success)
+            {
                 audioClip.status = AudioClipStatus.Loaded;
+#if ENABLE_DOTSRUNTIME_PROFILER
+                ProfilerStats.AccumStats.memAudioCount.Accumulate(1);
+                int mem = AudioNativeCalls.GetRequiredMemory(audioNativeClip.clipID);
+                ProfilerStats.AccumStats.memAudio.Accumulate(mem);
+                ProfilerStats.AccumStats.memReservedAudio.Accumulate(mem);
+                ProfilerStats.AccumStats.memUsedAudio.Accumulate(mem);
+
+                // All audio clips in native Tiny audio are decompressed on load
+                ProfilerStats.AccumStats.audioSampleMemory.Accumulate(mem);
+#endif
+            }
             else if (result == LoadResult.failed)
                 audioClip.status = AudioClipStatus.LoadError;
 
@@ -141,6 +172,15 @@ namespace Unity.Tiny.Audio
 
         public void FreeNative(EntityManager man, Entity e, ref AudioNativeClip audioNativeClip)
         {
+#if ENABLE_DOTSRUNTIME_PROFILER
+            ProfilerStats.AccumStats.memAudioCount.Accumulate(-1);
+            int mem = AudioNativeCalls.GetRequiredMemory(audioNativeClip.clipID);
+            ProfilerStats.AccumStats.memAudio.Accumulate(-mem);
+            ProfilerStats.AccumStats.memReservedAudio.Accumulate(-mem);
+            ProfilerStats.AccumStats.memUsedAudio.Accumulate(-mem);
+
+            ProfilerStats.AccumStats.audioSampleMemory.Accumulate(-mem);
+#endif
             AudioNativeCalls.FreeAudio(audioNativeClip.clipID);
         }
 
@@ -167,6 +207,13 @@ namespace Unity.Tiny.Audio
         private double lastWorldTimeAudioConsumed = 0.0;
         private ulong lastAudioOutputTimeInFrames = 0;
 
+        #if ENABLE_PLAYERCONNECTION
+        static bool s_Muted;
+        #endif
+
+        // for use with the toggle mute callback emitted from the editor
+        static readonly Guid k_EditorMuteMessageId = new Guid("01372e16-3f1f-4b47-8d09-b48c7c8a3f4d");
+
         protected override void OnStartRunning()
         {
             PlatformEvents.OnSuspendResume += OnSuspendResume;
@@ -177,12 +224,25 @@ namespace Unity.Tiny.Audio
             PlatformEvents.OnSuspendResume -= OnSuspendResume;
         }
 
+
+        #if ENABLE_PLAYERCONNECTION
+        static void ToggleMuteFromEditor(MessageEventArgs args)
+        {
+            s_Muted = !s_Muted;
+            AudioNativeCalls.SetIsMuted(s_Muted);
+        }
+        #endif
+
         protected override void InitAudioSystem()
         {
             AudioNativeCalls.InitAudio();
 
             TinyEnvironment env = World.TinyEnvironment();
             AudioConfig ac = env.GetConfigData<AudioConfig>();
+
+            #if ENABLE_PLAYERCONNECTION
+            PlayerConnection.instance.Register(k_EditorMuteMessageId, ToggleMuteFromEditor);
+            #endif
             ac.initialized = true;
             ac.unlocked = true;
             env.SetConfigData(ac);
@@ -190,6 +250,10 @@ namespace Unity.Tiny.Audio
 
         protected override void DestroyAudioSystem()
         {
+            #if ENABLE_PLAYERCONNECTION
+            PlayerConnection.instance.Unregister(k_EditorMuteMessageId,  ToggleMuteFromEditor);
+            #endif
+
             AudioNativeCalls.DestroyAudio();
         }
 
@@ -354,6 +418,10 @@ namespace Unity.Tiny.Audio
                     AudioNativeCalls.FreeAudio(tag.clipID);
                     mgr.RemoveComponent<AudioNativeClip>(e);
                 }).Run();
+
+#if ENABLE_DOTSRUNTIME_PROFILER
+            ProfilerStats.AccumStats.audioDspCPUx10.value = (long)(AudioNativeCalls.GetCpuUsage() * 10);
+#endif
         }
 
         public void OnSuspendResume(object sender, SuspendResumeEvent evt)

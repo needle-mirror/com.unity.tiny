@@ -1,11 +1,11 @@
 using System;
-using Unity.Mathematics;
 using Unity.Entities;
-using Unity.Tiny;
 using Unity.Tiny.GenericAssetLoading;
 using Unity.Tiny.Assertions;
-using Unity.Collections;
 using System.Runtime.InteropServices;
+#if ENABLE_DOTSRUNTIME_PROFILER
+using Unity.Development.Profiling;
+#endif
 
 /**
  * @module
@@ -99,6 +99,10 @@ namespace Unity.Tiny.STB
 
             var fnLog = string.Empty;
             fnLog += man.GetBufferAsString<Image2DLoadFromFileImageFile>(e);
+            if (man.HasComponent<Image2DLoadFromFileGuids>(e))
+            {
+                fnLog += man.GetComponentData<Image2DLoadFromFileGuids>(e).imageAsset;
+            }
             if (man.HasComponent<Image2DLoadFromFileMaskFile>(e))
             {
                 fnLog += " alpha=";
@@ -126,12 +130,38 @@ namespace Unity.Tiny.STB
 #if IO_ENABLE_TRACE
             Debug.LogFormat("Loaded image: {0} Handle {4} Size: {1},{2}", fnLog, w, h, imgSTB.imageHandle);
 #endif
+#if ENABLE_DOTSRUNTIME_PROFILER
+            ProfilerStats.AccumStats.memTextureCount.Accumulate(1);
+
+            long bytes = image.imagePixelWidth * image.imagePixelHeight * 4;
+
+            ProfilerStats.AccumStats.memTexture.Accumulate(bytes);
+            ProfilerStats.AccumStats.memReservedGFX.Accumulate(bytes);
+            ProfilerStats.AccumStats.memUsedGFX.Accumulate(bytes);
+#endif
             image.status = ImageStatus.Loaded;
             return LoadResult.success;
         }
 
         public void FreeNative(EntityManager man, Entity e, ref Image2DSTB imgSTB)
         {
+#if ENABLE_DOTSRUNTIME_PROFILER
+            int w = 0, h = 0;
+            unsafe
+            {
+                ImageIOSTBNativeCalls.GetImageFromHandle(imgSTB.imageHandle, ref w, ref h);
+            }
+            if (w != 0 && h != 0)
+            {
+                ProfilerStats.AccumStats.memTextureCount.Accumulate(-1);
+
+                long bytes = -w * h * 4;
+
+                ProfilerStats.AccumStats.memTexture.Accumulate(bytes);
+                ProfilerStats.AccumStats.memReservedGFX.Accumulate(bytes);
+                ProfilerStats.AccumStats.memUsedGFX.Accumulate(bytes);
+            }
+#endif
             ImageIOSTBNativeCalls.FreeNative(imgSTB.imageHandle);
         }
 

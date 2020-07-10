@@ -44,7 +44,7 @@ namespace Unity.Tiny.Animation.Editor
                         var discardEntry = true;
 
                         // A 0-length property path had no ECS equivalent at build time
-                        if (propertyPath.LengthInBytes > 0)
+                        if (!propertyPath.IsEmpty)
                         {
                             var targetEntity = isFloatAnimation ? floatBindingBuffer[i].TargetEntity : pPtrBindingBuffer[i].TargetEntity;
                             var result = BindingUtils.GetBindingInfo(DstEntityManager, targetEntity, propertyPath);

@@ -5,7 +5,7 @@ using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Entities.Serialization;
 using Unity.Tiny;
-using Unity.Tiny.Codec;
+using Unity.Core.Compression;
 using Unity.Tiny.IO;
 using Unity.Tiny.Assertions;
 using static Unity.Tiny.IO.AsyncOp;
@@ -47,7 +47,10 @@ namespace Unity.Tiny.Scenes
             if (world.TinyEnvironment().configEntity != Entity.Null)
                 throw new Exception("Configuration already loaded");
 
-            return LoadSceneAsync(world, new SceneGuid() { Guid = ConfigurationScene.Guid });
+            // TODO: Emscripten seems to have problems loading statics so reading
+            // from ConfigurationScene.Guid will pretty reliably come back as all zeros
+            var configGuid = new Hash128("46b433b264c69cbd39f04ad2e5d12be8"); // ConfigurationScene.Guid; 
+            return LoadSceneAsync(world, new SceneGuid() { Guid = configGuid });
         }
 
         /// <summary>
@@ -55,9 +58,9 @@ namespace Unity.Tiny.Scenes
         /// </summary>
         /// <param name="sceneReference"></param>
         /// <returns>A new Entity with a `SceneData` component which should be stored for use in `GetSceneStatus`</returns>
-        static public Entity LoadSceneAsync(World world, Unity.Entities.Runtime.SceneReference sceneReference)
+        static public Entity LoadSceneAsync(World world, Unity.Entities.SceneReference sceneReference)
         {
-            return LoadSceneAsync(world, new SceneGuid() { Guid = sceneReference.SceneGuid });
+            return LoadSceneAsync(world, new SceneGuid() { Guid = sceneReference.SceneGUID });
         }
 
         static internal Entity LoadSceneAsync(World world, SceneGuid sceneGuid)
@@ -91,9 +94,9 @@ namespace Unity.Tiny.Scenes
         /// Unloads all scene instances of the same type as the `SceneReference` passed in.
         /// </summary>
         /// <param name="sceneReference"></param>
-        static public void UnloadAllSceneInstances(World world, Unity.Entities.Runtime.SceneReference sceneReference)
+        static public void UnloadAllSceneInstances(World world, Unity.Entities.SceneReference sceneReference)
         {
-            UnloadAllSceneInstances(world, new SceneGuid() { Guid = sceneReference.SceneGuid });
+            UnloadAllSceneInstances(world, new SceneGuid() { Guid = sceneReference.SceneGUID });
         }
 
         /// <summary>
@@ -114,7 +117,7 @@ namespace Unity.Tiny.Scenes
             using (var query = em.CreateEntityQuery(ComponentType.ReadOnly<SceneLoadRequest>(), ComponentType.ReadOnly<SceneGuid>()))
             {
                 query.SetSharedComponentFilter(sceneGuid);
-                using (var issuedRequests = query.ToEntityArray(Allocator.Temp))
+                using (var issuedRequests = query.ToEntityArray(Allocator.TempJob))
                 {
                     foreach (var entity in issuedRequests)
                     {
@@ -153,36 +156,6 @@ namespace Unity.Tiny.Scenes
             var sceneData = world.EntityManager.GetComponentData<SceneData>(scene);
             return sceneData.Status;
         }
-
-        /// <summary>
-        /// Check that all startup scenes have been loaded
-        /// </summary>
-        /// <param name="world"></param>
-        /// <returns></returns>
-        static public bool AreStartupScenesLoaded(World world)
-        {
-            using (var startupScenes = world.TinyEnvironment().GetConfigBufferData<StartupScenes>().ToNativeArray(Allocator.Temp))
-            {
-                bool bAllLoaded = true;
-                var em = world.EntityManager;
-                for (var i = 0; i < startupScenes.Length; ++i)
-                {
-                    using (var query = em.CreateEntityQuery(ComponentType.ReadOnly<SceneData>(), ComponentType.ReadOnly<SceneGuid>()))
-                    {
-                        query.SetSharedComponentFilter(new SceneGuid() { Guid = startupScenes[i].SceneReference.SceneGuid });
-                        var entities = query.ToEntityArray(Allocator.TempJob);
-                        foreach (var e in entities)
-                        {
-                            SceneData sceneData = em.GetComponentData<SceneData>(e);
-                            if (sceneData.Status != SceneStatus.Loaded)
-                                bAllLoaded &= false;
-                        }
-                        entities.Dispose();
-                    }
-                }
-                return bAllLoaded;
-            }
-        }
     }
 
     /// <summary>
@@ -210,8 +183,8 @@ namespace Unity.Tiny.Scenes
             m_LoadingWorld.Dispose();
         }
 
-        internal static string DebugSceneGuid(SceneData sd) => sd.Scene.SceneGuid.Guid.ToString("N");
-        internal static string DebugSceneGuid(Scene sc) => sc.SceneGuid.Guid.ToString("N");
+        internal static string DebugSceneGuid(SceneData sd) => sd.Scene.SceneGuid.Guid.ToString();
+        internal static string DebugSceneGuid(Scene sc) => sc.SceneGuid.Guid.ToString();
 
         protected override unsafe void OnUpdate()
         {
@@ -223,7 +196,7 @@ namespace Unity.Tiny.Scenes
                 {
                     var sceneData = EntityManager.GetComponentData<SceneData>(e);
                     var sceneGuid = sceneData.Scene.SceneGuid;
-                    var path = DataRootPath + sceneGuid.Guid.ToString("N");
+                    var path = DataRootPath + sceneGuid.Guid.ToString();
 #if IO_ENABLE_TRACE
                     Debug.Log($"SceneStreamingSystem: starting load for {DebugSceneGuid(sceneData)} from {path}");
 #endif
@@ -266,7 +239,7 @@ namespace Unity.Tiny.Scenes
                 }
 
                 byte* decompressedScene = data + headerSize;
-                if (header.Codec != Codec.Codec.None)
+                if (header.Codec != Codec.None)
                 {
                     decompressedScene = (byte*)UnsafeUtility.Malloc(header.DecompressedSize, 16, Allocator.Temp);
 
@@ -297,7 +270,7 @@ namespace Unity.Tiny.Scenes
                 EntityManager.World.GetExistingSystem<EntityReferenceRemapSystem>().Update();
                 EntityManager.World.GetExistingSystem<RemoveRemapInformationSystem>().Update();
 
-                if (header.Codec != Codec.Codec.None)
+                if (header.Codec != Codec.None)
                 {
                     UnsafeUtility.Free(decompressedScene, Allocator.Temp);
                 }

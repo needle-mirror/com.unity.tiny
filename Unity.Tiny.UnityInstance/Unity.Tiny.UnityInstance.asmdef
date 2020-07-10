@@ -3,10 +3,12 @@
     "references": [
         "Unity.Collections",
         "Unity.Entities",
-        "Unity.Tiny.Core",
-        "Unity.Tiny.Scenes",
+        "Unity.Entities.Runtime",
+        "Unity.Mathematics",
         "Unity.Platforms.RunLoop",
-        "Unity.Entities.Runtime"
+        "Unity.Scenes",
+        "Unity.Tiny.Core",
+        "Unity.Tiny.Scenes"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
@@ -14,7 +16,7 @@
     "overrideReferences": false,
     "precompiledReferences": [],
     "autoReferenced": false,
-    "defineConstraints": ["UNITY_DOTSPLAYER"],
+    "defineConstraints": ["UNITY_DOTSRUNTIME"],
     "versionDefines": [],
     "noEngineReferences": false
 }

@@ -6,7 +6,6 @@
         "Unity.Entities",
         "Unity.Entities.Runtime",
         "Unity.Mathematics",
-        "Unity.Tiny.Codec",
         "Unity.Tiny.Core",
         "Unity.Tiny.IO"
     ],

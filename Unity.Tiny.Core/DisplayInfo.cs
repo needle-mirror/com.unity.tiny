@@ -11,8 +11,8 @@ namespace Unity.Tiny
         PortraitUpsideDown = 2,
         ReversePortrait = 2,
         Landscape = 4,
-        LandscapeRight = 4,
-        LandscapeLeft = 8,
+        LandscapeLeft = 4,
+        LandscapeRight = 8,
         ReverseLandscape = 8,
         AutoRotationPortrait = Portrait | ReversePortrait,
         AutoRotationLandscape = Landscape | ReverseLandscape,
@@ -121,6 +121,11 @@ namespace Unity.Tiny
         ///  Disabling the wait for sync might not be possible on some platforms, like inside a web browser.
         /// </summary>
         public bool disableVSync;
+
+        /// <summary>
+        ///  Specifies whether using gpu mesh skinning.
+        /// </summary>
+        public bool gpuSkinning;
 
         /// <summary>
         ///  Color space to use for rendering.

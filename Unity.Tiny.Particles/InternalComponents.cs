@@ -3,35 +3,29 @@ using Unity.Entities;
 
 namespace Unity.Tiny.Particles
 {
-    /// <summary>
-    /// Modifies the position of the particle every frame.
-    /// </summary>
-    /// <remarks>
-    /// Should be placed next to <see cref="Particle"/>
-    /// </remarks>
-    struct ParticleVelocity : IComponentData
+    struct Particle
     {
+        /// <summary> How long this particle has existed, in seconds.  From 0.0 to lifetime. </summary>
+        internal float time;
+
+        /// <summary> The maximum lifetime of this particle, in seconds. </summary>
+        internal float lifetime;
+
+        internal float3 position;
+        internal float3 scale;
+        internal quaternion rotation;
+
+        /// <summary> Modifies the position of the particle every frame. </summary>
         internal float3 velocity;
-    }
-#if false
-    // Modifies the rotation around z axis.
-    struct ParticleAngularVelocity : IComponentData
-    {
-        internal float angularVelocity;
-    }
 
-    struct ParticleLifetimeScale : IComponentData
-    {
-        internal float3 initialScale;
-    }
-#endif
-
-    /// <remarks>
-    /// Should be placed next to <see cref="Particle"/>
-    /// </remarks>
-    struct ParticleColor : IComponentData
-    {
         internal float4 color;
+    }
+
+    struct DynamicParticle : IBufferElementData
+    {
+#pragma warning disable 0649
+        internal Particle Value;
+#pragma warning restore 0649
     }
 
     struct BurstEmissionInternal : IComponentData
@@ -48,7 +42,6 @@ namespace Unity.Tiny.Particles
     /// </remarks>
     struct ParticleEmitterInternal : ISystemStateComponentData
     {
-        internal Entity particleTemplate;
         internal float particleSpawnCooldown;
         internal uint numParticles;
         internal Entity particleRenderer;
@@ -58,6 +51,9 @@ namespace Unity.Tiny.Particles
 
         /// <summary> Current remainder of start delay in seconds </summary>
         internal float remainingDelay;
+
+        /// <summary> True if this emitter is actively spawning new particles </summary>
+        internal bool active;
     }
 
     /// <summary>
@@ -69,14 +65,6 @@ namespace Unity.Tiny.Particles
     struct Rng : IComponentData
     {
         internal Random rand;
-    }
-
-    /// <summary>
-    /// Reference to particle emitter. Shared across all particles that were emitted by the referenced emitter.
-    /// </summary>
-    struct EmitterReferenceForParticles : ISharedComponentData
-    {
-        internal Entity emitter;
     }
 
     /// <summary>

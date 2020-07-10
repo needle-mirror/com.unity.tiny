@@ -1,4 +1,3 @@
-using System;
 using System.Linq;
 using Unity.Entities;
 using UnityEngine;
@@ -26,6 +25,11 @@ namespace Unity.Tiny.Bootstrap.Hybrid
                     return true;
                 }
 
+                if (asmName.Contains("Unity.Tiny.Animation"))
+                {
+                    return true;
+                }
+
                 if (asmName.Contains("Unity.Tiny") && !asmName.Contains("Hybrid"))
                 {
                     return false;
@@ -35,7 +39,9 @@ namespace Unity.Tiny.Bootstrap.Hybrid
             }).ToList();
 
             DefaultWorldInitialization.AddSystemsToRootLevelSystemGroups(world, systems);
-            ScriptBehaviourUpdateOrder.UpdatePlayerLoop(world);
+            var playerLoop = UnityEngine.LowLevel.PlayerLoop.GetDefaultPlayerLoop(); // TODO(DOTS-2283): shouldn't stomp the default player loop here
+            ScriptBehaviourUpdateOrder.AddWorldToPlayerLoop(world, ref playerLoop);
+            UnityEngine.LowLevel.PlayerLoop.SetPlayerLoop(playerLoop);
             return true;
         }
     }

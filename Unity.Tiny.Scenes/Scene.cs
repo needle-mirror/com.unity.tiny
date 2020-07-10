@@ -21,7 +21,7 @@ namespace Unity.Tiny.Scenes
             SceneInstanceId = sceneInstanceId;
         }
 
-        public Scene(Guid sceneGuid, uint sceneInstanceId)
+        public Scene(Hash128 sceneGuid, uint sceneInstanceId)
         {
             SceneGuid = new SceneGuid { Guid = sceneGuid };
             SceneInstanceId = new SceneInstanceId { InstanceId = sceneInstanceId };

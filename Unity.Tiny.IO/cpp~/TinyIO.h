@@ -18,10 +18,10 @@ enum class ErrorStatus {
     Unknown
 };
 
-DOTS_EXPORT(int) RequestAsyncRead(const char* path);
+DOTS_EXPORT(int) RequestAsyncRead(const char* path, void* pData = nullptr, int len = 0);
 DOTS_EXPORT(int) GetStatus(int requestIndex);
 DOTS_EXPORT(int) GetErrorStatus(int requestIndex);
 DOTS_EXPORT(void) Close(int requestIndex);
-DOTS_EXPORT(void) GetData(int requestIndex, const char** data, int* len);
+DOTS_EXPORT(void) GetData(int requestIndex, const char** ppData, int* pLen);
 
 }}} // namespace Unity::Tiny::IO

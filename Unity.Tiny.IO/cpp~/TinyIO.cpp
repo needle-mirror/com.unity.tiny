@@ -12,6 +12,9 @@
 #if defined __EMSCRIPTEN__
     #include <emscripten.h>
     #include <emscripten/fetch.h>
+#if SINGLE_FILE
+    extern "C" bool js_fetch_embedded(const char* path, void** ppData, size_t* pLen);
+#endif
 #else
     #include <stdio.h>
     #include <stdlib.h>
@@ -30,6 +33,7 @@ namespace Unity { namespace Tiny { namespace IO
         Request(int index = -1) : mIndex(index) {}
 
         uint64_t mJobId; // platform specific
+        bool mbOwnPayload = true;
         void* mpPayload = nullptr;
         size_t mPayloadSize = 0;
         int mIndex;
@@ -170,7 +174,7 @@ namespace Unity { namespace Tiny { namespace IO
     // Async API
     /////////////
     DOTS_EXPORT(int)
-    RequestAsyncRead(const char* path)
+    RequestAsyncRead(const char* path, void* pData, int len)
     {
         int requestIndex = sRequestPool.GetRequestIndex();
         Request& request = sRequestPool.GetRequest(requestIndex);
@@ -178,6 +182,17 @@ namespace Unity { namespace Tiny { namespace IO
         request.mStatus = Status::InProgress;
         request.mErrorStatus = ErrorStatus::None;
 
+#if SINGLE_FILE
+        if (js_fetch_embedded(path, &request.mpPayload, &request.mPayloadSize))
+        {
+            request.mStatus = Status::Success;
+        }
+        else
+        {
+            request.mStatus = Status::Failure;
+            request.mErrorStatus = ErrorStatus::FileNotFound;
+        }
+#else
         emscripten_fetch_attr_t attr;
         emscripten_fetch_attr_init(&attr);
 
@@ -188,6 +203,7 @@ namespace Unity { namespace Tiny { namespace IO
         attr.userData = (void*)requestIndex;
 
         request.mJobId = (uint64_t) emscripten_fetch(&attr, path);
+#endif
 
         return requestIndex;
     }
@@ -200,7 +216,9 @@ namespace Unity { namespace Tiny { namespace IO
 
         Request& request = sRequestPool.GetRequest(requestIndex);
         
+#if !SINGLE_FILE
         emscripten_fetch_close((emscripten_fetch_t*)request.mJobId);
+#endif
 
         request.mpPayload = nullptr;
         request.mPayloadSize = 0;
@@ -217,18 +235,24 @@ namespace Unity { namespace Tiny { namespace IO
 
 #if defined(UNITY_ANDROID)
     extern "C" void* loadAsset(const char *path, int *size, void* (*alloc)(size_t));
+
     DOTS_EXPORT(int)
-    RequestAsyncRead(const char* path)
+    RequestAsyncRead(const char* path, void* pData, int len)
     {
         int requestIndex = sRequestPool.GetRequestIndex();
         Request& request = sRequestPool.GetRequest(requestIndex);
 
         request.mStatus = Status::InProgress;
         request.mErrorStatus = ErrorStatus::None;
+        request.mbOwnPayload = len == 0;
 
         // Just do syncrounous IO on native for now
         int size;
         void* data = loadAsset(path, &size, [](size_t bytes) -> void* { return unsafeutility_malloc(bytes, 16, Allocator::Persistent); });
+        // This is terrible, but need platforms changes to offer a buffer to be filled in a safe manner
+        if (!request.mbOwnPayload)
+            memcpy(pData, data, size < len ? size : len);
+
         if (data == NULL)
         {
             request.mStatus = Status::Failure;
@@ -280,11 +304,18 @@ namespace Unity { namespace Tiny { namespace IO
             else
             {
                 int size = statBuf.st_size;
-                void* data = unsafeutility_malloc(size, 16, Allocator::Persistent);
+                if (request.mbOwnPayload)
+                {
+                    request.mpPayload = unsafeutility_malloc(size, 16, Allocator::Persistent);
+                    request.mPayloadSize = size;
+                }
+                else
+                {
+                    request.mPayloadSize = size < request.mPayloadSize ? size : request.mPayloadSize;
+                }
 
-                int bytesRead = (int) fread(data, 1, size, pFile);
-
-                if (bytesRead != size)
+                int bytesRead = (int) fread(request.mpPayload, 1, request.mPayloadSize, pFile);
+                if (bytesRead != request.mPayloadSize)
                 {
                     request.mStatus = Status::Failure;
                 }
@@ -292,9 +323,6 @@ namespace Unity { namespace Tiny { namespace IO
                 {
                     request.mStatus = Status::Success;
                 }
-
-                request.mpPayload = data;
-                request.mPayloadSize = size;
 
                 fclose(pFile);
             }
@@ -304,7 +332,7 @@ namespace Unity { namespace Tiny { namespace IO
     };
 
     DOTS_EXPORT(int)
-    RequestAsyncRead(const char* path)
+    RequestAsyncRead(const char* path, void* pData, int len)
     {
         int requestIndex = sRequestPool.GetRequestIndex();
         Request& request = sRequestPool.GetRequest(requestIndex);
@@ -317,6 +345,9 @@ namespace Unity { namespace Tiny { namespace IO
         readJob->mRequestIndex = requestIndex;
 
         request.mJobId = Pool::GetInstance()->Enqueue(std::move(readJob));
+        request.mpPayload = pData;
+        request.mPayloadSize = len;
+        request.mbOwnPayload = len == 0;
 
         return requestIndex;
     }
@@ -336,7 +367,9 @@ namespace Unity { namespace Tiny { namespace IO
             Pool::GetInstance()->Abort(request.mJobId);
 #endif
 
-        unsafeutility_free(request.mpPayload, Allocator::Persistent);
+        if(request.mbOwnPayload)
+            unsafeutility_free(request.mpPayload, Allocator::Persistent);
+
         request.mpPayload = nullptr;
         request.mPayloadSize = 0;
         request.mStatus = Status::NotStarted;

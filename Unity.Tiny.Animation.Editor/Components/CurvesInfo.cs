@@ -15,8 +15,8 @@ namespace Unity.Tiny.Animation.Editor
     {
         public BlobArray<Keyframe> Keyframes;
         public BlobArray<int> CurveOffsets;
-        public BlobArray<NativeString512> TargetGameObjectPaths;
-        public BlobArray<NativeString512> BindingNames;
+        public BlobArray<FixedString512> TargetGameObjectPaths;
+        public BlobArray<FixedString512> BindingNames;
         public BlobArray<Entity> AnimatedAssetGroupings;
 
         public RequiredConversionActions ConversionActions;
@@ -47,6 +47,6 @@ namespace Unity.Tiny.Animation.Editor
 
     struct AnimationBindingName : IBufferElementData
     {
-        public NativeString512 Value;
+        public FixedString512 Value;
     }
 }

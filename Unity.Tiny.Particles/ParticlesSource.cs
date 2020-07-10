@@ -1,34 +1,36 @@
 using Unity.Entities;
 using Unity.Collections;
 using Unity.Mathematics;
-using Unity.Transforms;
 
 namespace Unity.Tiny.Particles
 {
     static class ParticlesSource
     {
-        internal static void InitEmitterCircleSource(EntityManager mgr, EntityCommandBuffer ecb, Entity emitter, NativeArray<Entity> particles, Range speed, float randomizePos, float randomizeDir, ref Random rand)
+        internal static void InitEmitterCircleSource(EntityManager mgr, Entity emitter, DynamicBuffer<Particle> particles, int offset, Range speed, float randomizePos, float randomizeDir, float4x4 matrix, ref Random rand)
         {
-            var radius = mgr.GetComponentData<EmitterCircleSource>(emitter).radius;
-            foreach (var particle in particles)
+            var radius = mgr.GetComponentData<EmitterCircleSource>(emitter).Radius;
+            for (var i = offset; i < particles.Length; i++)
             {
+                var particle = particles[i];
                 float randomAngle = rand.NextFloat((float)-math.PI, (float)math.PI);
                 float radiusNormalized = math.sqrt(rand.Random01());
                 radius *= radiusNormalized;
                 var positionNormalized = new float3(math.sin(randomAngle), math.cos(randomAngle), 0.0f);
-                SetPosition(ecb, particle, positionNormalized * radius, randomizePos, ref rand);
-                SetVelocity(ecb, particle, ref positionNormalized, speed, randomizeDir, ref rand);
-                SetRotation(mgr, ecb, emitter, particle, positionNormalized, ref rand);
+                particle.position = GetParticlePosition(positionNormalized * radius, randomizePos, matrix, ref rand);
+                particle.velocity = GetParticleVelocity(ref positionNormalized, speed, randomizeDir, matrix, ref rand);
+                particle.rotation = GetParticleRotation(mgr, emitter, positionNormalized, ref rand);
+                particles[i] = particle;
             }
         }
 
-        internal static void InitEmitterConeSource(EntityManager mgr, EntityCommandBuffer ecb, Entity emitter, NativeArray<Entity> particles, Range speed, float randomizePos, float randomizeDir, ref Random rand)
+        internal static void InitEmitterConeSource(EntityManager mgr, Entity emitter, DynamicBuffer<Particle> particles, int offset, Range speed, float randomizePos, float randomizeDir, float4x4 matrix, ref Random rand)
         {
             var source = mgr.GetComponentData<EmitterConeSource>(emitter);
-            source.angle = math.clamp(source.angle, 0.0f, 90.0f);
-            float coneAngle = math.radians(source.angle);
-            foreach (var particle in particles)
+            source.Angle = math.clamp(source.Angle, 0.0f, 90.0f);
+            float coneAngle = math.radians(source.Angle);
+            for (var i = offset; i < particles.Length; i++)
             {
+                var particle = particles[i];
                 float angle = rand.Random01() * 2.0f * math.PI;
                 float radiusNormalized = math.sqrt(rand.Random01());
                 float3 localPositionOnConeBase;
@@ -36,19 +38,21 @@ namespace Unity.Tiny.Particles
                 localPositionOnConeBase.y = math.sin(angle);
                 localPositionOnConeBase.z = 0.0f;
                 localPositionOnConeBase *= radiusNormalized;
-                SetPosition(ecb, particle, localPositionOnConeBase * source.radius, randomizePos, ref rand);
+                particle.position = GetParticlePosition(localPositionOnConeBase * source.Radius, randomizePos, matrix, ref rand);
                 float directionRadius = math.sin(coneAngle);
                 float directionHeight = math.cos(coneAngle);
                 float3 direction = new float3(localPositionOnConeBase.x * directionRadius, localPositionOnConeBase.y * directionRadius, directionHeight);
-                SetVelocity(ecb, particle, ref direction, speed, randomizeDir, ref rand);
-                SetRotation(mgr, ecb, emitter, particle, direction, ref rand);
+                particle.velocity = GetParticleVelocity(ref direction, speed, randomizeDir, matrix, ref rand);
+                particle.rotation = GetParticleRotation(mgr, emitter, direction, ref rand);
+                particles[i] = particle;
             }
         }
 
-        internal static void InitEmitterSphereSource(EntityManager mgr, EntityCommandBuffer ecb, Entity emitter, NativeArray<Entity> particles, float radius, bool hemisphere, Range speed, float randomizePos, float randomizeDir, ref Random rand)
+        internal static void InitEmitterSphereSource(EntityManager mgr, Entity emitter, DynamicBuffer<Particle> particles, int offset, float radius, bool hemisphere, Range speed, float randomizePos, float randomizeDir, float4x4 matrix, ref Random rand)
         {
-            foreach (var particle in particles)
+            for (var i = offset; i < particles.Length; i++)
             {
+                var particle = particles[i];
                 float3 positionOnUnitSphere = rand.NextFloat3Direction();
 
                 // For sphere, z ranges from [-1, 1]. For hemisphere, z ranges from [0, 1].
@@ -58,52 +62,56 @@ namespace Unity.Tiny.Particles
                 // Create more points toward the outer part of the sphere
                 float3 position = positionOnUnitSphere * math.pow(rand.Random01(), 1.0f / 3.0f) * radius;
 
-                SetPosition(ecb, particle, position, randomizePos, ref rand);
-                SetVelocity(ecb, particle, ref positionOnUnitSphere, speed, randomizeDir, ref rand);
-                SetRotation(mgr, ecb, emitter, particle, positionOnUnitSphere, ref rand);
+                particle.position = GetParticlePosition(position, randomizePos, matrix, ref rand);
+                particle.velocity = GetParticleVelocity(ref positionOnUnitSphere, speed, randomizeDir, matrix, ref rand);
+                particle.rotation = GetParticleRotation(mgr, emitter, positionOnUnitSphere, ref rand);
+                particles[i] = particle;
             }
         }
 
-        internal static void InitEmitterRectangleSource(EntityManager mgr, EntityCommandBuffer ecb, Entity emitter, NativeArray<Entity> particles, Range speed, float randomizePos, float randomizeDir, ref Random rand)
+        internal static void InitEmitterRectangleSource(EntityManager mgr, Entity emitter, DynamicBuffer<Particle> particles, int offset, Range speed, float randomizePos, float randomizeDir, float4x4 matrix, ref Random rand)
         {
             // Unit rectangle centered at the origin
             float2 bottomLeft = new float2(-0.5f, -0.5f);
             float2 topRight = new float2(0.5f, 0.5f);
             float3 direction = new float3(0, 0, 1);
-            foreach (var particle in particles)
+            for (var i = offset; i < particles.Length; i++)
             {
+                var particle = particles[i];
                 var position = new float3(rand.NextFloat2(bottomLeft, topRight), 0.0f);
-                SetPosition(ecb, particle, position, randomizePos, ref rand);
-                SetVelocity(ecb, particle, ref direction, speed, randomizeDir, ref rand);
-                SetRotation(mgr, ecb, emitter, particle, direction, ref rand);
+                particle.position = GetParticlePosition(position, randomizePos, matrix, ref rand);
+                particle.velocity = GetParticleVelocity(ref direction, speed, randomizeDir, matrix, ref rand);
+                particle.rotation = GetParticleRotation(mgr, emitter, direction, ref rand);
+                particles[i] = particle;
             }
         }
 
-        private static void SetPosition(EntityCommandBuffer ecb, Entity particle, float3 position, float randomizePos, ref Random rand)
+        private static float3 GetParticlePosition(float3 position, float randomizePos, float4x4 matrix, ref Random rand)
         {
             if (randomizePos > 0.0f)
                 position += rand.NextFloat3Direction() * randomizePos;
 
-            ecb.AddComponent(particle, new Translation { Value = position });
+            return math.transform(matrix, position);
         }
 
-        private static void SetVelocity(EntityCommandBuffer ecb, Entity particle, ref float3 direction, Range speed, float randomizeDir,  ref Random rand)
+        private static float3 GetParticleVelocity(ref float3 direction, Range speed, float randomizeDir, float4x4 matrix, ref Random rand)
         {
-            if (speed.end != 0.0f)
-            {
-                if (randomizeDir > 0.0f)
-                {
-                    float3 randomDir = rand.NextFloat3Direction();
-                    direction = math.lerp(direction, randomDir, randomizeDir);
-                }
+            if (speed.End == 0.0f)
+                return float3.zero;
 
-                float randomSpeed = rand.RandomRange(speed);
-                var particleVelocity = new ParticleVelocity { velocity = direction * randomSpeed };
-                ecb.AddComponent(particle, particleVelocity);
+            if (randomizeDir > 0.0f)
+            {
+                float3 randomDir = rand.NextFloat3Direction();
+                direction = math.lerp(direction, randomDir, randomizeDir);
             }
+
+            var velocity = direction * rand.RandomRange(speed);
+            matrix.c3 = new float4(0, 0, 0, 1); // remove translation
+            return math.transform(matrix, velocity);
+
         }
 
-        private static void SetRotation(EntityManager mgr, EntityCommandBuffer ecb, Entity emitter, Entity particle, float3 direction, ref Random rand)
+        private static quaternion GetParticleRotation(EntityManager mgr, Entity emitter, float3 direction, ref Random rand)
         {
             if (mgr.HasComponent<EmitterInitialRotation>(emitter))
             {
@@ -112,32 +120,18 @@ namespace Unity.Tiny.Particles
                 float3 z = new float3(0, 0, 1);
                 float3 axis = math.cross(z, direction);
                 axis = math.dot(axis, axis) <= 0.01f ? new float3(0, 1, 0) : math.normalize(axis);
-
-                ecb.AddComponent(particle, new Rotation
-                {
-                    Value = quaternion.AxisAngle(axis, rand.RandomRange(initialRotation.angle))
-                });
+                return quaternion.AxisAngle(axis, rand.RandomRange(initialRotation.Angle));
             }
-            else if (mgr.HasComponent<EmitterInitialNonUniformRotation>(emitter))
+            if (mgr.HasComponent<EmitterInitialNonUniformRotation>(emitter))
             {
                 var initialRotation = mgr.GetComponentData<EmitterInitialNonUniformRotation>(emitter);
-                ecb.AddComponent(particle, new Rotation
-                {
-                    Value = quaternion.Euler(
-                        rand.RandomRange(initialRotation.angleX),
-                        rand.RandomRange(initialRotation.angleY),
-                        rand.RandomRange(initialRotation.angleZ))
-                });
+                return quaternion.Euler(
+                    rand.RandomRange(initialRotation.AngleX),
+                    rand.RandomRange(initialRotation.AngleY),
+                    rand.RandomRange(initialRotation.AngleZ));
             }
-#if false
-            if (mgr.HasComponent<LifetimeAngularVelocity>(emitter))
-            {
-                foreach (var particle in newParticles)
-                {
-                    ecb.AddComponent(particle, new ParticleAngularVelocity());
-                }
-            }
-#endif
+
+            return quaternion.identity;
         }
     }
 } // namespace Particles

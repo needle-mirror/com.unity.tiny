@@ -158,6 +158,16 @@ namespace Unity.Tiny
                 SRGBToLinear(rgba.z),
                 rgba.w);
         }
+
+        static public uint PackFloatABGR(float4 c)
+        {
+            int ri = math.clamp((int)(c.x * 255.0f), 0, 255);
+            int gi = math.clamp((int)(c.y * 255.0f), 0, 255);
+            int bi = math.clamp((int)(c.z * 255.0f), 0, 255);
+            int ai = math.clamp((int)(c.w * 255.0f), 0, 255);
+            return ((uint)ai << 0) | ((uint)bi << 8) | ((uint)gi << 16) | ((uint)ri << 24);
+        }
+
     }
 
     /// <summary>

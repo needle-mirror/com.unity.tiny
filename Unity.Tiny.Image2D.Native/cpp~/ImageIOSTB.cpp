@@ -1,20 +1,11 @@
 #include <stdlib.h>
 #include <stdint.h>
+#include <allocators.h>
+#include <stdio.h>
 
-// Using baselib for now since we need realloc and we currently don't support it in Unity::LowLevel
-#include <Baselib.h>
-#include <C/Baselib_Memory.h>
-
-static void FreeWrapped(void* p) 
-{
-    if (!p)
-        return;
-    Baselib_Memory_AlignedFree(p);
-}
-
-#define STBI_MALLOC(sz)           Baselib_Memory_AlignedAllocate(sz,16)
-#define STBI_REALLOC(p,newsz)     Baselib_Memory_AlignedReallocate(p,newsz,16)
-#define STBI_FREE(p)              FreeWrapped(p)
+#define STBI_MALLOC(sz)           unsafeutility_malloc(sz,16,Unity::LowLevel::Allocator::Persistent)
+#define STBI_REALLOC(p,newsz)     unsafeutility_realloc(p,newsz,16,Unity::LowLevel::Allocator::Persistent)
+#define STBI_FREE(p)              unsafeutility_free(p,Unity::LowLevel::Allocator::Persistent)
 #define STBI_REALLOC_SIZED(p,oldsz,newsz) STBI_REALLOC(p,newsz)
 #define STBIW_MALLOC(sz)          STBI_MALLOC(sz)
 #define STBIW_REALLOC(p,newsz)    STBI_REALLOC(p,newsz)
@@ -32,6 +23,8 @@ static void FreeWrapped(void* p)
 #include "Image2DHelpers.h"
 
 #include <Unity/Runtime.h>
+
+#include "src/webp/decode.h"
 
 using namespace ut;
 using namespace ut::ThreadPool;
@@ -61,7 +54,7 @@ public:
     }
 
     ImageSTB(ImageSTB&& other) {
-        pixels = other.pixels; 
+        pixels = other.pixels;
         w = other.w;
         h = other.h;
         other.pixels = 0;
@@ -94,6 +87,83 @@ static std::vector<ImageSTB*> allImages(1); // by handle, reserve handle 0
 extern "C" void* loadAsset(const char *path, int *size, void* (*alloc)(size_t));
 #endif
 
+//Read image data utility function
+static bool ReadFile(const char* file_name, uint8_t** data, size_t* data_size) {
+    int ok;
+    uint8_t* file_data;
+    size_t file_size;
+    FILE* in;
+
+    *data = NULL;
+    *data_size = 0;
+
+    in = fopen(file_name, "rb");
+    if (in == NULL) {
+        printf("Failed to open input image file '%s'\n", file_name);
+        return false;
+    }
+
+    fseek(in, 0, SEEK_END);
+    file_size = ftell(in);
+    fseek(in, 0, SEEK_SET);
+    file_data = (uint8_t*)malloc(file_size);
+    if (file_data == NULL) {
+        fclose(in);
+        return false;
+    }
+    ok = (fread(file_data, file_size, 1, in) == 1);
+    fclose(in);
+
+    if (!ok) {
+        free(file_data);
+        return false;
+    }
+
+    *data = file_data;
+    *data_size = file_size;
+    return true;
+}
+
+//Load/Read a potential webp compressed image file and try to decode it to RGBA
+//TODO: to move to a C# non stb only module
+static uint32_t* LoadWebpImage(const char* fn, int *width, int *height)
+{
+    uint8_t* data;
+    size_t size_data;
+    //Read image file
+    if (!ReadFile(fn, &data, &size_data))
+        return NULL;
+
+    //Init webp decoder
+    WebPDecoderConfig config;
+    if (WebPInitDecoderConfig(&config) != 1)
+        return NULL;
+
+    //Retrieve webp feature such as image width/height
+    if (WebPGetFeatures(data, size_data, &config.input) != VP8_STATUS_OK)
+        return NULL;
+
+    //We support only 32 bits images for now
+    config.output.colorspace = WEBP_CSP_MODE::MODE_RGBA;
+
+    //Finally decode the image
+    if (WebPDecode(data, size_data, &config) != VP8_STATUS_OK)
+        return NULL;
+
+    *width = config.output.width;
+    *height = config.output.height;
+    uint32_t* pixels = (uint32_t*)STBI_MALLOC((*width) * (*height) * sizeof(uint32_t));
+
+    //Copy the output to pixels
+    memcpy(pixels, config.output.u.RGBA.rgba, (*width) * (*height) * sizeof(uint32_t));
+
+    //And release the webp output
+    WebPFreeDecBuffer(&config.output);
+    free(data);
+
+    return pixels;
+}
+
 static bool
 LoadImageFromFile(const char* fn, size_t fnlen, ImageSTB& colorImg)
 {
@@ -111,9 +181,11 @@ LoadImageFromFile(const char* fn, size_t fnlen, ImageSTB& colorImg)
     pixels = (uint32_t*)stbi_load_from_memory((uint8_t*)data, size, &w, &h, &bpp, 4);
     free(data);
 #endif
-    if (!pixels) // try loading as file
+    if (!pixels) // try loading as file (supported STB image file)
         pixels = (uint32_t*)stbi_load(fn, &w, &h, &bpp, 4);
-    if (!pixels)
+    if (!pixels) // try loading as webp image file
+        pixels = LoadWebpImage(fn, &w, &h);
+    if(!pixels)
         return false;
     colorImg.Set(pixels, w, h);
     return true;
@@ -254,7 +326,7 @@ checkload_stb(int64_t loadId, int *imageHandle)
         return 2; // failed
     }
     // put it into a local copy
-    int found = -1; 
+    int found = -1;
     for (int i=1; i<(int)allImages.size(); i++ ) {
         if (!allImages[i]) {
             found = i;
@@ -278,7 +350,7 @@ freeimagemem_stb(int imageHandle)
 {
     if (imageHandle<0 || imageHandle>=(int)allImages.size())
         return;
-    allImages[imageHandle]->Free(); // free mem, but keep image 
+    allImages[imageHandle]->Free(); // free mem, but keep image
 }
 
 DOTS_EXPORT(uint8_t*)
@@ -295,7 +367,7 @@ getimage_stb(int imageHandle, int *sizeX, int *sizeY)
 
 DOTS_EXPORT(void)
 initmask_stb(int imageHandle, uint8_t* buffer)
-{    
+{
     initImage2DMask(*allImages[imageHandle], buffer);
 }
 

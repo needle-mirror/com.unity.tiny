@@ -1,12 +1,11 @@
 {
   "name": "Unity.Tiny.Thread.Native",
   "references": [
-    "Unity.Entities"
   ],
   "optionalUnityReferences": [],
   "excludePlatforms": [
     "WebGL"
   ],
   "allowUnsafeCode": true,
-  "defineConstraints": ["UNITY_DOTSPLAYER"]
+  "defineConstraints": ["UNITY_DOTSRUNTIME"]
 }

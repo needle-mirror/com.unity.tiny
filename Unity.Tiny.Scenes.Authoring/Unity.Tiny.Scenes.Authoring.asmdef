@@ -6,7 +6,10 @@
         "Unity.Tiny.Scenes",
         "Unity.Tiny.Core",
         "Unity.Entities.Runtime",
-        "Unity.Scenes.Hybrid"
+        "Unity.Scenes",
+        "Unity.Mathematics",
+        "Unity.Build",
+        "Unity.Build.DotsRuntime"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

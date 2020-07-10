@@ -16,7 +16,7 @@ namespace Unity.Tiny.Animation.Editor
             return k_AnimatableTypes.Contains(type);
         }
 
-        public static BindingInfo GetBindingInfo(EntityManager entityManager, Entity entity, NativeString512 propertyPath)
+        public static BindingInfo GetBindingInfo(EntityManager entityManager, Entity entity, FixedString512 propertyPath)
         {
             var path = propertyPath.ToString();
             if (string.IsNullOrEmpty(path))

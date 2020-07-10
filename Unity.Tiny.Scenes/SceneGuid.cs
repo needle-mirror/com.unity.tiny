@@ -7,7 +7,7 @@ namespace Unity.Tiny.Scenes
     //[HideInInspector, NonExported]
     public struct SceneGuid : ISharedComponentData, IEquatable<SceneGuid>
     {
-        public Guid Guid;
+        public Hash128 Guid;
 
         public bool Equals(SceneGuid other)
         {

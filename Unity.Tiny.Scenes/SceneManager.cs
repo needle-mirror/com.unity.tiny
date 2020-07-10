@@ -18,7 +18,7 @@ namespace Unity.Tiny.Scenes
         /// <param name="entities">The set of entities to convert.</param>
         /// <param name="guid">The unique identifier of the scene.</param>
         /// <returns>A scene view of entities.</returns>
-        public static Scene Create(EntityManager entityManager, NativeArray<Entity> entities, Guid guid)
+        public static Scene Create(EntityManager entityManager, NativeArray<Entity> entities, Hash128 guid)
         {
             var sceneGuid = new SceneGuid {Guid = guid};
             var sceneInstanceId = new SceneInstanceId {InstanceId = s_NextSceneInstanceId++};
@@ -49,7 +49,7 @@ namespace Unity.Tiny.Scenes
             return new Scene(sceneGuid, sceneInstanceId);
         }
 
-        public static Scene Create(Guid guid)
+        public static Scene Create(Hash128 guid)
         {
             var sceneGuid = new SceneGuid {Guid = guid};
             var sceneInstanceId = new SceneInstanceId {InstanceId = s_NextSceneInstanceId++};

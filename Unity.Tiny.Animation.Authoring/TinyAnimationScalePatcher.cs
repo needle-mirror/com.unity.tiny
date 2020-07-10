@@ -1,4 +1,4 @@
-#if !UNITY_DOTSPLAYER
+#if !UNITY_DOTSRUNTIME
 using UnityEngine;
 using UnityEngine.Animations;
 

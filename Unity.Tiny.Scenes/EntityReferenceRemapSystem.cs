@@ -10,8 +10,8 @@ namespace Unity.Tiny.Scenes
         [BurstCompile]
         private struct BuildEntityGuidHashMapJob : IJobChunk
         {
-            [Unity.Collections.ReadOnly] public ArchetypeChunkEntityType Entity;
-            [Unity.Collections.ReadOnly] public ArchetypeChunkComponentType<EntityGuid> EntityGuidType;
+            [Unity.Collections.ReadOnly] public EntityTypeHandle Entity;
+            [Unity.Collections.ReadOnly] public ComponentTypeHandle<EntityGuid> EntityGuidType;
             [Unity.Collections.WriteOnly] public NativeHashMap<EntityGuid, Entity>.ParallelWriter HashMap;
 
             public void Execute(ArchetypeChunk chunk, int chunkIndex, int firstEntityIndex)
@@ -56,18 +56,18 @@ namespace Unity.Tiny.Scenes
         {
             using (var entityGuidHashMap = new NativeHashMap<EntityGuid, Entity>(m_EntityGuidQuery.CalculateEntityCount(), Allocator.TempJob))
             {
-                var entityType = EntityManager.GetArchetypeChunkEntityType();
+                var entityType = EntityManager.GetEntityTypeHandle();
 
                 new BuildEntityGuidHashMapJob
                 {
                     Entity = entityType,
-                    EntityGuidType = GetArchetypeChunkComponentType<EntityGuid>(true),
+                    EntityGuidType = GetComponentTypeHandle<EntityGuid>(true),
                     HashMap = entityGuidHashMap.AsParallelWriter()
                 }.Schedule(m_EntityGuidQuery).Complete();
 
                 using (var chunks = m_EntityReferenceRemapQuery.CreateArchetypeChunkArray(Allocator.TempJob))
                 {
-                    var entityReferenceRemapType = GetArchetypeChunkBufferType<EntityReferenceRemap>(true);
+                    var entityReferenceRemapType = GetBufferTypeHandle<EntityReferenceRemap>(true);
 
                     // Run through all chunks
                     for (var chunkIndex = 0; chunkIndex < chunks.Length; chunkIndex++)
@@ -156,8 +156,8 @@ namespace Unity.Tiny.Scenes
         {
             using (var chunks = m_EntityReferenceRemapQuery.CreateArchetypeChunkArray(Allocator.TempJob))
             {
-                var entityType = EntityManager.GetArchetypeChunkEntityType();
-                var entityReferenceRemapType = GetArchetypeChunkBufferType<EntityReferenceRemap>();
+                var entityType = EntityManager.GetEntityTypeHandle();
+                var entityReferenceRemapType = GetBufferTypeHandle<EntityReferenceRemap>();
 
                 // Run through all chunks
                 for (var chunkIndex = 0; chunkIndex < chunks.Length; chunkIndex++)

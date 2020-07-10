@@ -17,179 +17,147 @@ namespace Unity.Tiny.Particles
     [UpdateBefore(typeof(SubmitSystemGroup))]
     public class ParticlesMeshBuilderSystem : SystemBase
     {
-        EntityQuery particleRenderersQuery;
+        EntityQuery m_ParticleRenderersQuery;
 
         protected override void OnCreate()
         {
             base.OnCreate();
-            var queryDesc = new EntityQueryDesc
+            var rendererQueryDesc = new EntityQueryDesc
             {
                 All = new[] { typeof(MeshRenderer), ComponentType.ReadOnly<EmitterReferenceForRenderer>() },
                 Options = EntityQueryOptions.IncludeDisabled
             };
-            particleRenderersQuery = GetEntityQuery(queryDesc);
+            m_ParticleRenderersQuery = GetEntityQuery(rendererQueryDesc);
         }
 
         protected override void OnUpdate()
         {
             EntityCommandBuffer ecb = new EntityCommandBuffer(Allocator.TempJob);
-            ComponentDataFromEntity<LocalToWorld> localToWorldGetter = GetComponentDataFromEntity<LocalToWorld>(true);
-            ComponentDataFromEntity<ParticleColor> colorGetter = GetComponentDataFromEntity<ParticleColor>(true);
-
-            NativeArray<Entity> entities = particleRenderersQuery.ToEntityArray(Allocator.TempJob);
-            foreach (var entity in entities)
+            NativeArray<Entity> renderers = m_ParticleRenderersQuery.ToEntityArray(Allocator.TempJob);
+            foreach (var renderer in renderers)
             {
-                var emitterReference = EntityManager.GetComponentData<EmitterReferenceForRenderer>(entity);
+                var emitterReference = EntityManager.GetComponentData<EmitterReferenceForRenderer>(renderer);
                 var eEmitter = emitterReference.emitter;
-                EmitterReferenceForParticles emitterReferenceForParticles = new EmitterReferenceForParticles { emitter = eEmitter };
 
                 // In some cases it takes an extra frame for the particle entities that reference a destroyed emitter to be destroyed, most likely because of system state components
-                if (!ParticlesUtil.EmitterIsValid(EntityManager, emitterReference.emitter))
+                if (!ParticlesUtil.EmitterIsValid(EntityManager, eEmitter))
                     continue;
 
-                var particleMesh = EntityManager.GetComponentData<ParticleMesh>(eEmitter);
-                var meshRenderer = EntityManager.GetComponentData<MeshRenderer>(entity);
-                Entity eMesh = meshRenderer.mesh;
-                bool billboarded = EntityManager.HasComponent<Billboarded>(eEmitter);
+                DynamicBuffer<Particle> particles = EntityManager.GetBuffer<DynamicParticle>(eEmitter).Reinterpret<Particle>();
 
-                if (EntityManager.HasComponent<LitMeshRenderer>(entity))
+                if (!EntityManager.GetEnabled(eEmitter) || particles.Length == 0)
                 {
-                    ref LitMeshData lmd = ref EntityManager.GetComponentData<LitMeshRenderData>(particleMesh.mesh).Mesh.Value;
+                    if (!EntityManager.HasComponent<Disabled>(renderer))
+                        ecb.AddComponent(renderer, new Disabled());
+
+                    continue;
+                }
+
+                if (EntityManager.HasComponent<Disabled>(renderer))
+                    ecb.RemoveComponent<Disabled>(renderer);
+
+                var particleMesh = EntityManager.GetComponentData<ParticleMesh>(eEmitter);
+                var meshRenderer = EntityManager.GetComponentData<MeshRenderer>(renderer);
+                Entity eMesh = meshRenderer.mesh;
+                var particleEmitter = EntityManager.GetComponentData<ParticleEmitter>(eEmitter);
+                var localToWorldEmitter = particleEmitter.AttachToEmitter ? EntityManager.GetComponentData<LocalToWorld>(eEmitter).Value : float4x4.identity;
+                MinMaxAABB minMaxAABB = MinMaxAABB.Empty;
+                int numVertices, numIndices;
+                if (EntityManager.HasComponent<LitParticleRenderer>(renderer))
+                {
+                    ref LitMeshData lmd = ref EntityManager.GetComponentData<LitMeshRenderData>(particleMesh.Mesh).Mesh.Value;
                     int numVertsPerParticle = lmd.Vertices.Length;
                     int numIndicesPerParticle = lmd.Indices.Length;
                     NativeArray<LitVertex> particleVertices = MeshHelper.AsNativeArray(ref lmd.Vertices);
                     NativeArray<ushort> particleIndices = MeshHelper.AsNativeArray(ref lmd.Indices);
                     var vBuffer = EntityManager.GetBuffer<DynamicLitVertex>(eMesh);
                     var iBuffer = EntityManager.GetBuffer<DynamicIndex>(eMesh);
-
-                    // Note that buffers have their capacity initialized to support the max particles allowed for an emitter
-                    vBuffer.ResizeUninitialized(vBuffer.Capacity);
-                    iBuffer.ResizeUninitialized(iBuffer.Capacity);
+                    numVertices = particles.Length * numVertsPerParticle;
+                    numIndices = particles.Length * numIndicesPerParticle;
+                    vBuffer.ResizeUninitialized(numVertices); // Grow buffers as needed
+                    iBuffer.ResizeUninitialized(numIndices);
                     NativeArray<LitVertex> vertices = vBuffer.AsNativeArray().Reinterpret<DynamicLitVertex, LitVertex>();
                     NativeArray<ushort> indices = iBuffer.AsNativeArray().Reinterpret<DynamicIndex, ushort>();
+                    bool billboarded = EntityManager.GetComponentData<LitMaterial>(meshRenderer.material).billboarded;
 
-                    ushort particleIndex = 0;
-                    MinMaxAABB minMaxAABB = MinMaxAABB.Empty;
-                    Entities
-                        .WithSharedComponentFilter(emitterReferenceForParticles)
-                        .ForEach((Entity eParticle, Particle particle) =>
-                        {
-                            var color = colorGetter[eParticle].color;
-                            var localToWorld = localToWorldGetter[eParticle].Value;
-                            var localToWorldRS = new float3x3(localToWorld.c0.xyz, localToWorld.c1.xyz, localToWorld.c2.xyz);
-                            float3x3 modelInverseTransposeRS = math.transpose(math.inverse(localToWorldRS));
-                            float4x4 modelInverseTranspose = new float4x4(modelInverseTransposeRS, float3.zero);
-
-                            // Postpone translate until after additional rotation for billboarding is applied in shader
-                            float4x4 model = billboarded ? new float4x4(localToWorldRS, float3.zero) : localToWorld;
-
-                            int vertexOffset = particleIndex * numVertsPerParticle;
-                            for (int i = 0; i < numVertsPerParticle; i++)
-                            {
-                                LitVertex vertex = particleVertices[i];
-                                vertex.Position = math.transform(model, vertex.Position);
-                                vertex.Normal = math.transform(modelInverseTranspose, vertex.Normal);
-                                vertex.Tangent = math.transform(modelInverseTranspose, vertex.Tangent);
-                                vertex.BillboardPos = billboarded ? localToWorld.c3.xyz : float3.zero;
-                                vertex.Albedo_Opacity = color;
-                                vertices[vertexOffset + i] = vertex;
-                                minMaxAABB.Encapsulate(vertex.Position + vertex.BillboardPos);
-                            }
-                            UpdateIndicesForParticle(indices, particleIndices, particleIndex, numIndicesPerParticle, vertexOffset);
-                            particleIndex++;
-                        }).Run();
-
-                    int numVertices = particleIndex * numVertsPerParticle;
-                    int numIndices = particleIndex * numIndicesPerParticle;
-                    if (UpdateDynamicMeshData(EntityManager, ecb, entity, eMesh, meshRenderer, minMaxAABB, numVertices, numIndices))
+                    for (int particleIndex = 0; particleIndex < particles.Length; particleIndex++)
                     {
-                        vBuffer.ResizeUninitialized(numVertices);
-                        iBuffer.ResizeUninitialized(numIndices);
+                        float4x4 localToWorld = GetParticleLocalToWorld(particles[particleIndex], localToWorldEmitter);
+                        float3x3 localToWorldRS = new float3x3(localToWorld.c0.xyz, localToWorld.c1.xyz, localToWorld.c2.xyz);
+                        float3x3 modelInverseTransposeRS = math.transpose(math.inverse(localToWorldRS));
+                        float4x4 modelInverseTranspose = new float4x4(modelInverseTransposeRS, float3.zero);
+
+                        // Postpone translate until after additional rotation for billboarding is applied in shader
+                        float4x4 model = billboarded ? new float4x4(localToWorldRS, float3.zero) : localToWorld;
+
+                        int vertexOffset = particleIndex * numVertsPerParticle;
+                        for (int i = 0; i < numVertsPerParticle; i++)
+                        {
+                            LitVertex vertex = particleVertices[i];
+                            vertex.Position = math.transform(model, vertex.Position);
+                            vertex.Normal = math.transform(modelInverseTranspose, vertex.Normal);
+                            vertex.Tangent = math.transform(modelInverseTranspose, vertex.Tangent);
+                            vertex.BillboardPos = billboarded ? localToWorld.c3.xyz : float3.zero;
+                            vertex.Albedo_Opacity = particles[particleIndex].color;
+                            vertices[vertexOffset + i] = vertex;
+                            minMaxAABB.Encapsulate(vertex.Position + vertex.BillboardPos);
+                        }
+                        UpdateIndicesForParticle(indices, particleIndices, particleIndex, numIndicesPerParticle, vertexOffset);
                     }
                 }
                 else
                 {
-                    ref SimpleMeshData smd = ref EntityManager.GetComponentData<SimpleMeshRenderData>(particleMesh.mesh).Mesh.Value;
+                    ref SimpleMeshData smd = ref EntityManager.GetComponentData<SimpleMeshRenderData>(particleMesh.Mesh).Mesh.Value;
                     int numVertsPerParticle = smd.Vertices.Length;
                     int numIndicesPerParticle = smd.Indices.Length;
                     var particleVertices = MeshHelper.AsNativeArray(ref smd.Vertices);
                     var particleIndices = MeshHelper.AsNativeArray(ref smd.Indices);
-
                     var vBuffer = EntityManager.GetBuffer<DynamicSimpleVertex>(eMesh);
                     var iBuffer = EntityManager.GetBuffer<DynamicIndex>(eMesh);
-
-                    // Note that buffers have their capacity initialized to support the max particles allowed for an emitter
-                    vBuffer.ResizeUninitialized(vBuffer.Capacity);
-                    iBuffer.ResizeUninitialized(iBuffer.Capacity);
+                    numVertices = particles.Length * numVertsPerParticle;
+                    numIndices = particles.Length * numIndicesPerParticle;
+                    vBuffer.ResizeUninitialized(numVertices); // Grow buffers as needed
+                    iBuffer.ResizeUninitialized(numIndices);
                     var vertices = vBuffer.AsNativeArray().Reinterpret<DynamicSimpleVertex, SimpleVertex>();
                     var indices = iBuffer.AsNativeArray().Reinterpret<DynamicIndex, ushort>();
+                    bool billboarded = EntityManager.GetComponentData<SimpleMaterial>(meshRenderer.material).billboarded;
 
-                    ushort particleIndex = 0;
-                    MinMaxAABB minMaxAABB = MinMaxAABB.Empty;
-                    Entities
-                        .WithSharedComponentFilter(emitterReferenceForParticles)
-                        .ForEach((Entity eParticle, Particle particle) =>
-                        {
-                            var color = colorGetter[eParticle].color;
-                            var localToWorld = localToWorldGetter[eParticle].Value;
-                            var localToWorldRS = new float3x3(localToWorld.c0.xyz, localToWorld.c1.xyz, localToWorld.c2.xyz);
-
-                            // Postpone translate until after additional rotation for billboarding is applied in shader
-                            float4x4 model = billboarded ? new float4x4(localToWorldRS, float3.zero) : localToWorld;
-
-                            int vertexOffset = particleIndex * numVertsPerParticle;
-                            for (int i = 0; i < numVertsPerParticle; i++)
-                            {
-                                SimpleVertex vertex = particleVertices[i];
-                                vertex.Position = math.transform(model, vertex.Position);
-                                vertex.Color = color;
-                                vertex.BillboardPos = billboarded ? localToWorld.c3.xyz : float3.zero;
-                                vertices[vertexOffset + i] = vertex;
-                                minMaxAABB.Encapsulate(vertex.Position + vertex.BillboardPos);
-                            }
-                            UpdateIndicesForParticle(indices, particleIndices, particleIndex, numIndicesPerParticle, vertexOffset);
-                            particleIndex++;
-                        }).Run();
-
-                    int numVertices = particleIndex * numVertsPerParticle;
-                    int numIndices = particleIndex * numIndicesPerParticle;
-                    if (UpdateDynamicMeshData(EntityManager, ecb, entity, eMesh, meshRenderer, minMaxAABB, numVertices, numIndices))
+                    for (int particleIndex = 0; particleIndex < particles.Length; particleIndex++)
                     {
-                        vBuffer.ResizeUninitialized(numVertices);
-                        iBuffer.ResizeUninitialized(numIndices);
+                        float4x4 localToWorld = GetParticleLocalToWorld(particles[particleIndex], localToWorldEmitter);
+                        float3x3 localToWorldRS = new float3x3(localToWorld.c0.xyz, localToWorld.c1.xyz, localToWorld.c2.xyz);
+
+                        // Postpone translate until after additional rotation for billboarding is applied in shader
+                        float4x4 model = billboarded ? new float4x4(localToWorldRS, float3.zero) : localToWorld;
+
+                        int vertexOffset = particleIndex * numVertsPerParticle;
+                        for (int i = 0; i < numVertsPerParticle; i++)
+                        {
+                            SimpleVertex vertex = particleVertices[i];
+                            vertex.Position = math.transform(model, vertex.Position);
+                            vertex.Color = particles[particleIndex].color;
+                            vertex.BillboardPos = billboarded ? localToWorld.c3.xyz : float3.zero;
+                            vertices[vertexOffset + i] = vertex;
+                            minMaxAABB.Encapsulate(vertex.Position + vertex.BillboardPos);
+                        }
+                        UpdateIndicesForParticle(indices, particleIndices, particleIndex, numIndicesPerParticle, vertexOffset);
                     }
                 }
+
+                MeshBounds mb;
+                mb.Bounds = minMaxAABB;
+                EntityManager.SetComponentData(eMesh, mb);
             }
 
             ecb.Playback(EntityManager);
             ecb.Dispose();
-            entities.Dispose();
+            renderers.Dispose();
         }
 
-        static bool UpdateDynamicMeshData(EntityManager mgr, EntityCommandBuffer ecb, Entity eRenderer, Entity eMesh, MeshRenderer meshRenderer, MinMaxAABB minMaxAABB, int numVertices, int numIndices)
+        static float4x4  GetParticleLocalToWorld(Particle particle, float4x4 localToWorldEmitter)
         {
-            if (numVertices > 0)
-            {
-                var dmd = mgr.GetComponentData<DynamicMeshData>(eMesh);
-                dmd.Dirty = true;
-                dmd.NumVertices = numVertices;
-                dmd.NumIndices = numIndices;
-                mgr.SetComponentData(eMesh, dmd);
-
-                MeshBounds mb;
-                mb.Bounds = minMaxAABB;
-                mgr.SetComponentData(eMesh, mb);
-
-                meshRenderer.indexCount = numIndices;
-                mgr.SetComponentData(eRenderer, meshRenderer);
-
-                if (mgr.HasComponent<Disabled>(eRenderer))
-                    ecb.RemoveComponent<Disabled>(eRenderer);
-                return true;
-            }
-            if (!mgr.HasComponent<Disabled>(eRenderer))
-                ecb.AddComponent(eRenderer, new Disabled());
-            return false;
+            particle.position = math.transform(localToWorldEmitter, particle.position);
+            return float4x4.TRS(particle.position, particle.rotation, particle.scale);
         }
 
         static void UpdateIndicesForParticle(NativeArray<ushort> indices, NativeArray<ushort> particleIndices, int particleIndex, int numIndicesPerParticle, int vertexOffset)
