@@ -1,7 +1,7 @@
 {
   "name": "com.unity.tiny",
   "displayName": "Project Tiny",
-  "version": "0.28.0-preview.40",
+  "version": "0.29.0-preview.22",
   "unity": "2020.1",
   "unityRelease": "0b15",
   "description": "Project Tiny enables you to create lightweight Web-based games using the Unity Editor.",
@@ -13,16 +13,16 @@
     "canvas"
   ],
   "dependencies": {
-    "com.unity.dots.runtime": "0.28.0-preview.40",
-    "com.unity.tiny.rendering": "0.28.0-preview.40",
-    "com.unity.textmeshpro": "2.0.0"
+    "com.unity.dots.runtime": "0.29.0-preview.22",
+    "com.unity.tiny.rendering": "0.29.0-preview.22",
+    "com.unity.textmeshpro": "3.0.1"
   },
   "upmCi": {
-    "footprint": "4d22c6878ed9721fb773efb813f067adef91a03f"
+    "footprint": "e360c02249d8bf5ec0bc601bf4860dbc5701082d"
   },
   "repository": {
     "url": "https://github.com/Unity-Technologies/dots.git",
     "type": "git",
-    "revision": "ca4add2df8479b9544e15b5920d46ff6aef3bf23"
+    "revision": "24228e52a3ca266ebc2b23f24507cabeddb08417"
   }
 }

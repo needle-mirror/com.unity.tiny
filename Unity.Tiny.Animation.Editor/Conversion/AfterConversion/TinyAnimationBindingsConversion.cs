@@ -37,9 +37,10 @@ namespace Unity.Tiny.Animation.Editor
             if (animationClips.Length == 0)
                 return;
 
-            var gameObjectEntity = TryGetPrimaryEntity(animationComponent.gameObject);
+            var rootGameObject = animationComponent.gameObject;
+            var gameObjectEntity = TryGetPrimaryEntity(rootGameObject);
             if (gameObjectEntity == Entity.Null)
-                throw new Exception($"Could not get a conversion entity for {animationComponent.GetType().Name} on {animationComponent.gameObject}.");
+                throw new Exception($"Could not get a conversion entity for {animationComponent.GetType().Name} on {rootGameObject}.");
 
             DstEntityManager.AddBuffer<TinyAnimationClipRef>(gameObjectEntity);
 
@@ -47,7 +48,7 @@ namespace Unity.Tiny.Animation.Editor
 
             foreach (var clip in animationClips)
             {
-                anythingToAnimate |= Convert(animationComponent, clip, gameObjectEntity);
+                anythingToAnimate |= Convert(rootGameObject, clip, gameObjectEntity);
             }
 
             if (anythingToAnimate)
@@ -69,7 +70,7 @@ namespace Unity.Tiny.Animation.Editor
             }
         }
 
-        bool Convert(Component animationComponent, AnimationClip clip, Entity gameObjectEntity)
+        bool Convert(GameObject rootGameObject, AnimationClip clip, Entity gameObjectEntity)
         {
             if (clip == null)
                 return false;
@@ -88,7 +89,6 @@ namespace Unity.Tiny.Animation.Editor
             if (!hasFloatCurves && !hasPPtrCurves)
                 return false; // Nothing to animate
 
-            var rootGameObject = animationComponent.gameObject;
             var clipEntity = CreateAdditionalEntity(rootGameObject);
             DstEntityManager.SetName(clipEntity, $"{clip.name} ({rootGameObject.name})");
 
@@ -124,7 +124,7 @@ namespace Unity.Tiny.Animation.Editor
                     });
 
                 var clipReferences = DstEntityManager.GetBuffer<TinyAnimationClipRef>(gameObjectEntity);
-                clipReferences.Add(new TinyAnimationClipRef { Value = clipEntity});
+                clipReferences.Add(new TinyAnimationClipRef { Value = clipEntity, Hash = bakedAnimationClip.ClipHash });
             }
 
             return anythingToAnimate;
@@ -209,7 +209,7 @@ namespace Unity.Tiny.Animation.Editor
 
             var length = curvesInfo.GetCurvesCount();
             var pPtrBindings = new List<AnimationPPtrBinding>(length);
-            var animationBindingsNames = new List<AnimationBindingName>(length);
+            var pPtrBindingNames = new List<AnimationPPtrBindingName>(length);
 
             var rootTransform = rootGameObject.transform;
 
@@ -238,7 +238,7 @@ namespace Unity.Tiny.Animation.Editor
                     });
                 }
 
-                animationBindingsNames.Add(new AnimationBindingName
+                pPtrBindingNames.Add(new AnimationPPtrBindingName
                 {
                     Value = curvesInfo.BindingNames[i]
                 });
@@ -253,11 +253,11 @@ namespace Unity.Tiny.Animation.Editor
             var pPtrBindingsBuffer = DstEntityManager.AddBuffer<AnimationPPtrBinding>(entity);
             pPtrBindingsBuffer.CopyFrom(pPtrBindings.ToArray());
 
-            var animationBindingsNamesBuffer = DstEntityManager.AddBuffer<AnimationBindingName>(entity);
-            animationBindingsNamesBuffer.CopyFrom(animationBindingsNames.ToArray());
+            var pPtrBindingsNamesBuffer = DstEntityManager.AddBuffer<AnimationPPtrBindingName>(entity);
+            pPtrBindingsNamesBuffer.CopyFrom(pPtrBindingNames.ToArray());
 
-            var animationBindingRetargetBuffer = DstEntityManager.AddBuffer<AnimationBindingRetarget>(entity);
-            animationBindingRetargetBuffer.ResizeUninitialized(length);
+            var animationPPtrBindingRetargetBuffer = DstEntityManager.AddBuffer<AnimationPPtrBindingRetarget>(entity);
+            animationPPtrBindingRetargetBuffer.ResizeUninitialized(length);
 
             return true;
         }

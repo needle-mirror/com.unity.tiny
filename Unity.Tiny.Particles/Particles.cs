@@ -441,13 +441,31 @@ namespace Unity.Tiny.Particles
             }
             else // Billboarded
             {
-                // Add mesh for 1x1 quad centered at the origin
+                // Add mesh for 1x1 quad
                 Entity mesh;
+                float3 org = new float3(-0.5f, -0.5f, 0);
+                float3 du = new float3(1, 0, 0);
+                float3 dv = new float3(0, 1, 0);
+                var builder = new BlobBuilder(Allocator.Temp);
                 if (isLit)
                 {
                     LitMeshRenderData lmrd;
                     MeshBounds mb;
-                    MeshHelper.CreatePlaneLit(new float3(-0.5f, -0.5f, 0), new float3(1, 0, 0), new float3(0, 1, 0), out mb, out lmrd);
+                    ref var root = ref builder.ConstructRoot<LitMeshData>();
+                    var vertices = builder.Allocate(ref root.Vertices, 4).AsNativeArray();
+                    var indices = builder.Allocate(ref root.Indices, 6).AsNativeArray();
+                    vertices[0] = new LitVertex { Position = org, TexCoord0 = new float2(0, 1) };
+                    vertices[1] = new LitVertex { Position = org + du, TexCoord0 = new float2(1, 1) };
+                    vertices[2] = new LitVertex { Position = org + du + dv, TexCoord0 = new float2(1, 0) };
+                    vertices[3] = new LitVertex { Position = org + dv, TexCoord0 = new float2(0, 0) };
+                    indices[0] = 0; indices[1] = 2; indices[2] = 1;
+                    indices[3] = 2; indices[4] = 0; indices[5] = 3;
+                    MeshHelper.ComputeNormals(vertices, indices);
+                    MeshHelper.ComputeTangentAndBinormal(vertices, indices);
+                    MeshHelper.SetAlbedoColor(vertices, new float4(1));
+                    MeshHelper.SetMetalSmoothness(vertices, new float2(1));
+                    mb.Bounds = MeshHelper.ComputeBounds(vertices);
+                    lmrd.Mesh = builder.CreateBlobAssetReference<LitMeshData>(Allocator.Persistent);
                     mesh = mgr.CreateEntity(typeof(LitMeshRenderData), typeof(MeshBounds));
                     mgr.SetComponentData(mesh, lmrd);
                     mgr.SetComponentData(mesh, mb);
@@ -459,7 +477,17 @@ namespace Unity.Tiny.Particles
                 {
                     SimpleMeshRenderData smrd;
                     MeshBounds mb;
-                    MeshHelper.CreatePlane(new float3(-0.5f, -0.5f, 0), new float3(1, 0, 0), new float3(0, 1, 0), out mb, out smrd);
+                    ref var root = ref builder.ConstructRoot<SimpleMeshData>();
+                    var vertices = builder.Allocate(ref root.Vertices, 4).AsNativeArray();
+                    var indices = builder.Allocate(ref root.Indices, 6).AsNativeArray();
+                    vertices[0] = new SimpleVertex { Position = org, Color = new float4(1), TexCoord0 = new float2(0, 1) };
+                    vertices[1] = new SimpleVertex { Position = org + du, Color = new float4(1), TexCoord0 = new float2(1, 1) };
+                    vertices[2] = new SimpleVertex { Position = org + du + dv, Color = new float4(1), TexCoord0 = new float2(1, 0) };
+                    vertices[3] = new SimpleVertex { Position = org + dv, Color = new float4(1), TexCoord0 = new float2(0, 0) };
+                    indices[0] = 0; indices[1] = 2; indices[2] = 1;
+                    indices[3] = 2; indices[4] = 0; indices[5] = 3;
+                    mb.Bounds = MeshHelper.ComputeBounds(vertices);
+                    smrd.Mesh = builder.CreateBlobAssetReference<SimpleMeshData>(Allocator.Persistent);
                     mesh = mgr.CreateEntity(typeof(SimpleMeshRenderData), typeof(MeshBounds));
                     mgr.SetComponentData(mesh, smrd);
                     mgr.SetComponentData(mesh, mb);
@@ -468,6 +496,7 @@ namespace Unity.Tiny.Particles
                     mgr.SetComponentData(material, simpleMaterial);
                 }
                 mgr.AddComponentData(eEmitter, new ParticleMesh { Mesh = mesh });
+                builder.Dispose();
             }
 
             if (isLit)

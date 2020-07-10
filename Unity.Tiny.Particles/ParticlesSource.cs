@@ -1,6 +1,7 @@
 using Unity.Entities;
 using Unity.Collections;
 using Unity.Mathematics;
+using Unity.Tiny.Rendering;
 
 namespace Unity.Tiny.Particles
 {
@@ -115,12 +116,21 @@ namespace Unity.Tiny.Particles
         {
             if (mgr.HasComponent<EmitterInitialRotation>(emitter))
             {
-                // Set axis of rotation perpendicular to direction of travel
                 var initialRotation = mgr.GetComponentData<EmitterInitialRotation>(emitter);
+                float rotation = rand.RandomRange(initialRotation.Angle);
+
+                var material = mgr.GetComponentData<ParticleMaterial>(emitter).Material;
+                bool billboarded = mgr.HasComponent<LitMaterial>(material) ? mgr.GetComponentData<LitMaterial>(material).billboarded : mgr.GetComponentData<SimpleMaterial>(material).billboarded;
+                if (billboarded)
+                {
+                    return quaternion.RotateZ(rotation);
+                }
+
+                // Set axis of rotation perpendicular to direction of travel
                 float3 z = new float3(0, 0, 1);
                 float3 axis = math.cross(z, direction);
                 axis = math.dot(axis, axis) <= 0.01f ? new float3(0, 1, 0) : math.normalize(axis);
-                return quaternion.AxisAngle(axis, rand.RandomRange(initialRotation.Angle));
+                return quaternion.AxisAngle(axis, rotation);
             }
             if (mgr.HasComponent<EmitterInitialNonUniformRotation>(emitter))
             {

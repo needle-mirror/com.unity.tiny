@@ -64,7 +64,21 @@ namespace Unity.Tiny.Animation.Editor
         {
             if (!k_ClipsCache.ContainsKey(animationComponent))
             {
-                k_ClipsCache.Add(animationComponent, FilterAnimationClips(AnimationUtility.GetAnimationClips(animationComponent.gameObject)));
+                var clips = FilterAnimationClips(AnimationUtility.GetAnimationClips(animationComponent.gameObject));
+
+                if (animationComponent.clip != null)
+                {
+                    var defaultClipIndex = Array.IndexOf(clips, animationComponent.clip);
+
+                    // Ensures that the default clip always comes first, so it's used when Play Automatically is selected
+                    if (defaultClipIndex > 0)
+                    {
+                        clips[defaultClipIndex] = clips[0];
+                        clips[0] = animationComponent.clip;
+                    }
+                }
+
+                k_ClipsCache.Add(animationComponent, clips);
             }
 
             return k_ClipsCache[animationComponent];

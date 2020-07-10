@@ -72,7 +72,7 @@ namespace Unity.Tiny.Animation.Editor
                 m_PropertyNameStartIndex = m_CurrentPropertyPath.PartsCount;
             }
 
-            if (BindingUtils.IsTypeAnimatable(value.GetType()))
+            if (BindingUtils.IsDestinationTypeAnimatable(value.GetType()))
             {
                 ProcessProperty(ref value);
             }

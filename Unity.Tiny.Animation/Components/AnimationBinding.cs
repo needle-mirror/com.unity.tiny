@@ -30,8 +30,16 @@ namespace Unity.Tiny.Animation
         public Entity Value;
     }
 
-    // Used for runtime retargetting; also marks an animation as "not fully bound"
+    // These components are used for runtime retargetting; also marks an animation as "not fully bound"
+
+    // Must be a buffer matching an AnimationBinding buffer 1:1
     struct AnimationBindingRetarget : IBufferElementData
+    {
+        public ulong StableTypeHash;
+    }
+
+    // Must be a buffer matching an AnimationPPtrBinding buffer 1:1
+    struct AnimationPPtrBindingRetarget : IBufferElementData
     {
         public ulong StableTypeHash;
     }

@@ -38,7 +38,7 @@ namespace Unity.Tiny.Animation
                 Entities
                     .WithoutBurst() // Burst does not support: TypeManager.GetTypeIndexFromStableTypeHash
                     .ForEach(
-                        (Entity entity, int entityInQueryIndex, ref DynamicBuffer<AnimationPPtrBinding> bindings, in DynamicBuffer<AnimationBindingRetarget> bindingRetargetBuffer) =>
+                        (Entity entity, int entityInQueryIndex, ref DynamicBuffer<AnimationPPtrBinding> bindings, in DynamicBuffer<AnimationPPtrBindingRetarget> bindingRetargetBuffer) =>
                         {
                             for (int i = 0; i < bindingRetargetBuffer.Length; ++i)
                             {
@@ -47,7 +47,7 @@ namespace Unity.Tiny.Animation
                                 bindings[i] = binding;
                             }
 
-                            commandBuffer.RemoveComponent<AnimationBindingRetarget>(entityInQueryIndex, entity);
+                            commandBuffer.RemoveComponent<AnimationPPtrBindingRetarget>(entityInQueryIndex, entity);
                         }).Schedule(Dependency);
 
             m_ECBSystem.AddJobHandleForProducer(Dependency);

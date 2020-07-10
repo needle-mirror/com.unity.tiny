@@ -20,35 +20,6 @@ namespace Unity.Tiny
         public Entity configEntity;
         public Entity whiteSpriteEntity;
 
-        public bool fixedFrameRateEnabled;
-        public float fixedFrameDeltaTime = 1.0f / 60.0f;
-
-        internal TimeData m_timeData;
-
-        // must called from windowing systems once a frame
-        public TimeData StepWallRealtimeFrame(double deltaTimeDouble)
-        {
-            // do the cast in here so that if we need to, we can detect
-            // precision loss in a single place
-            float deltaTime = (float)deltaTimeDouble;
-            // update
-            float frameDeltaTime;
-            if (fixedFrameRateEnabled)
-                frameDeltaTime = fixedFrameDeltaTime;
-            else
-                frameDeltaTime = deltaTime;
-            if (frameDeltaTime >= .5f) // max 1/2 second
-                frameDeltaTime = .5f;
-            if (frameDeltaTime <= 0.0) // no negative steps
-                return m_timeData;
-
-            m_timeData = new TimeData(
-                elapsedTime: m_timeData.ElapsedTime + frameDeltaTime,
-                deltaTime: frameDeltaTime);
-
-            return m_timeData;
-        }
-
         private void AddEntityToNameCache(Entity entity, string name)
         {
             if (!EntityManager.Exists(entity) || string.IsNullOrEmpty(name))

@@ -87,53 +87,37 @@ static std::vector<ImageSTB*> allImages(1); // by handle, reserve handle 0
 extern "C" void* loadAsset(const char *path, int *size, void* (*alloc)(size_t));
 #endif
 
-//Read image data utility function
-static bool ReadFile(const char* file_name, uint8_t** data, size_t* data_size) {
+//Loads a file and returns the loaded data
+static uint8_t* LoadFile(const char* file_name, size_t* data_size) {
     int ok;
-    uint8_t* file_data;
-    size_t file_size;
-    FILE* in;
-
-    *data = NULL;
-    *data_size = 0;
-
-    in = fopen(file_name, "rb");
+    FILE* in = stbi__fopen(file_name, "rb");
     if (in == NULL) {
         printf("Failed to open input image file '%s'\n", file_name);
-        return false;
+        return NULL;
     }
-
     fseek(in, 0, SEEK_END);
-    file_size = ftell(in);
+    size_t file_size = ftell(in);
     fseek(in, 0, SEEK_SET);
-    file_data = (uint8_t*)malloc(file_size);
+    uint8_t* file_data = (uint8_t*)malloc(file_size);
     if (file_data == NULL) {
         fclose(in);
-        return false;
+        return NULL;
     }
     ok = (fread(file_data, file_size, 1, in) == 1);
     fclose(in);
 
     if (!ok) {
         free(file_data);
-        return false;
+        return NULL;
     }
-
-    *data = file_data;
     *data_size = file_size;
-    return true;
+    return file_data;
 }
 
 //Load/Read a potential webp compressed image file and try to decode it to RGBA
 //TODO: to move to a C# non stb only module
-static uint32_t* LoadWebpImage(const char* fn, int *width, int *height)
+static uint32_t* LoadWebpImage(uint8_t* data, int size_data, int *width, int *height)
 {
-    uint8_t* data;
-    size_t size_data;
-    //Read image file
-    if (!ReadFile(fn, &data, &size_data))
-        return NULL;
-
     //Init webp decoder
     WebPDecoderConfig config;
     if (WebPInitDecoderConfig(&config) != 1)
@@ -159,7 +143,6 @@ static uint32_t* LoadWebpImage(const char* fn, int *width, int *height)
 
     //And release the webp output
     WebPFreeDecBuffer(&config.output);
-    free(data);
 
     return pixels;
 }
@@ -179,13 +162,21 @@ LoadImageFromFile(const char* fn, size_t fnlen, ImageSTB& colorImg)
     int size;
     void *data = loadAsset(fn, &size, malloc);
     pixels = (uint32_t*)stbi_load_from_memory((uint8_t*)data, size, &w, &h, &bpp, 4);
+    if (!pixels)
+        pixels = LoadWebpImage((uint8_t*)data, size, &w, &h);
     free(data);
 #endif
     if (!pixels) // try loading as file (supported STB image file)
         pixels = (uint32_t*)stbi_load(fn, &w, &h, &bpp, 4);
     if (!pixels) // try loading as webp image file
-        pixels = LoadWebpImage(fn, &w, &h);
-    if(!pixels)
+    {
+        //Read image file
+        size_t size;
+        uint8_t* data = LoadFile(fn, &size);
+        pixels = LoadWebpImage(data, size, &w, &h);
+        free(data);
+    }
+    if (!pixels)
         return false;
     colorImg.Set(pixels, w, h);
     return true;

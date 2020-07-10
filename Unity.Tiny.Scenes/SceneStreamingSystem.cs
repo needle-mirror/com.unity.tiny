@@ -1,5 +1,4 @@
 using System;
-using Unity.Entities.Runtime.Hashing;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;

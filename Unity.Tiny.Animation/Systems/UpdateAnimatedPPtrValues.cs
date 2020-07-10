@@ -28,6 +28,7 @@ namespace Unity.Tiny.Animation
                     .WithNativeDisableUnsafePtrRestriction(entityComponentStore)
                     .WithBurst(FloatMode.Fast)
                     .WithAll<ApplyAnimationResultTag>()
+                    .WithNone<AnimationPPtrBindingRetarget>()
                     .ForEach(
                         (in DynamicBuffer<AnimationPPtrBinding> bindings, in TinyAnimationTime animationTime) =>
                         {

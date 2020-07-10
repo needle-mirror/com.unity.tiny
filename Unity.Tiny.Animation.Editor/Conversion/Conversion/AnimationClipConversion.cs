@@ -76,7 +76,8 @@ namespace Unity.Tiny.Animation.Editor
             DstEntityManager.AddComponentData(entity, new BakedAnimationClip
             {
                 FloatCurvesInfo = floatCurvesInfo,
-                PPtrCurvesInfo = pPtrCurvesInfo
+                PPtrCurvesInfo = pPtrCurvesInfo,
+                ClipHash = TinyAnimation.StringToHash(clip.name)
             });
         }
 

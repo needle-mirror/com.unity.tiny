@@ -4,6 +4,7 @@ using UnityEditor;
 using Unity.Tiny;
 using Unity.Tiny.Texture.Settings;
 using UnityEngine;
+using Hash128 = Unity.Entities.Hash128;
 
 namespace Unity.TinyConversion
 {
@@ -45,6 +46,19 @@ namespace Unity.TinyConversion
                     status = ImageStatus.Invalid,
                     flags = Texture2DConversionUtils.GetTextureFlags(texture, textureImporterSettings)
                 });
+            });
+        }
+    }
+
+    [WorldSystemFilter(WorldSystemFilterFlags.DotsRuntimeGameObjectConversion)]
+    [UpdateAfter(typeof(ConvertTexture2DAsset))]
+    internal class AddExtraImage2DComponents : GameObjectConversionSystem
+    {
+        protected override void OnUpdate()
+        {
+            Entities.ForEach((UnityEngine.Texture2D texture) =>
+            {
+                var entity = GetPrimaryEntity(texture);
 
                 DstEntityManager.AddComponent<Image2DLoadFromFile>(entity);
 
@@ -53,12 +67,13 @@ namespace Unity.TinyConversion
                 DstEntityManager.AddComponentData(entity, new Image2DLoadFromFileGuids()
                 {
                     imageAsset = exportGuid,
-                    maskAsset = Guid.Empty
+                    maskAsset = new Hash128()
                 });
             });
         }
     }
 
+    [WorldSystemFilter(WorldSystemFilterFlags.DotsRuntimeGameObjectConversion)]
     [UpdateInGroup(typeof(GameObjectExportGroup))]
     internal class ExportTexture2DAsset : GameObjectConversionSystem
     {
@@ -89,10 +104,10 @@ namespace Unity.TinyConversion
                     switch (parameters.FormatType)
                     {
                         case TextureFormatType.WebP:
+                        default:
                             Texture2DExportUtils.EncodeWebP(writer, texture, parameters.Lossless, parameters.CompressionQuality);
                             break;
                         case TextureFormatType.PNG:
-                        default:
                             Texture2DExportUtils.ExportPng(writer, texture);
                             break;
                     }

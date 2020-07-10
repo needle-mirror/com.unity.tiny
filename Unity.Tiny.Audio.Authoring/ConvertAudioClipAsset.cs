@@ -5,6 +5,7 @@ using Unity.Tiny.Audio;
 
 namespace Unity.TinyConversion
 {
+    [WorldSystemFilter(WorldSystemFilterFlags.DotsRuntimeGameObjectConversion)]
     internal class ConvertAudioClipAsset : GameObjectConversionSystem
     {
         protected override void OnUpdate()
@@ -17,11 +18,12 @@ namespace Unity.TinyConversion
                 DstEntityManager.AddComponent<AudioClipLoadFromFileAudioFile>(entity);
 
                 var exportGuid = GetGuidForAssetExport(audioClip);
-                DstEntityManager.SetBufferFromString<AudioClipLoadFromFileAudioFile>(entity, "Data/" + exportGuid.ToString("N"));
+                DstEntityManager.SetBufferFromString<AudioClipLoadFromFileAudioFile>(entity, "Data/" + exportGuid.ToString());
             });
         }
     }
 
+    [WorldSystemFilter(WorldSystemFilterFlags.DotsRuntimeGameObjectConversion)]
     [UpdateInGroup(typeof(GameObjectExportGroup))]
     internal class AudioClipAsset : GameObjectConversionSystem
     {

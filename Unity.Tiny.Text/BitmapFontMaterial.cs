@@ -9,7 +9,7 @@ namespace Unity.Tiny.Text
     /// </summary>
     public struct BitmapFontMaterial : IComponentData, IEquatable<BitmapFontMaterial>
     {
-        public static readonly Guid ShaderGuid = new Guid("2A6FB286-E9B8-4557-801D-AEA0CF2E33B1");
+        public static readonly Hash128 ShaderGuid = new Hash128("2A6FB286E9B84557801DAEA0CF2E33B1");
 
         public Entity AtlasTexture;
         public BlobAssetReference<FontData> FontData;
@@ -28,7 +28,7 @@ namespace Unity.Tiny.Text
     /// </summary>
     public struct SDFFontMaterial : IComponentData, IEquatable<SDFFontMaterial>
     {
-        public static readonly Guid ShaderGuid = new Guid("7C8B4A25-9152-4B59-86D1-B37C040A6DB1");
+        public static readonly Hash128 ShaderGuid = new Hash128("7C8B4A2591524B5986D1B37C040A6DB1");
 
         public Entity AtlasTexture;
         public BlobAssetReference<FontData> FontData;

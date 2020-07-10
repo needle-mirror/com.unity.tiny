@@ -3,6 +3,7 @@ using Unity.Tiny.Audio;
 
 namespace Unity.TinyConversion
 {
+    [WorldSystemFilter(WorldSystemFilterFlags.DotsRuntimeGameObjectConversion)]
     [UpdateInGroup(typeof(GameObjectDeclareReferencedObjectsGroup))]
     class AudioClipDeclareAssets : GameObjectConversionSystem
     {
@@ -11,10 +12,12 @@ namespace Unity.TinyConversion
             Entities.ForEach((UnityEngine.AudioSource audioSource) =>
             {
                 DeclareReferencedAsset(audioSource.clip);
+                DeclareAssetDependency(audioSource.gameObject, audioSource.clip);
             });
         }
     }
 
+    [WorldSystemFilter(WorldSystemFilterFlags.DotsRuntimeGameObjectConversion)]
     internal class ConvertAudioSource : GameObjectConversionSystem
     {
         protected override void OnUpdate()

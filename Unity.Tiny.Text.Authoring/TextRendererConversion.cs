@@ -18,6 +18,9 @@ namespace Unity.Tiny.Text.Authoring
             {
                 DeclareReferencedAsset(displayText.Font);
                 DeclareReferencedAsset(displayText.Font.atlasTexture);
+
+                DeclareAssetDependency(displayText.gameObject, displayText.Font);
+                DeclareAssetDependency(displayText.gameObject, displayText.Font.atlasTexture);
             });
         }
     }

@@ -19,15 +19,16 @@ namespace Unity.Tiny.Text.Native
         RendererBGFXSystem m_BGFXSystem;
         RendererBGFXInstance* m_BGFXInstance;
 
-        unsafe void SubmitTextDirect(ushort viewId, ref MeshBGFX mesh, ref float4x4 tx, ref TextMaterialBGFX mat, int startIndex, int indexCount, byte flipCulling)
+        unsafe void SubmitTextDirect(ushort viewId, ref MeshBGFX mesh, ref float4x4 tx, ref TextMaterialBGFX mat,
+            int startIndex, int indexCount, uint depth, byte flipCulling)
         {
             bgfx.Encoder* encoder = bgfx.encoder_begin(false);
-            EncodeText(encoder, viewId, ref mesh, ref tx, ref mat, startIndex, indexCount, flipCulling);
+            EncodeText(encoder, viewId, ref mesh, ref tx, ref mat, startIndex, indexCount, depth, flipCulling);
             bgfx.encoder_end(encoder);
         }
 
         unsafe void EncodeText(bgfx.Encoder* encoder, ushort viewId, ref MeshBGFX mesh, ref float4x4 tx,
-            ref TextMaterialBGFX mat, int startIndex, int indexCount, byte flipCulling)
+            ref TextMaterialBGFX mat, int startIndex, int indexCount, uint depth, byte flipCulling)
         {
             bgfx.set_state(mat.state, 0);
             fixed(float4x4* p = &tx)
@@ -41,18 +42,19 @@ namespace Unity.Tiny.Text.Native
             }
 
             bgfx.encoder_set_texture(encoder, 0, m_TextShader.m_mainTex, mat.texAtlas, UInt32.MaxValue);
-            bgfx.encoder_submit(encoder, viewId, m_TextShader.m_prog, 0, (byte)bgfx.DiscardFlags.All);
+            bgfx.encoder_submit(encoder, viewId, m_TextShader.m_prog, depth, (byte)bgfx.DiscardFlags.All);
         }
 
-        void SubmitTextSDFDirect(ushort viewId, ref MeshBGFX mesh, ref float4x4 tx, ref TextSDFMaterialBGFX mat, int startIndex, int indexCount, byte flipCulling)
+        void SubmitTextSDFDirect(ushort viewId, ref MeshBGFX mesh, ref float4x4 tx, ref TextSDFMaterialBGFX mat,
+            int startIndex, int indexCount, uint depth, byte flipCulling)
         {
             bgfx.Encoder* encoder = bgfx.encoder_begin(false);
-            EncodeTextSDF(encoder, viewId, ref mesh, ref tx, ref mat, startIndex, indexCount, flipCulling);
+            EncodeTextSDF(encoder, viewId, ref mesh, ref tx, ref mat, startIndex, indexCount, depth, flipCulling);
             bgfx.encoder_end(encoder);
         }
 
         void EncodeTextSDF(bgfx.Encoder* encoder, ushort viewId, ref MeshBGFX mesh, ref float4x4 tx,
-            ref TextSDFMaterialBGFX mat, int startIndex, int indexCount, byte flipCulling)
+            ref TextSDFMaterialBGFX mat, int startIndex, int indexCount, uint depth, byte flipCulling)
         {
             bgfx.set_state(mat.state, 0);
             fixed(float4x4* p = &tx)
@@ -81,7 +83,7 @@ namespace Unity.Tiny.Text.Native
             }
 
             bgfx.encoder_set_texture(encoder, 0, m_TextSDFShader.u_MainTex, mat.texAtlas, UInt32.MaxValue);
-            bgfx.encoder_submit(encoder, viewId, m_TextSDFShader.m_prog, 0, (byte)bgfx.DiscardFlags.All);
+            bgfx.encoder_submit(encoder, viewId, m_TextSDFShader.m_prog, depth, (byte)bgfx.DiscardFlags.All);
         }
 
         protected override void OnStartRunning()
@@ -178,6 +180,7 @@ namespace Unity.Tiny.Text.Native
                     if (Culling.Cull(in wbs, in pass.frustum) == Culling.CullingResult.Outside)
                         continue;
                     var mesh = EntityManager.GetComponentData<MeshBGFX>(mr.mesh);
+                    uint depth = 0;
                     switch (pass.passType)
                     {
                         case RenderPassType.ZOnly:
@@ -185,15 +188,17 @@ namespace Unity.Tiny.Text.Native
                             SubmitHelper.SubmitZOnlyMeshDirect(m_BGFXInstance, pass.viewId, ref mesh, ref tx.Value, mr.startIndex, mr.indexCount, pass.GetFlipCulling());
                             break;
                         case RenderPassType.Transparent:
+                            depth = pass.ComputeSortDepth(tx.Value.c3);
+                            goto case RenderPassType.Opaque;
                         case RenderPassType.Opaque:
                             if (EntityManager.HasComponent<TextMaterialBGFX>(mr.material))
                             {
                                 var material = EntityManager.GetComponentData<TextMaterialBGFX>(mr.material);
-                                SubmitTextDirect(pass.viewId, ref mesh, ref tx.Value, ref material, mr.startIndex, mr.indexCount, pass.GetFlipCulling());
+                                SubmitTextDirect(pass.viewId, ref mesh, ref tx.Value, ref material, mr.startIndex, mr.indexCount, depth, pass.GetFlipCulling());
                             } else if (EntityManager.HasComponent<TextSDFMaterialBGFX>(mr.material))
                             {
                                 var material = EntityManager.GetComponentData<TextSDFMaterialBGFX>(mr.material);
-                                SubmitTextSDFDirect(pass.viewId, ref mesh, ref tx.Value, ref material, mr.startIndex, mr.indexCount, pass.GetFlipCulling());
+                                SubmitTextSDFDirect(pass.viewId, ref mesh, ref tx.Value, ref material, mr.startIndex, mr.indexCount, depth, pass.GetFlipCulling());
                             }
 
                             break;

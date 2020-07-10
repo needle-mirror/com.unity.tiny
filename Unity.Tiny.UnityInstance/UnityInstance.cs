@@ -7,9 +7,8 @@ using Unity.Platforms;
 using Unity.Core;
 using Unity.Entities.Runtime;
 using Unity.Scenes;
-using UnityEngine;
 using Unity.Assertions;
-#if UNITY_DOTSRUNTIME && ENABLE_PLAYERCONNECTION
+#if ENABLE_PLAYERCONNECTION
 using Unity.Development.PlayerConnection;
 using System.Diagnostics;
 using Unity.Tiny.IO;
@@ -48,7 +47,10 @@ namespace Unity.Tiny
         private BootPhase m_BootPhase;
         private Entity m_ConfigScene;
         private NativeList<Entity> m_StartupScenes;
-        private double m_StartTime;
+
+        private double m_StartTimeInSeconds;
+        private double m_ElapsedTimeInSeconds;
+        private double m_PreviousElapsedTimeInSeconds;
 
         public World World => m_World;
         public TinyEnvironment Environment => m_Environment;
@@ -78,7 +80,7 @@ namespace Unity.Tiny
 
         public static UnityInstance Initialize()
         {
-#if DEBUG && UNITY_DOTSRUNTIME
+#if DEBUG
             if (!DotsRuntime.Initialized)
                 throw new InvalidOperationException("Unity.Core.DotsRuntime.Initialize() must be called before a UnityInistance can be initialized");
 #endif
@@ -87,14 +89,10 @@ namespace Unity.Tiny
 #if ENABLE_UNITY_COLLECTIONS_CHECKS
             NativeLeakDetection.Mode = NativeLeakDetectionMode.Enabled;
 #endif
-#if UNITY_DOTSRUNTIME
             TempMemoryScope.EnterScope();
-#endif
             TypeManager.Initialize();
             var inst = new UnityInstance();
-#if UNITY_DOTSRUNTIME
             TempMemoryScope.ExitScope();
-#endif
             return inst;
         }
 
@@ -103,9 +101,7 @@ namespace Unity.Tiny
             if (m_StartupScenes.IsCreated)
                 m_StartupScenes.Dispose();
 
-#if UNITY_DOTSRUNTIME
             TempMemoryScope.EnterScope();
-#endif
 
             m_World.Dispose();
             TypeManager.Shutdown();
@@ -115,43 +111,68 @@ namespace Unity.Tiny
             // leaking the native containers in the instance.
             WordStorage.Instance.Dispose();
 
-#if UNITY_DOTSRUNTIME
             TempMemoryScope.ExitScope();
-#endif
         }
 
-        public bool Update()
+        private double GetDeltaTime(double timestampInSeconds)
+        {
+            m_ElapsedTimeInSeconds = timestampInSeconds - m_StartTimeInSeconds;
+            var dt = m_ElapsedTimeInSeconds - m_PreviousElapsedTimeInSeconds;
+
+            const double k_MaxDeltaTime = 0.5;
+            if (dt > k_MaxDeltaTime)
+            {
+                m_StartTimeInSeconds += dt - k_MaxDeltaTime;
+                m_ElapsedTimeInSeconds -= dt - k_MaxDeltaTime;
+                dt = k_MaxDeltaTime;
+            }
+
+            m_PreviousElapsedTimeInSeconds = m_ElapsedTimeInSeconds;
+
+            Assert.IsTrue(dt > 0.0);
+
+            return dt;
+        }
+
+        /// <summary>
+        /// Updates UnityInstance state. In Running Phase will set time and update world/worlds
+        /// </summary>
+        /// <param name="timestampInSeconds">
+        /// Timestamp in seconds as a double since some platform-dependent point in time, that will be used to calculate delta and elapsed time.
+        /// It is expected to be a timestamp from monotonic high-frequency timer, but on some platforms it is received from a wallclock timer (emscripten, html5)
+        ///</param>
+        /// <returns>True if Update should be called again, or False if not (fatal error / quit command received)</returns>
+        public bool Update(double timestampInSeconds)
         {
             var shouldContinue = true;
 
             if (m_BootPhase == BootPhase.Running)
             {
-#if UNITY_DOTSRUNTIME
-                DotsRuntime.UpdatePreFrame();
-#endif
+                double dt = GetDeltaTime(timestampInSeconds);
 
+                DotsRuntime.UpdatePreFrame();
+
+                // If elapsed time starts from a non-zero point in time, it can break assumptions made in other code
+                // (with Entities fixed time stepping logic being a prime example). Even if our code is protected against
+                // this, users will often expect elapsed time to accumulate from 0.
+                m_World.SetTime(new TimeData(elapsedTime: m_ElapsedTimeInSeconds, deltaTime: (float)dt));
                 m_World.Update();
+
                 shouldContinue = !m_World.QuitUpdate;
 
-#if UNITY_DOTSRUNTIME
                 DotsRuntime.UpdatePostFrame(shouldContinue);
-#endif
             }
             else
             {
-#if UNITY_DOTSRUNTIME
                 TempMemoryScope.EnterScope();
-#endif
                 if (m_BootPhase == BootPhase.Booting)
                 {
-                    m_StartTime = Time.realtimeSinceStartup;
                     UpdateBooting();
                 }
                 else if (m_BootPhase == BootPhase.LoadingConfig)
                 {
                     shouldContinue = UpdateLoading();
 
-#if UNITY_DOTSRUNTIME
                     if (m_BootPhase == BootPhase.Running)
                     {
                         // Loaded - set up dots runtime with config info
@@ -168,16 +189,17 @@ namespace Unity.Tiny
                         ProfilerStats.Stats.debugStats.m_UnityVersionReleaseType = config.editorVersionReleaseType;
                         ProfilerStats.Stats.debugStats.m_UnityVersionIncrementalVersion = config.editorVersionInc;
 #endif
+
+                        // Start now so fixed stepping doesn't try to catch up after time spent in booting and loading
+                        m_StartTimeInSeconds = timestampInSeconds;
+                        m_PreviousElapsedTimeInSeconds = 0;
                     }
-#endif
                 }
                 else
                 {
                     throw new Exception("Invalid BootPhase specified");
                 }
-#if UNITY_DOTSRUNTIME
                 TempMemoryScope.ExitScope();
-#endif
             }
 
             return shouldContinue;
@@ -206,8 +228,7 @@ namespace Unity.Tiny
             if (!Debugger.IsAttached)
 #endif
             {
-                var timeBooting = Time.realtimeSinceStartup - m_StartTime;
-                if (timeBooting > 5.0/*seconds*/)
+                if (m_ElapsedTimeInSeconds > 5.0)
                 {
                     Debug.LogError("Failed to load the configuration scene at boot. Shutting down....");
                     return false;

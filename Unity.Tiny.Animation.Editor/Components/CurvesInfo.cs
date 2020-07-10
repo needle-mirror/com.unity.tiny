@@ -9,6 +9,7 @@ namespace Unity.Tiny.Animation.Editor
     {
         public BlobAssetReference<CurvesInfo> FloatCurvesInfo;
         public BlobAssetReference<CurvesInfo> PPtrCurvesInfo;
+        public uint ClipHash;
     }
 
     struct CurvesInfo
@@ -46,6 +47,11 @@ namespace Unity.Tiny.Animation.Editor
     }
 
     struct AnimationBindingName : IBufferElementData
+    {
+        public FixedString512 Value;
+    }
+
+    struct AnimationPPtrBindingName : IBufferElementData
     {
         public FixedString512 Value;
     }

@@ -3,6 +3,7 @@ using Unity.Tiny.Audio;
 
 namespace Unity.TinyConversion
 {
+    [WorldSystemFilter(WorldSystemFilterFlags.DotsRuntimeGameObjectConversion)]
     internal class ConvertAudioListener : GameObjectConversionSystem
     {
         protected override void OnUpdate()

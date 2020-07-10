@@ -17,6 +17,9 @@ namespace Unity.Tiny.Text.Authoring
             {
                 DeclareReferencedAsset(tmpro.font);
                 DeclareReferencedAsset(tmpro.font.atlasTexture);
+
+                DeclareAssetDependency(tmpro.gameObject, tmpro.font);
+                DeclareAssetDependency(tmpro.gameObject, tmpro.font.atlasTexture);
             });
         }
     }

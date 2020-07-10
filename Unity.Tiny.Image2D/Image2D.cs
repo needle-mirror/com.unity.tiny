@@ -74,8 +74,8 @@ namespace Unity.Tiny
     /// Tag with Image2DLoadFromFile to start a load
     public struct Image2DLoadFromFileGuids : IComponentData
     {
-        public Guid imageAsset;
-        public Guid maskAsset;
+        public Hash128 imageAsset;
+        public Hash128 maskAsset;
     }
 
     public enum RenderToTextureFormat

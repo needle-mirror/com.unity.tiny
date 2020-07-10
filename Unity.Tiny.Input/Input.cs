@@ -690,12 +690,14 @@ namespace Unity.Tiny.Input
             var tt = touches[t];
             // Accumulate touch movement delta in case multiple touch move events come within a single frame, .reset() will
             // revert the deltas to zero for the next frame.
+
+            if (tt.phase == TouchState.Began && phase == TouchState.Moved)
+              return;
+            // If the Moved event is received during the same frame as the Began event, then it will mask the Began phase if not discarded
+
             tt.deltaX = x - tt.x;
             tt.deltaY = y - tt.y;
-            if (phase == TouchState.Moved && (tt.deltaX != 0 || tt.deltaY != 0))
-                tt.phase = TouchState.Moved;
-            else
-                tt.phase = phase;
+            tt.phase = phase;
             tt.x = x;
             tt.y = y;
             touches[t] = tt;

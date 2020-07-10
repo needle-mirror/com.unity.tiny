@@ -1,8 +1,10 @@
 using System;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using JetBrains.Annotations;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Mathematics;
 
@@ -14,7 +16,7 @@ namespace Unity.Tiny.Animation
         static void AssertEntityIsValidAnimationPlayer(World world, Entity entity)
         {
             if (!world.EntityManager.HasComponent<TinyAnimationPlayer>(entity))
-                throw new ArgumentException($"Trying to use a TinyAnimation API on an entity without a component of type:{typeof(TinyAnimationPlayer)}.");
+                throw new ArgumentException($"Trying to use a TinyAnimation API on an entity without a component of type {typeof(TinyAnimationPlayer)}.");
 
             AssertEntityIsValidAnimationClip(world, world.EntityManager.GetComponentData<TinyAnimationPlayer>(entity).CurrentClip);
         }
@@ -44,6 +46,34 @@ namespace Unity.Tiny.Animation
             return world.EntityManager.GetBuffer<TinyAnimationClipRef>(entity).Length;
         }
 
+        static int GetClipIndex(World world, Entity clipPlayerEntity, uint clipHash)
+        {
+            var clipsBuffer = world.EntityManager.GetBuffer<TinyAnimationClipRef>(clipPlayerEntity);
+
+            for (int i = 0; i < clipsBuffer.Length; ++i)
+            {
+                if (clipsBuffer[i].Hash == clipHash)
+                    return i;
+            }
+
+            return -1;
+        }
+
+        static void SelectClip_Internal(World world, Entity clipPlayerEntity, uint clipHash)
+        {
+            var index = GetClipIndex(world, clipPlayerEntity, clipHash);
+            if (index == -1)
+            {
+#if ENABLE_UNITY_COLLECTIONS_CHECKS
+                throw new ArgumentException($"A tiny animation clip with hash: {clipHash} could not be found for the selected entity ({clipPlayerEntity}).");
+#else
+                return;
+#endif
+            }
+
+            SelectClip_Internal(world, clipPlayerEntity, index);
+        }
+
         static void SelectClip_Internal(World world, Entity clipPlayerEntity, int clipIndex)
         {
             var clipPlayer = world.EntityManager.GetComponentData<TinyAnimationPlayer>(clipPlayerEntity);
@@ -70,10 +100,39 @@ namespace Unity.Tiny.Animation
         }
 
         [PublicAPI]
+        public static uint StringToHash(string source)
+        {
+            if (string.IsNullOrEmpty(source))
+                return 0;
+
+            uint hash;
+            unsafe
+            {
+                fixed (char* ptr = source)
+                {
+                    // This could be replaced to be compatible with FixedStringN; but if a user is storing
+                    // their clip name as a FixedStringN, why not simply store it as its hash instead?
+                    hash = math.hash(ptr, UnsafeUtility.SizeOf<char>() * source.Length);
+                }
+            }
+
+            return hash;
+        }
+
+        [PublicAPI]
         public static int GetCurrentClipIndex(World world, Entity entity)
         {
             AssertEntityIsValidAnimationPlayer(world, entity);
             return GetCurrentClipIndex_Internal(world, entity);
+        }
+
+        [PublicAPI]
+        public static uint GetCurrentClipHash(World world, Entity entity)
+        {
+            AssertEntityIsValidAnimationPlayer(world, entity);
+            var index = GetCurrentClipIndex_Internal(world, entity);
+            var clipsBuffer = world.EntityManager.GetBuffer<TinyAnimationClipRef>(entity);
+            return clipsBuffer[index].Hash;
         }
 
         [PublicAPI]
@@ -84,7 +143,26 @@ namespace Unity.Tiny.Animation
         }
 
         [PublicAPI]
-        public static void SelectClip(World world, Entity entity, int clipIndex)
+        public static void SelectClip(World world, Entity entity, string clipName)
+        {
+            AssertEntityIsValidAnimationPlayer(world, entity);
+            SelectClip_Internal(world, entity, StringToHash(clipName));
+        }
+
+        [PublicAPI]
+        public static void SelectClip(World world, Entity entity, uint clipHash)
+        {
+            AssertEntityIsValidAnimationPlayer(world, entity);
+            SelectClip_Internal(world, entity, clipHash);
+        }
+
+        [PublicAPI]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Obsolete("SelectClip(World, Entity, int) has been renamed to SelectClipAtIndex. (RemovedAfter 2020-10-30). (UnityUpgradable) -> SelectClipAtIndex(*)", true)]
+        public static void SelectClip(World world, Entity entity, int clipIndex) => SelectClipAtIndex(world, entity, clipIndex);
+
+        [PublicAPI]
+        public static void SelectClipAtIndex(World world, Entity entity, int clipIndex)
         {
             AssertEntityIsValidAnimationPlayer(world, entity);
 
@@ -227,9 +305,35 @@ namespace Unity.Tiny.Animation
         }
 
         [PublicAPI]
-        public static float GetDuration(World world, Entity entity, int clipIndex)
+        public static float GetDuration(World world, Entity entity, uint clipHash)
+        {
+            var index = GetClipIndex(world, entity, clipHash);
+            if (index == -1)
+            {
+#if ENABLE_UNITY_COLLECTIONS_CHECKS
+                throw new ArgumentException($"A tiny animation clip with hash: {clipHash} could not be found for the selected entity ({entity}).");
+#else
+                return 0.0f;
+#endif
+            }
+
+            return GetDurationAtIndex(world, entity, index);
+        }
+
+        [PublicAPI]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Obsolete("GetDuration(World, Entity, int) has been renamed to GetDurationAtIndex. (RemovedAfter 2020-10-30). (UnityUpgradable) -> GetDurationAtIndex(*)", true)]
+        public static float GetDuration(World world, Entity entity, int clipIndex) => GetDurationAtIndex(world, entity, clipIndex);
+
+        [PublicAPI]
+        public static float GetDurationAtIndex(World world, Entity entity, int clipIndex)
         {
             AssertEntityIsValidAnimationPlayer(world, entity);
+
+#if ENABLE_UNITY_COLLECTIONS_CHECKS
+            if (clipIndex < 0 || clipIndex >= GetClipsCount_Internal(world, entity))
+                throw new IndexOutOfRangeException($"Invalid TinyAnimation clip index: {clipIndex.ToString()}");
+#endif
 
             var clipsBuffer = world.EntityManager.GetBuffer<TinyAnimationClipRef>(entity);
             var clip = clipsBuffer[clipIndex].Value;

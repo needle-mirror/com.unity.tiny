@@ -11,5 +11,6 @@ namespace Unity.Tiny.Animation
     public struct TinyAnimationClipRef : IBufferElementData
     {
         public Entity Value;
+        public uint Hash;
     }
 }

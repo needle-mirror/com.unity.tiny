@@ -4,6 +4,56 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+* Added APIs to `TinyAnimation` to allow selecting clips by hash or by name. To take advantage of it, please use `TinyAnimation.StringToHash`.
+
+### Changed
+
+
+### Deprecated
+
+* `TinyAnimation.SelectClip(World, Entity, int)` was deprecated and renamed `TinyAnimation.SelectClipAtIndex(World, Entity, int)` to more easily differentiate it from the newly introduced `TinyAnimation.SelectClip(World, Entity, uint)`.
+* `TinyAnimation.GetDuration(World, Entity, int)` was deprecated and renamed `TinyAnimation.GetDurationAtIndex(World, Entity, int)` to more easily differentiate it from the newly introduced `TinyAnimation.GetDuration(World, Entity, uint)`.
+
+### Fixed
+
+* TinyAnimation no longer causes crashes when instantiating an animated entity from a prefab, if the animation is set to "Play Automatically".
+* TinyAnimation now ensures that if a default clip is set on the `Animation` component, it will be the one playing by default.
+* Fixed a crash in `TinyAnimation` that happens when animating references and float values on the same entity.
+* Fixed an issue in `TinyAnimation` where the `CreateAnimationBinding` attribute would not be able to bind an asset field to an entity field.
+
+### Security
+
+
+
+
+## [0.29.0] - 2020-07-10
+
+### Added
+
+
+### Changed
+
+
+### Deprecated
+
+
+### Removed
+
+
+### Fixed
+
+* ScreenSpaceToWorldSpace now also works correctly when rendering direct to framebuffer
+* ScreenSpaceToWorldSpaceRay is no longer inverted
+
+### Security
+
+
+
+
 ## [0.28.0] - 2020-07-10
 
 ### Added

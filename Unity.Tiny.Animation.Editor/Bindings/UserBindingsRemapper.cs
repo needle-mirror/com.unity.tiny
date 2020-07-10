@@ -76,13 +76,10 @@ namespace Unity.Tiny.Animation.Editor
                 return;
 
             var fieldType = fieldInfo.FieldType;
-            if (fieldType.IsPrimitive)
+            if (BindingUtils.IsSourceTypeAnimatable(fieldType))
             {
-                if (BindingUtils.IsTypeAnimatable(fieldType))
-                {
-                    BindingsStore.CreateBindingNameRemap($"{sourceNamePrefix}.{fieldInfo.Name}", destinationName);
-                    return;
-                }
+                BindingsStore.CreateBindingNameRemap($"{sourceNamePrefix}.{fieldInfo.Name}", destinationName);
+                return;
             }
 
             var fields = fieldType.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
