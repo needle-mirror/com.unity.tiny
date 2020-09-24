@@ -1,0 +1,71 @@
+#pragma vertex Vert
+#pragma fragment Frag
+
+#include "UnityCG.cginc"
+
+struct VertexInput
+{
+    float3 pos : POSITION;
+    float2 texcoord : TEXCOORD0;
+    float4 color : COLOR;
+};
+
+struct VertexOutput 
+{
+    float4 pos : SV_POSITION;
+    float4 color : COLOR;
+    float2 texcoord : TEXCOORD0;
+};
+
+CBUFFER_START(UniformsVert)
+    uniform float4 u_texmad;
+CBUFFER_END
+
+CBUFFER_START(UniformsFrag)
+    float4 u_colormul;
+    float4 u_coloradd;
+    float4 u_decodeSRGB_encodeSRGB_reinhard_premultiply; 
+CBUFFER_END
+
+sampler2D s_texColor;
+
+
+VertexOutput Vert(VertexInput input) 
+{
+    VertexOutput output;
+    output.pos = UnityObjectToClipPos(input.pos);
+    output.color = input.color;
+    output.texcoord = input.texcoord * u_texmad.xy + u_texmad.zw; // TODO use TRANSFORM_TEX
+
+    return output;
+}
+
+float4 Frag(VertexOutput input) : SV_TARGET 
+{
+    float4 c = tex2D(s_texColor, input.texcoord);
+
+    if (u_decodeSRGB_encodeSRGB_reinhard_premultiply.x != 0.0) {
+        c.r = GammaToLinearSpaceExact(c.r);
+        c.g = GammaToLinearSpaceExact(c.g);
+        c.b = GammaToLinearSpaceExact(c.b);
+    }
+
+    c = c * input.color;
+    c = c * u_colormul + u_coloradd;
+
+    if (u_decodeSRGB_encodeSRGB_reinhard_premultiply.z != 0.0) {
+        c.xyz = c.xyz / (c.xyz + float3(u_decodeSRGB_encodeSRGB_reinhard_premultiply.z, u_decodeSRGB_encodeSRGB_reinhard_premultiply.z, u_decodeSRGB_encodeSRGB_reinhard_premultiply.z));
+    }
+
+    if (u_decodeSRGB_encodeSRGB_reinhard_premultiply.y != 0.0) {
+        c.r = LinearToGammaSpaceExact(c.r);
+        c.g = LinearToGammaSpaceExact(c.g);
+        c.b = LinearToGammaSpaceExact(c.b);
+    }
+
+    if ( u_decodeSRGB_encodeSRGB_reinhard_premultiply.w != 0.0 ) {
+        c.xyz = c.xyz * c.w;
+    }
+
+    return c;
+}

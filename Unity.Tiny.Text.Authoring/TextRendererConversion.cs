@@ -42,6 +42,9 @@ namespace Unity.Tiny.Text.Authoring
                     Size = displayText.Size,
                     HorizontalAlignment = displayText.Alignment
                 });
+                DstEntityManager.AddComponentData(textEntity, new Unity.Tiny.Rendering.CameraMask {
+                   mask = (ulong)(1<<displayText.gameObject.layer)
+                });
 
                 var text = displayText.Text;
                 DstEntityManager.AddBufferFromString<TextRendererString>(textEntity, text);

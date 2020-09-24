@@ -49,10 +49,20 @@ namespace Unity.Tiny.Animation.Editor
     struct AnimationBindingName : IBufferElementData
     {
         public FixedString512 Value;
+
+        // Used for error reporting
+        public FixedString128 ClipName;
+        public FixedString128 SourceGameObjectName;
+        public FixedString128 TargetGameObjectName;
     }
 
     struct AnimationPPtrBindingName : IBufferElementData
     {
         public FixedString512 Value;
+
+        // Used for error reporting
+        public FixedString128 ClipName;
+        public FixedString128 SourceGameObjectName;
+        public FixedString128 TargetGameObjectName;
     }
 }

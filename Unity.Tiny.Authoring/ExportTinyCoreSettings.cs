@@ -1,10 +1,9 @@
 using Unity.Entities;
 using Unity.Entities.Runtime.Build;
 using UnityEngine.Assertions;
-using Unity.Tiny;
 using System;
-using System.Reflection;
 using System.Text.RegularExpressions;
+using Unity.Entities.Runtime;
 
 namespace Unity.Tiny.Authoring
 {
@@ -19,7 +18,7 @@ namespace Unity.Tiny.Authoring
                 int num = query.CalculateEntityCount();
                 Assert.IsTrue(num != 0);
                 var singletonEntity = query.GetSingletonEntity();
-                
+
                 CoreConfig config = CoreConfig.Default;
 
                 var editorConnectionType = Type.GetType($"UnityEditor.EditorConnectionInternal,UnityEditor");
@@ -28,11 +27,11 @@ namespace Unity.Tiny.Authoring
                 {
                     config.editorGuid32 = (uint)methodGetLocalGuid.Invoke(null, null);
                 }
-                
+
                 var unityVersionParts = Regex.Split(UnityEngine.Application.unityVersion, @"\D+");
                 config.editorVersionMajor = int.Parse(unityVersionParts[0]);
                 config.editorVersionMinor = int.Parse(unityVersionParts[1]);
-                
+
                 int typeIndex = UnityEngine.Application.unityVersion.IndexOfAny(new char[] {'a','b','f','p','x'});
                 if (UnityEngine.Application.unityVersion[typeIndex] == 'a')
                     config.editorVersionReleaseType = 0;  // alpha pre-release
@@ -50,7 +49,7 @@ namespace Unity.Tiny.Authoring
 
                 // There might be an additional version for special builds for customers (such as c1 for China users)
                 // but we won't currently track that...
-                
+
                 EntityManager.AddComponentData(singletonEntity, config);
             }
         }

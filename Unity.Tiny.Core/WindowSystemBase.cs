@@ -17,9 +17,8 @@ namespace Unity.Tiny
 
         public ScreenOrientation GetOrientation()
         {
-            var env = World.TinyEnvironment();
-            var config = env.GetConfigData<DisplayInfo>();
-            return config.orientation;
+            var displayInfo = GetSingleton<DisplayInfo>();
+            return displayInfo.orientation;
         }
     }
 }

@@ -23,7 +23,7 @@ namespace Unity.Tiny
             {
                 var array = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<char>(ptr, name.Length, Allocator.None);
 #if ENABLE_UNITY_COLLECTIONS_CHECKS
-                NativeArrayUnsafeUtility.SetAtomicSafetyHandle(ref array, AtomicSafetyHandle.Create());
+                NativeArrayUnsafeUtility.SetAtomicSafetyHandle(ref array, AtomicSafetyHandle.GetTempUnsafePtrSliceHandle());
 #endif
                 buffer.CopyFrom(array);
             }

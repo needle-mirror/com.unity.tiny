@@ -1,0 +1,31 @@
+#pragma vertex Vert
+#pragma fragment Frag
+
+#include "UnityCG.cginc"
+#include "common/skinning.cginc"
+#include "common/simple.cginc"
+
+struct VertexInput
+{
+    float3 pos : POSITION;
+    float2 texcoord : TEXCOORD0;
+    float4 color : COLOR;
+    float3 billboardpos : TEXCOORD1;
+    float4 weight : BLENDWEIGHTS;
+    float4 indices : BLENDINDICES;
+};
+
+VertexOutput Vert(VertexInput input)
+{
+    // gpu skinning
+    float4 skinnedPos = float4(input.pos, 1.0);
+    float4x4 mat = mtxForGPUSkinning(input.weight, input.indices);
+    skinnedPos = mul(mat, skinnedPos);
+
+    return SimpleVert(skinnedPos, input.texcoord, input.billboardpos, input.color);
+}
+
+float4 Frag(VertexOutput input) : SV_TARGET
+{
+    return SimpleFragColor(input);
+}

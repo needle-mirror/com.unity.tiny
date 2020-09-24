@@ -27,7 +27,7 @@ namespace Unity.Tiny
 
     /// <summary>
     ///  Configures display-related parameters. You can access this component via
-    ///  TinyEnvironment.Get/SetConfigData&lt;DisplayInfo&gt;()
+    ///  GetSingleton&lt;DisplayInfo&gt;()
     /// </summary>
     //[HideInInspector]
     public struct DisplayInfo : IComponentData

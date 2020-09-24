@@ -515,7 +515,7 @@ namespace Unity.Tiny.Particles
 
         private void CleanupBurstEmitters(EntityManager mgr)
         {
-            EntityCommandBuffer ecb = new EntityCommandBuffer(Allocator.Temp);
+            EntityCommandBuffer ecb = new EntityCommandBuffer(Allocator.TempJob);
 
             // Remove BurstEmissionInternal component if the user removed BurstEmission
             Entities
@@ -532,7 +532,7 @@ namespace Unity.Tiny.Particles
 
         private void InitBurstEmitters(EntityManager mgr)
         {
-            EntityCommandBuffer ecb = new EntityCommandBuffer(Allocator.Temp);
+            EntityCommandBuffer ecb = new EntityCommandBuffer(Allocator.TempJob);
 
             // Add BurstEmissionInternal component to newly created burst emitters
             Entities.WithNone<BurstEmissionInternal>().WithAll<ParticleEmitter, BurstEmission>().ForEach((Entity e) =>
@@ -546,7 +546,7 @@ namespace Unity.Tiny.Particles
 
         private void CleanupEmitters(EntityManager mgr)
         {
-            EntityCommandBuffer ecb = new EntityCommandBuffer(Allocator.Temp);
+            EntityCommandBuffer ecb = new EntityCommandBuffer(Allocator.TempJob);
 
             Entities.WithoutBurst().WithNone<ParticleEmitter>().WithAll<ParticleEmitterInternal>().ForEach((Entity e) =>
             {

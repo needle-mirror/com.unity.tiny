@@ -1,0 +1,23 @@
+#pragma vertex Vert
+#pragma fragment Frag
+
+#include "UnityCG.cginc"
+#include "common/simple.cginc"
+
+struct VertexInput
+{
+    float3 pos : POSITION;
+    float2 texcoord : TEXCOORD0;
+    float4 color : COLOR;
+    float3 billboardpos : TEXCOORD1;
+};
+
+VertexOutput Vert(VertexInput input)
+{
+    return SimpleVert(float4(input.pos, 1.0), input.texcoord, input.billboardpos, input.color);
+}
+
+float4 Frag(VertexOutput input) : SV_TARGET
+{
+    return SimpleFragColor(input);
+}

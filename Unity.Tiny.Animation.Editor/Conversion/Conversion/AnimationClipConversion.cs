@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.IO;
+using System.Linq;
 using JetBrains.Annotations;
 using TinyInternal.Bridge;
 using Unity.Collections;
@@ -57,7 +57,7 @@ namespace Unity.Tiny.Animation.Editor
 
         void Convert(AnimationClip clip)
         {
-            if (clip == null || clip.empty)
+            if (clip == null)
                 return;
 
             var entity = TryGetPrimaryEntity(clip);
@@ -83,7 +83,12 @@ namespace Unity.Tiny.Animation.Editor
 
         static BlobAssetReference<CurvesInfo> ConvertFloatCurves([NotNull] AnimationClip clip)
         {
-            var bindings = AnimationUtility.GetCurveBindings(clip);
+            var bindings = AnimationUtility
+                          .GetCurveBindings(clip)
+                          .OrderBy(b => b.path) // Ensures we are processing one target at a time
+                          .ThenBy(b => b.propertyName) // Ensures we are processing vector properties together
+                          .ToArray();
+
             var numBindings = bindings.Length;
 
             var blobAssetRef = BlobAssetReference<CurvesInfo>.Null;
@@ -103,22 +108,49 @@ namespace Unity.Tiny.Animation.Editor
                 var binding = bindings[i];
                 var rotationMode = TinyAnimationEditorBridge.GetRotationMode(binding);
 
+                // Handle non quaternion rotation.
                 if (rotationMode != TinyAnimationEditorBridge.RotationMode.Undefined && rotationMode != TinyAnimationEditorBridge.RotationMode.RawQuaternions)
                 {
-                    // Handle non quaternion rotation
-                    //TODO: Handle other modes as they show up
+                    // TODO: Handle other modes when/if they show up
                     if (rotationMode == TinyAnimationEditorBridge.RotationMode.RawEuler)
                     {
-                        if (i + 2 >= numBindings)
-                            throw new InvalidDataException($"Euler rotation curve for {binding.type.Name}.{binding.propertyName} is malformed");
+                        var currentPath = binding.path;
 
-                        var xBinding = binding;
-                        var yBinding = bindings[i + 1];
-                        var zBinding = bindings[i + 2];
+                        var xBinding = default(EditorCurveBinding);
+                        var yBinding = default(EditorCurveBinding);
+                        var zBinding = default(EditorCurveBinding);
 
-                        var xCurveOriginal = AnimationUtility.GetEditorCurve(clip, xBinding);
-                        var yCurveOriginal = AnimationUtility.GetEditorCurve(clip, yBinding);
-                        var zCurveOriginal = AnimationUtility.GetEditorCurve(clip, zBinding);
+                        var rotationBindingOffset = 0;
+                        while (rotationBindingOffset < 3 && i + rotationBindingOffset < numBindings)
+                        {
+                            var nextBinding = bindings[i + rotationBindingOffset];
+                            if (!string.Equals(currentPath, nextBinding.path, StringComparison.Ordinal) || TinyAnimationEditorBridge.GetRotationMode(nextBinding) != TinyAnimationEditorBridge.RotationMode.RawEuler)
+                            {
+                                // Binding is either for a different target or not a rotation: skip!
+                                break;
+                            }
+
+                            if (nextBinding.propertyName.EndsWith(".x", StringComparison.Ordinal))
+                                xBinding = nextBinding;
+                            else if (nextBinding.propertyName.EndsWith(".y", StringComparison.Ordinal))
+                                yBinding = nextBinding;
+                            else
+                                zBinding = nextBinding;
+
+                            rotationBindingOffset++;
+                        }
+
+                        var xCurveOriginal = xBinding != default
+                            ? AnimationUtility.GetEditorCurve(clip, xBinding)
+                            : new AnimationCurve(new UnityEngine.Keyframe(0.0f, 0.0f), new UnityEngine.Keyframe(clip.length, 0.0f));
+
+                        var yCurveOriginal = yBinding != default
+                            ? AnimationUtility.GetEditorCurve(clip, yBinding)
+                            : new AnimationCurve(new UnityEngine.Keyframe(0.0f, 0.0f), new UnityEngine.Keyframe(clip.length, 0.0f));
+
+                        var zCurveOriginal = zBinding != default
+                            ? AnimationUtility.GetEditorCurve(clip, zBinding)
+                            : new AnimationCurve(new UnityEngine.Keyframe(0.0f, 0.0f), new UnityEngine.Keyframe(clip.length, 0.0f));
 
                         var xCurveNew = new AnimationCurve();
                         var yCurveNew = new AnimationCurve();
@@ -128,39 +160,28 @@ namespace Unity.Tiny.Animation.Editor
                         // We *need* to resample at the framerate when converting from Euler to Quaternion
                         var step = clip.length / clip.frameRate;
                         var time = 0.0f;
-                        while (time <= clip.length + 0.001f) // Offset end in case of imprecision
+                        do
                         {
-                            var euler = new float3(xCurveOriginal.Evaluate(time), yCurveOriginal.Evaluate(time), zCurveOriginal.Evaluate(time));
+                            EvaluateAndConvert(time);
+                            time += step;
+                        }
+                        while (time <= clip.length - step);
+
+                        // Setting the last frame explicitly to avoid precision errors
+                        EvaluateAndConvert(clip.length);
+
+                        void EvaluateAndConvert(float t)
+                        {
+                            var euler = new float3(xCurveOriginal.Evaluate(t), yCurveOriginal.Evaluate(t), zCurveOriginal.Evaluate(t));
                             var quat = quaternion.Euler(math.radians(euler));
 
-                            // No interpolation between keyframes is not ideal, but shouldn't be super noticeable
-                            xCurveNew.AddKey(new UnityEngine.Keyframe(time, quat.value.x, Mathf.Infinity, Mathf.Infinity));
-                            yCurveNew.AddKey(new UnityEngine.Keyframe(time, quat.value.y, Mathf.Infinity, Mathf.Infinity));
-                            zCurveNew.AddKey(new UnityEngine.Keyframe(time, quat.value.z, Mathf.Infinity, Mathf.Infinity));
-                            wCurveNew.AddKey(new UnityEngine.Keyframe(time, quat.value.w, Mathf.Infinity, Mathf.Infinity));
-
-                            time += step;
+                            xCurveNew.AddKey(new UnityEngine.Keyframe(t, quat.value.x, Mathf.Infinity, Mathf.Infinity));
+                            yCurveNew.AddKey(new UnityEngine.Keyframe(t, quat.value.y, Mathf.Infinity, Mathf.Infinity));
+                            zCurveNew.AddKey(new UnityEngine.Keyframe(t, quat.value.z, Mathf.Infinity, Mathf.Infinity));
+                            wCurveNew.AddKey(new UnityEngine.Keyframe(t, quat.value.w, Mathf.Infinity, Mathf.Infinity));
                         }
 
                         var resampledKeysCount = xCurveNew.length;
-                        var lastKeyIndex = resampledKeysCount - 1;
-
-                        // Fixup in case of imprecision
-                        var lastKey = xCurveNew.keys[lastKeyIndex];
-                        lastKey.time = clip.length;
-                        xCurveNew.keys[lastKeyIndex] = lastKey;
-
-                        lastKey = yCurveNew.keys[lastKeyIndex];
-                        lastKey.time = clip.length;
-                        yCurveNew.keys[lastKeyIndex] = lastKey;
-
-                        lastKey = zCurveNew.keys[lastKeyIndex];
-                        lastKey.time = clip.length;
-                        zCurveNew.keys[lastKeyIndex] = lastKey;
-
-                        lastKey = wCurveNew.keys[lastKeyIndex];
-                        lastKey.time = clip.length;
-                        wCurveNew.keys[lastKeyIndex] = lastKey;
 
                         var xPropName = GetConvertedName(binding.type, TinyAnimationEditorBridge.CreateRawQuaternionsBindingName("x"));
                         var yPropName = GetConvertedName(binding.type, TinyAnimationEditorBridge.CreateRawQuaternionsBindingName("y"));
@@ -185,8 +206,14 @@ namespace Unity.Tiny.Animation.Editor
                         targetPaths.Add(targetPath);
                         targetPaths.Add(targetPath);
 
-                        numBindingsAfterConversion += 1;
-                        i += 2;
+                        // How many new bindings were added by this conversion?
+                        // e.g.:
+                        //     Euler bindings to [x,y,z] converts to quaternion bindings [x,y,z,w], so we added 1 new binding
+                        //     Euler bindings to [y] converts to  quaternion bindings [x,y,z,w], so we added 3 new binding
+                        numBindingsAfterConversion += 4 - rotationBindingOffset;
+
+                        // Skip already processed bindings
+                        i += rotationBindingOffset - 1;
                     }
                     else
                     {
@@ -208,7 +235,7 @@ namespace Unity.Tiny.Animation.Editor
                     keyframeCurves.Add(curve);
                     numKeys += curve.Length;
 
-                    if (binding.type == typeof(Transform) && bindingPropertyName.StartsWith("m_LocalScale.", StringComparison.Ordinal))
+                    if (!scaleRequired && binding.type == typeof(Transform) && bindingPropertyName.StartsWith("m_LocalScale.", StringComparison.Ordinal))
                         scaleRequired = true;
                 }
             }
@@ -252,7 +279,6 @@ namespace Unity.Tiny.Animation.Editor
             return blobAssetRef;
         }
 
-        // TODO: Lots of copy-paste from previous method, worth refactoring?
         BlobAssetReference<CurvesInfo> ConvertPPtrCurves([NotNull] AnimationClip clip)
         {
             var bindings = AnimationUtility.GetObjectReferenceCurveBindings(clip);

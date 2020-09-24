@@ -1,0 +1,22 @@
+{
+    "name": "Unity.Tiny.Rendering",
+    "references": [
+      "Unity.Entities",
+      "Unity.Mathematics",
+      "Unity.Mathematics.Extensions",
+      "Unity.Collections",
+      "Unity.Tiny.Core",
+      "Unity.Transforms",
+      "Unity.Burst",
+      "Unity.Tiny.Image2D"
+    ],
+    "optionalUnityReferences": [],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": []
+}

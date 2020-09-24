@@ -44,40 +44,32 @@ namespace Unity.Tiny.Animation.Editor
 
             DstEntityManager.AddBuffer<TinyAnimationClipRef>(gameObjectEntity);
 
-            var anythingToAnimate = false;
-
             foreach (var clip in animationClips)
             {
-                anythingToAnimate |= Convert(rootGameObject, clip, gameObjectEntity);
+                Convert(rootGameObject, clip, gameObjectEntity);
             }
 
-            if (anythingToAnimate)
-            {
-                var clipReferences = DstEntityManager.GetBuffer<TinyAnimationClipRef>(gameObjectEntity);
-                var currentClipEntity = clipReferences[0].Value;
-                DstEntityManager.AddComponentData(gameObjectEntity, new TinyAnimationPlayer { CurrentClip = currentClipEntity, CurrentIndex = 0 });
+            var clipReferences = DstEntityManager.GetBuffer<TinyAnimationClipRef>(gameObjectEntity);
+            var currentClipEntity = clipReferences[0].Value;
+            DstEntityManager.AddComponentData(gameObjectEntity, new TinyAnimationPlayer { CurrentClip = currentClipEntity, CurrentIndex = 0 });
 
-                if (PlaysAutomatically(animationComponent))
-                {
-                    DstEntityManager.AddComponent<UpdateAnimationTimeTag>(currentClipEntity);
-                    DstEntityManager.AddComponent<ApplyAnimationResultTag>(currentClipEntity);
-                }
-            }
-            else
+            if (PlaysAutomatically(animationComponent))
             {
-                // Not needed
-                DstEntityManager.RemoveComponent<TinyAnimationClipRef>(gameObjectEntity);
+                DstEntityManager.AddComponent<UpdateAnimationTimeTag>(currentClipEntity);
+                DstEntityManager.AddComponent<ApplyAnimationResultTag>(currentClipEntity);
             }
         }
 
-        bool Convert(GameObject rootGameObject, AnimationClip clip, Entity gameObjectEntity)
+        void Convert(GameObject rootGameObject, AnimationClip clip, Entity gameObjectEntity)
         {
             if (clip == null)
-                return false;
+                return;
+
+            var clipName = clip.name;
 
             var clipInfoEntity = TryGetPrimaryEntity(clip);
             if (clipInfoEntity == Entity.Null || !DstEntityManager.HasComponent<BakedAnimationClip>(clipInfoEntity))
-                throw new Exception($"Something went wrong while retrieving the Entity for animation clip: {clip.name}");
+                throw new Exception($"Something went wrong while retrieving the Entity for animation clip: {clipName}");
 
             var bakedAnimationClip = DstEntityManager.GetComponentData<BakedAnimationClip>(clipInfoEntity);
             var floatCurvesInfo = bakedAnimationClip.FloatCurvesInfo;
@@ -86,51 +78,46 @@ namespace Unity.Tiny.Animation.Editor
             var hasFloatCurves = floatCurvesInfo != BlobAssetReference<CurvesInfo>.Null;
             var hasPPtrCurves = pPtrCurvesInfo != BlobAssetReference<CurvesInfo>.Null;
 
-            if (!hasFloatCurves && !hasPPtrCurves)
-                return false; // Nothing to animate
-
             var clipEntity = CreateAdditionalEntity(rootGameObject);
-            DstEntityManager.SetName(clipEntity, $"{clip.name} ({rootGameObject.name})");
+            DstEntityManager.SetName(clipEntity, $"{clipName} ({rootGameObject.name})");
 
             // With pruning, it's possible that nothing remains to be animated
             var anythingToAnimate = false;
 
             if (hasFloatCurves)
-                anythingToAnimate |= ConvertFloatCurves(rootGameObject, clipEntity, floatCurvesInfo);
+                anythingToAnimate |= ConvertFloatCurves(rootGameObject, clipEntity, floatCurvesInfo, clipName);
 
             if (hasPPtrCurves)
-                anythingToAnimate |= ConvertPPtrCurves(rootGameObject, clipEntity, pPtrCurvesInfo);
+                anythingToAnimate |= ConvertPPtrCurves(rootGameObject, clipEntity, pPtrCurvesInfo, clipName);
 
-            if (anythingToAnimate)
-            {
-                var wrapMode = ConversionUtils.GetWrapMode(clip);
-                var cycleOffset = ConversionUtils.GetCycleOffset(clip);
+            if ((hasFloatCurves || hasPPtrCurves) && !anythingToAnimate)
+                Debug.LogWarning($"Due to the pruning of invalid bindings, the animation clip {clipName} has become empty.");
 
-                DstEntityManager.AddComponentData(
-                    clipEntity, new TinyAnimationPlaybackInfo
-                    {
-                        Duration = clip.length,
-                        CycleOffset = cycleOffset,
-                        WrapMode = wrapMode
-                    });
+            var wrapMode = ConversionUtils.GetWrapMode(clip);
+            var cycleOffset = ConversionUtils.GetCycleOffset(clip);
 
-                var initialTime = (wrapMode == WrapMode.Loop || wrapMode == WrapMode.PingPong) ? cycleOffset * clip.length : 0.0f;
+            DstEntityManager.AddComponentData(
+                clipEntity, new TinyAnimationPlaybackInfo
+                {
+                    Duration = clip.length,
+                    CycleOffset = cycleOffset,
+                    WrapMode = wrapMode
+                });
 
-                DstEntityManager.AddComponentData(
-                    clipEntity, new TinyAnimationTime
-                    {
-                        InternalWorkTime = initialTime,
-                        Value = initialTime
-                    });
+            var initialTime = (wrapMode == WrapMode.Loop || wrapMode == WrapMode.PingPong) ? cycleOffset * clip.length : 0.0f;
 
-                var clipReferences = DstEntityManager.GetBuffer<TinyAnimationClipRef>(gameObjectEntity);
-                clipReferences.Add(new TinyAnimationClipRef { Value = clipEntity, Hash = bakedAnimationClip.ClipHash });
-            }
+            DstEntityManager.AddComponentData(
+                clipEntity, new TinyAnimationTime
+                {
+                    InternalWorkTime = initialTime,
+                    Value = initialTime
+                });
 
-            return anythingToAnimate;
+            var clipReferences = DstEntityManager.GetBuffer<TinyAnimationClipRef>(gameObjectEntity);
+            clipReferences.Add(new TinyAnimationClipRef { Value = clipEntity, Hash = bakedAnimationClip.ClipHash });
         }
 
-        bool ConvertFloatCurves(GameObject rootGameObject, Entity entity, BlobAssetReference<CurvesInfo> floatCurvesInfo)
+        bool ConvertFloatCurves(GameObject rootGameObject, Entity entity, BlobAssetReference<CurvesInfo> floatCurvesInfo, string clipName)
         {
             ref var curvesInfo = ref floatCurvesInfo.Value;
 
@@ -171,7 +158,12 @@ namespace Unity.Tiny.Animation.Editor
 
                 animationBindingsNames.Add(new AnimationBindingName
                 {
-                    Value = curvesInfo.BindingNames[i]
+                    Value = curvesInfo.BindingNames[i],
+
+                    // Debug Info
+                    ClipName = clipName,
+                    SourceGameObjectName = rootGameObject.name,
+                    TargetGameObjectName = target.gameObject.name
                 });
 
                 // TODO: This could be a bit less greedy
@@ -203,7 +195,7 @@ namespace Unity.Tiny.Animation.Editor
             return true;
         }
 
-        bool ConvertPPtrCurves(GameObject rootGameObject, Entity entity, BlobAssetReference<CurvesInfo> pPtrCurvesInfo)
+        bool ConvertPPtrCurves(GameObject rootGameObject, Entity entity, BlobAssetReference<CurvesInfo> pPtrCurvesInfo, string clipName)
         {
             ref var curvesInfo = ref pPtrCurvesInfo.Value;
 
@@ -240,7 +232,12 @@ namespace Unity.Tiny.Animation.Editor
 
                 pPtrBindingNames.Add(new AnimationPPtrBindingName
                 {
-                    Value = curvesInfo.BindingNames[i]
+                    Value = curvesInfo.BindingNames[i],
+
+                    // Debug Info
+                    ClipName = clipName,
+                    SourceGameObjectName = rootGameObject.name,
+                    TargetGameObjectName = target.gameObject.name
                 });
             }
 
@@ -283,15 +280,16 @@ namespace Unity.Tiny.Animation.Editor
 
         static bool GameObjectAllowsScalePatching(GameObject gameObject)
         {
-            var scalePatcherComponent = gameObject.GetComponent<TinyAnimationScalePatcher>();
-            if (scalePatcherComponent != null)
-                return !scalePatcherComponent.disableScalePatching;
-
             var tinyAnimationAuthoringComponent = gameObject.GetComponent<TinyAnimationAuthoring>();
             if (tinyAnimationAuthoringComponent != null)
                 return tinyAnimationAuthoringComponent.patchMissingScaleIfNeeded;
 
-            return false;
+            var scalePatcherComponent = gameObject.GetComponent<TinyAnimationScalePatcher>();
+            if (scalePatcherComponent != null)
+                return !scalePatcherComponent.disableScalePatching;
+
+            // We are an Animation component with no TinyAnimationScalePatcher component, so we can't opt out
+            return true;
         }
     }
 }

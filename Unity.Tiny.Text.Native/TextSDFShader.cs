@@ -6,7 +6,6 @@ using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Tiny.Assertions;
 using Unity.Tiny.Rendering;
-using Unity.Tiny.Scenes;
 using Unity.Transforms;
 
 namespace Unity.Tiny.Text.Native

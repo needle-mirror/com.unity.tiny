@@ -1,7 +1,7 @@
 using Bee.Toolchain.Xcode;
 using JetBrains.Annotations;
-using Unity.BuildSystem.NativeProgramSupport;
-using static Unity.BuildSystem.NativeProgramSupport.NativeProgramConfiguration;
+using Bee.NativeProgramSupport;
+using static Bee.NativeProgramSupport.NativeProgramConfiguration;
 using Bee.Core;
 using NiceIO;
 
@@ -22,10 +22,10 @@ class CustomizerForTinyImage2DNative : AsmDefCSharpProgramCustomizer
 }
 
 
-public static class WebPBuild
+public class WebPBuildCustomizer : DotsBuildCustomizer
 {
     //Run ./bee build-lib-webp to compile the webp library located in Unity.Tiny.Image2D.Native.cpp~/libwebp and copy it to Unity.Tiny.Image2D.Authoring/libwebp
-    public static void SetupWebPAlias()
+    public override void Customize()
     {
         var asmdefRoot = AsmDefConfigFile.AsmDefDescriptionFor("Unity.Tiny.Image2D.Native").Directory;
         var outputDirectory = AsmDefConfigFile.AsmDefDescriptionFor("Unity.Tiny.Image2D.Authoring").Directory;
@@ -39,7 +39,7 @@ public static class WebPBuild
         };
 
         DotsRuntimeNativeProgramConfiguration config = DotsConfigs.HostDotnet.NativeProgramConfiguration;
-        var builtWebPLib = WebPLib.SetupSpecificConfiguration( config, config.ToolChain.DynamicLibraryFormat);
+        var builtWebPLib = WebPLib.SetupSpecificConfiguration(config, config.ToolChain.DynamicLibraryFormat);
 
         Backend.Current.AddAliasDependency("build-lib-webp", builtWebPLib.Path);
     }

@@ -1,0 +1,35 @@
+#pragma vertex Vert
+#pragma fragment Frag
+
+#include "UnityCG.cginc"
+#include "common/skinning.cginc"
+#include "common/simplelit.cginc"
+
+struct VertexInput
+{
+    float3 pos : POSITION;
+    float2 texcoord : TEXCOORD0;
+    float3 normal : NORMAL;
+    float3 tangent : TANGENT;
+    float4 weight : BLENDWEIGHTS;
+    float4 indices : BLENDINDICES;
+    float3 billboardpos : TEXCOORD1;
+    float4 color : COLOR;
+    float2 metal_smoothness : TEXCOORD2;
+};
+
+VertexOutput Vert(VertexInput input)
+{
+    // gpu skinning
+    float4 skinnedPos = float4(input.pos, 1.0);
+    float4 skinnedNor = float4(input.normal, 1.0);
+    float4x4 mat = mtxForGPUSkinning(input.weight, input.indices);
+    skinnedPos = mul(mat, skinnedPos);
+    skinnedNor = mul(mat, skinnedNor);
+    return LitVert(skinnedPos, input.texcoord, skinnedNor, input.tangent, input.billboardpos, input.color, input.metal_smoothness);
+}
+
+float4 Frag(VertexOutput input) : SV_TARGET
+{
+    return LitFragColor(input);
+}

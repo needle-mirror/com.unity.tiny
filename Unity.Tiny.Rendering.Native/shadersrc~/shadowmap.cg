@@ -1,0 +1,31 @@
+#pragma vertex Vert
+#pragma fragment Frag
+
+#include "UnityCG.cginc"
+
+CBUFFER_START(UniformsVert)
+    uniform float4 u_bias;  // x=constant z, y=projected z, zw unused
+CBUFFER_END
+
+CBUFFER_START(UniformsFrag)
+    uniform float4 u_colorDebug;
+CBUFFER_END
+
+
+float4 Vert(float3 pos : POSITION) : SV_POSITION
+{
+    float4 p = mul(unity_MatrixMV, float4(pos, 1.0) );
+    p.z += u_bias.x; // light space constant bias
+    // pancake in range 
+    if ( p.z < 0.0 ) 
+        p.z = 0.0;
+
+    p = mul (UNITY_MATRIX_P, p);
+    p.z += u_bias.y * p.w; // projected bias
+    return p;
+}
+
+float4 Frag() : SV_TARGET 
+{
+    return u_colorDebug;
+}

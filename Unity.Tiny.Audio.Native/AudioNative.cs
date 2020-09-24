@@ -25,7 +25,7 @@ namespace Unity.Tiny.Audio
     {
     }
 
-    struct AudioNativeSource : IComponentData
+    struct AudioNativeSource : ISystemStateComponentData
     {
         public uint sourceID;
     }
@@ -237,15 +237,21 @@ namespace Unity.Tiny.Audio
         {
             AudioNativeCalls.InitAudio();
 
-            TinyEnvironment env = World.TinyEnvironment();
-            AudioConfig ac = env.GetConfigData<AudioConfig>();
+            AudioConfig ac = default;
+            Entity eAudioConfig = Entity.Null;
+            if (!HasSingleton<AudioConfig>())
+                eAudioConfig = EntityManager.CreateEntity(typeof(AudioConfig));
+            else
+                eAudioConfig = GetSingletonEntity<AudioConfig>();
 
             #if ENABLE_PLAYERCONNECTION
             PlayerConnection.instance.Register(k_EditorMuteMessageId, ToggleMuteFromEditor);
             #endif
+
             ac.initialized = true;
             ac.unlocked = true;
-            env.SetConfigData(ac);
+
+            EntityManager.SetComponentData(eAudioConfig, ac);
         }
 
         protected override void DestroyAudioSystem()
@@ -255,6 +261,9 @@ namespace Unity.Tiny.Audio
             #endif
 
             AudioNativeCalls.DestroyAudio();
+
+            if (HasSingleton<AudioConfig>())
+                EntityManager.DestroyEntity(GetSingletonEntity<AudioConfig>());
         }
 
         protected override bool PlaySource(Entity e)
@@ -403,13 +412,25 @@ namespace Unity.Tiny.Audio
             base.OnUpdate();
 
             var mgr = EntityManager;
-            TinyEnvironment env = World.TinyEnvironment();
-            AudioConfig ac = env.GetConfigData<AudioConfig>();
+            AudioConfig ac = GetSingleton<AudioConfig>();
             AudioNativeCalls.PauseAudio(ac.paused);
 
             ReinitIfDefaultDeviceChanged();
             ReinitIfNoAudioConsumed(ac.paused);
 
+            // Remove any lingering AudioNativeSources which may have had their AudioSource
+            // removed, otherwise we will continue playing looping clips
+            Entities
+                .WithStructuralChanges()
+                .WithNone<AudioSource>()
+                .ForEach((Entity e, ref AudioNativeSource source) =>
+                {
+                    AudioNativeCalls.Stop(source.sourceID);
+                    mgr.RemoveComponent<AudioNativeSource>(e);
+                }).Run();
+
+            // Remove any lingering AudioNativeClips which may have had their AudioClip
+            // removed, otherwise we will continue holding on to those resources
             Entities
                 .WithStructuralChanges()
                 .WithNone<AudioClipLoadFromFileAudioFile>()

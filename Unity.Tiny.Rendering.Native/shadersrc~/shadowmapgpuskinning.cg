@@ -1,0 +1,44 @@
+#pragma vertex Vert
+#pragma fragment Frag
+
+#include "UnityCG.cginc"
+#include "common/skinning.cginc"
+
+struct VertexInput
+{
+    float3 pos : POSITION;
+    float4 weight : BLENDWEIGHTS;
+    float4 indices : BLENDINDICES;
+};
+
+CBUFFER_START(UniformsVert)
+    uniform float4 u_bias;  // x=constant z, y=projected z, zw unused
+CBUFFER_END
+
+CBUFFER_START(UniformsFrag)
+    uniform float4 u_colorDebug;
+CBUFFER_END
+
+
+float4 Vert(VertexInput input) : SV_POSITION
+{
+    // gpu skinning
+    float4 skinnedPos = float4(input.pos, 1.0);
+    float4x4 mat = mtxForGPUSkinning(input.weight, input.indices);
+    skinnedPos = mul(mat, skinnedPos);
+
+    float4 p = mul(unity_MatrixMV, skinnedPos);
+    p.z += u_bias.x; // light space constant bias
+    // pancake in range 
+    if ( p.z < 0.0 ) 
+        p.z = 0.0;
+
+    p = mul (UNITY_MATRIX_P, p);
+    p.z += u_bias.y * p.w; // projected bias
+    return p;
+}
+
+float4 Frag() : SV_TARGET 
+{
+    return u_colorDebug;
+}

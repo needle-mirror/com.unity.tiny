@@ -1,0 +1,25 @@
+{
+    "name": "Unity.Tiny.Rendering.Authoring.Tests",
+    "references": [
+        "Unity.Entities",
+        "Unity.Entities.Hybrid",
+        "Unity.Entities.Tests.Conversion",
+        "Unity.Tiny.Rendering",
+        "Unity.Mathematics",
+        "Unity.Mathematics.Extensions",
+        "Unity.Build",
+        "Unity.Tiny.Rendering.Authoring",
+        "Unity.Transforms",
+        "Unity.PerformanceTesting",
+        "Unity.Entities.Runtime.Build",
+        "Unity.Build.DotsRuntime"
+    ],
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true
+}

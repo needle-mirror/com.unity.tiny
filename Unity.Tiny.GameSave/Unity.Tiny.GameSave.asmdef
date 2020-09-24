@@ -1,0 +1,15 @@
+{
+    "name": "Unity.Tiny.GameSave",
+    "references": [
+        "Unity.Entities",
+        "Unity.Collections",
+        "Unity.Collections.LowLevel.Unsafe",
+        "Unity.Tiny.Core",
+        "Unity.ZeroJobs",
+        "Unity.Platforms.Common"
+    ],
+    "optionalUnityReferences": [],
+    "includePlatforms": [],
+    "excludePlatforms": ["Editor", "WebGL"],
+	"allowUnsafeCode": true
+}

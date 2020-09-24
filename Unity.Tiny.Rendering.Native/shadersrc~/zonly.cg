@@ -1,0 +1,17 @@
+#pragma vertex Vert
+#pragma fragment Frag
+
+#include "UnityCG.cginc"
+
+uniform float4 u_colorDebug;
+
+
+float4 Vert(float3 pos : POSITION) : SV_POSITION
+{
+    return UnityObjectToClipPos(pos);;
+}
+
+float4 Frag() : SV_TARGET 
+{
+    return u_colorDebug;
+}

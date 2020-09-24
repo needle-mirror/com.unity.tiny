@@ -1,8 +1,8 @@
-using Bgfx;
+using System;
 using Unity.Build.DotsRuntime;
 using Unity.Entities;
-using Unity.Entities.Runtime.Build;
 using Unity.Tiny.Rendering;
+using Unity.Tiny.ShaderCompiler;
 using Unity.TinyConversion;
 
 namespace Unity.Tiny.Text.Authoring
@@ -10,23 +10,30 @@ namespace Unity.Tiny.Text.Authoring
     [DisableAutoCreation]
     internal class ExportTextShaders : ShaderExportSystem
     {
-        static readonly string kBinaryShaderFolderPath = "Packages/com.unity.tiny/Unity.Tiny.Text.Native/shaderbin~/";
+        public override Type[] UsedComponents { get; } =
+        {
+            typeof(DotsRuntimeBuildProfile)
+        };
 
         protected override void OnUpdate()
         {
-            if (BuildConfiguration == null)
+            if (BuildContext == null)
                 return;
-            if (!BuildConfiguration.TryGetComponent<DotsRuntimeBuildProfile>(out var profile))
+            if (!BuildContext.TryGetComponent<DotsRuntimeBuildProfile>(out var profile))
                 return;
-            if (!AssemblyCache.HasType<PrecompiledShaderData>())
+            if (!AssemblyCache.HasType<PrecompiledShader>())
                 return;
             if (!AssemblyCache.HasType<Text.TextRenderer>())
                 return;
 
-            bgfx.RendererType[] types = GetShaderFormat(profile.Target);
+            InitShaderCompiler();
 
-            CreateShaderDataEntity(kBinaryShaderFolderPath, BitmapFontMaterial.ShaderGuid, "text", types);
-            CreateShaderDataEntity(kBinaryShaderFolderPath, SDFFontMaterial.ShaderGuid, "textsdf", types);
+            var platforms = ShaderCompilerClient.GetSupportedPlatforms(profile.Target);
+
+            CreateShaderDataEntity(BitmapFontMaterial.ShaderGuid, @"Packages/com.unity.tiny/Unity.Tiny.Text.Native/shadersrc~/text.cg", platforms);
+            CreateShaderDataEntity(SDFFontMaterial.ShaderGuid, @"Packages/com.unity.tiny/Unity.Tiny.Text.Native/shadersrc~/textsdf.cg", platforms);
+
+            ShutdownShaderCompiler();
         }
     }
 }

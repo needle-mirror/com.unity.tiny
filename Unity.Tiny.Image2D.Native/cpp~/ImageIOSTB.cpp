@@ -173,7 +173,7 @@ LoadImageFromFile(const char* fn, size_t fnlen, ImageSTB& colorImg)
         //Read image file
         size_t size;
         uint8_t* data = LoadFile(fn, &size);
-        pixels = LoadWebpImage(data, size, &w, &h);
+        pixels = LoadWebpImage(data, (int) size, &w, &h);
         free(data);
     }
     if (!pixels)

@@ -1,0 +1,40 @@
+#pragma vertex Vert
+#pragma fragment Frag
+
+#include "UnityCG.cginc"
+
+struct VertexInput
+{
+    float3 pos : POSITION;
+    float2 texcoord : TEXCOORD0;
+};
+
+struct VertexOutput
+{
+    float4 pos : SV_POSITION;
+    float4 color : COLOR;
+    float2 texcoord : TEXCOORD0;
+};
+
+uniform float4 u_tint0;
+sampler2D s_texColor;
+
+
+VertexOutput Vert(VertexInput input)
+{
+    VertexOutput output;
+
+	output.pos = UnityObjectToClipPos(input.pos);
+	output.color = u_tint0;
+    output.texcoord = input.texcoord;
+
+    return output;
+}
+
+float4 Frag(VertexOutput input) : SV_TARGET
+{
+	float2 texcoord0 = float2(input.texcoord.x, 1.0f - input.texcoord.y);
+	float4 albedo = tex2D(s_texColor, texcoord0) * input.color;
+	albedo.xyz *= albedo.w;
+	return albedo;
+}

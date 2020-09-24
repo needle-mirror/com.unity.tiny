@@ -1,3 +1,4 @@
+using Unity.Assertions;
 using Unity.Mathematics;
 
 namespace Unity.Tiny
@@ -42,6 +43,91 @@ namespace Unity.Tiny
         public bool Contains(float2 pos)
         {
             return pos.x >= x && pos.y >= y && pos.x < x + width && pos.y < y + height;
+        }
+
+        public bool ContainsInclusive(float2 pos)
+        {
+            return pos.x >= x && pos.y >= y && pos.x <= x + width && pos.y <= y + height;
+        }
+
+        /// <summary>
+        /// Returns true if <paramref name="other"/> is inside this rectangle.
+        /// </summary>
+        /// <remarks>
+        /// The left and bottom edges are inclusive, while the right and top edges
+        /// are exclusive. Also, while this class doesn't forbid 0 or negative
+        /// width / heights, Contains() will be always be false in that case.
+        /// </remarks>
+        public bool ContainsInclusive(Rect other)
+        {
+            if ( other.IsEmpty() )
+                return false;
+            return ContainsInclusive(new float2(other.x, other.y)) &&
+                   ContainsInclusive(new float2(other.x+other.width, other.y+other.height));
+        }
+
+        /// <summary>
+        /// Returns true if <paramref name="other"/> is not overlapping with this rectangle.
+        /// </summary>
+        public bool Disjoint(Rect other)
+        {
+            if ( other.x >= x + width || other.y >= y + height )
+                return true;
+            if ( other.x + other.width <= x || other.y + other.height <= y )
+                return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Remove this rect from the other rect and return the up to four remaining pieces
+        /// destRects must have enough space for four rectangles
+        /// Returns the number of pieces other was broken up into.
+        /// </summary>
+        public unsafe int RemoveFrom(Rect other, Rect *destRects )
+        {
+            if ( Disjoint(other) ) {
+                destRects[0] = other;
+                return 1;
+            }
+            if ( ContainsInclusive(other) )
+                return 0;
+            // Always split like this: 
+            // +--------------+
+            // |      0       |
+            // |----+----+----|
+            // | 1  |this| 2  |
+            // |----+----+----|
+            // |      3       |
+            // +--------------|
+            // Then, only accept non-empty sub-rects
+            // This will create three sub rects even when 2 would be enough
+            int n = 0;
+            destRects[n].x = other.x;
+            destRects[n].y = other.y;
+            destRects[n].width = other.width;
+            destRects[n].height = math.min(y - other.y, other.height);
+            if ( !destRects[n].IsEmpty() ) n++;
+            
+            destRects[n].x = other.x;
+            destRects[n].y = y;
+            destRects[n].width = math.min(x - other.x, other.width);
+            destRects[n].height = math.min(height, other.height);
+            if ( !destRects[n].IsEmpty() ) n++;
+            
+            destRects[n].x = x+width;
+            destRects[n].y = y;
+            destRects[n].width = math.min((other.x + other.width) - (x + width), other.width);
+            destRects[n].height = math.min(height, other.height);
+            if ( !destRects[n].IsEmpty() ) n++;
+
+            destRects[n].x = x;
+            destRects[n].y = y + height;
+            destRects[n].width = other.width;
+            destRects[n].height = (other.y + other.height) - (y+height);
+            if ( !destRects[n].IsEmpty() ) n++;
+
+            Assert.IsTrue(n==3);
+            return n;
         }
 
         /// <summary>

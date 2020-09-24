@@ -1,0 +1,39 @@
+#pragma vertex Vert
+#pragma fragment Frag
+
+#include "UnityCG.cginc"
+
+struct VertexInput
+{
+    float3 pos : POSITION;
+    float2 texcoord : TEXCOORD0;
+    float4 color : COLOR;
+};
+
+struct VertexOutput 
+{
+    float4 pos : SV_POSITION;
+    float4 color : COLOR;
+    float2 texcoord : TEXCOORD0;
+};
+
+
+float pow4(float x) {
+    float x2 = x*x;
+    return x2*x2;
+}
+
+VertexOutput Vert(VertexInput input) 
+{
+    VertexOutput output;
+    output.pos = float4(input.pos, 1.0);
+    output.color = input.color;
+    output.texcoord = input.texcoord;
+    return output;
+}
+
+float4 Frag(VertexOutput input) : SV_TARGET 
+{
+    float c = 1.0 - pow4(input.texcoord.y);
+    return c * input.color;
+}

@@ -1,0 +1,27 @@
+{
+    "name": "Unity.Tiny.2D.Native",
+    "references": [
+        "Unity.Entities",
+        "Unity.Collections",
+        "Unity.Mathematics",
+        "Unity.Mathematics.Extensions",
+        "Unity.Tiny.2D",
+        "Unity.Tiny.Core",
+        "Unity.Tiny.Rendering",
+        "Unity.Tiny.Rendering.Native",
+        "Unity.Transforms",
+        "Unity.Burst",
+        "Unity.Platforms.Common"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "UNITY_DOTSRUNTIME"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

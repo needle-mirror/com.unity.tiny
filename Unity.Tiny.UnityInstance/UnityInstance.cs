@@ -2,30 +2,27 @@ using System;
 using System.Runtime.InteropServices;
 using Unity.Collections;
 using Unity.Entities;
-using Unity.Tiny.Scenes;
 using Unity.Platforms;
 using Unity.Core;
 using Unity.Entities.Runtime;
 using Unity.Scenes;
 using Unity.Assertions;
+using Unity.Tiny.IO;
+using Unity.Collections.LowLevel.Unsafe;
+using Unity.Linker.StrippingControls.Balanced; // Workaround for case 1276535
 #if ENABLE_PLAYERCONNECTION
 using Unity.Development.PlayerConnection;
 using System.Diagnostics;
-using Unity.Tiny.IO;
 #endif
 #if ENABLE_DOTSRUNTIME_PROFILER
 using Unity.Development.Profiling;
 #endif
-#if !EXPERIMENTAL_SCENE_LOADING
-using SceneSystem = Unity.Tiny.Scenes.SceneStreamingSystem;
-#else
 using SceneSystem = Unity.Scenes.SceneSystem;
-#endif
 using Hash128 = Unity.Entities.Hash128;
 
 namespace Unity.Tiny
 {
-    public class UnityInstance
+    public unsafe class UnityInstance
     {
         public RunLoop.RunLoopDelegate OnTick;
 
@@ -33,28 +30,47 @@ namespace Unity.Tiny
         {
             Booting = 0,
             LoadingConfig,
-            Running
+            Running,
+        }
+
+        public enum RunState
+        {
+            Running = 0,
+            Suspended,
+            Resuming,     // Adjust the time base so that elapsed time continues from "now" after a suspend event or similarly after Booting/LoadConfig
         }
 
         private readonly World m_World;
-        private readonly TinyEnvironment m_Environment;
         private readonly EntityManager m_EntityManager;
         private readonly SceneSystem m_SceneSystem;
-#if EXPERIMENTAL_SCENE_LOADING
         private readonly SceneSystemGroup m_SceneSystemGroup;
         private AsyncOp m_CatalogOp;
-#endif
         private BootPhase m_BootPhase;
+        private RunState m_RunState;
         private Entity m_ConfigScene;
+        private Entity m_ConfigEntity;
         private NativeList<Entity> m_StartupScenes;
 
         private double m_StartTimeInSeconds;
         private double m_ElapsedTimeInSeconds;
         private double m_PreviousElapsedTimeInSeconds;
+        private double m_DeltaTimeInSeconds;
+        private TimeData* m_TimeData;
 
         public World World => m_World;
-        public TinyEnvironment Environment => m_Environment;
         public BootPhase Phase => m_BootPhase;
+
+        public bool Suspended
+        {
+            get
+            {
+                return m_RunState == RunState.Suspended;
+            }
+            set
+            {
+                m_RunState = value ? RunState.Suspended : RunState.Resuming;
+            }
+        }
 
         [DllImport("lib_unity_lowlevel")]
         public static extern void BurstInit();
@@ -62,20 +78,22 @@ namespace Unity.Tiny
         private UnityInstance()
         {
             m_World = DefaultWorldInitialization.Initialize("Default World");
-#if UNITY_DOTSRUNTIME_EXPERIMENTAL_FIXED_SIM
-            TinyInternals.SetSimFixedRate(m_World, 1.0f / 60.0f);
-#endif
 
             m_BootPhase = BootPhase.Booting;
-            m_Environment = m_World.GetOrCreateSystem<TinyEnvironment>();
+            m_RunState = RunState.Resuming;
             m_EntityManager = m_World.EntityManager;
 
-#if !EXPERIMENTAL_SCENE_LOADING
-            m_SceneSystem = m_World.GetOrCreateSystem<SceneStreamingSystem>();
-#else
+            m_StartTimeInSeconds = 0;
+            m_ElapsedTimeInSeconds = 0;
+            m_PreviousElapsedTimeInSeconds = 0;
+
             m_SceneSystemGroup = m_World.GetOrCreateSystem<SceneSystemGroup>();
             m_SceneSystem = m_World.GetOrCreateSystem<SceneSystem>();
-#endif
+
+            m_TimeData = (TimeData*)UnsafeUtility.Malloc(
+                UnsafeUtility.SizeOf<TimeData>(),
+                0,
+                Collections.Allocator.Persistent);
         }
 
         public static UnityInstance Initialize()
@@ -102,36 +120,29 @@ namespace Unity.Tiny
                 m_StartupScenes.Dispose();
 
             TempMemoryScope.EnterScope();
-
             m_World.Dispose();
             TypeManager.Shutdown();
-
-            // This is a static instance that leaks on first use, so there is no matching
-            // Init/Setup call, but we do need to dispose the static instance before shutdown to avoid
-            // leaking the native containers in the instance.
-            WordStorage.Instance.Dispose();
-
+            UnsafeUtility.Free(m_TimeData, Collections.Allocator.Persistent);
             TempMemoryScope.ExitScope();
         }
 
-        private double GetDeltaTime(double timestampInSeconds)
+        private void ComputeTime(double timestampInSeconds)
         {
             m_ElapsedTimeInSeconds = timestampInSeconds - m_StartTimeInSeconds;
             var dt = m_ElapsedTimeInSeconds - m_PreviousElapsedTimeInSeconds;
 
-            const double k_MaxDeltaTime = 0.5;
-            if (dt > k_MaxDeltaTime)
+            double maxDeltaTime = m_World.MaximumDeltaTime;
+            if (dt > maxDeltaTime)
             {
-                m_StartTimeInSeconds += dt - k_MaxDeltaTime;
-                m_ElapsedTimeInSeconds -= dt - k_MaxDeltaTime;
-                dt = k_MaxDeltaTime;
+                m_StartTimeInSeconds += dt - maxDeltaTime;
+                m_ElapsedTimeInSeconds -= dt - maxDeltaTime;
+                dt = maxDeltaTime;
             }
 
             m_PreviousElapsedTimeInSeconds = m_ElapsedTimeInSeconds;
 
             Assert.IsTrue(dt > 0.0);
-
-            return dt;
+            m_DeltaTimeInSeconds = dt;
         }
 
         /// <summary>
@@ -142,25 +153,36 @@ namespace Unity.Tiny
         /// It is expected to be a timestamp from monotonic high-frequency timer, but on some platforms it is received from a wallclock timer (emscripten, html5)
         ///</param>
         /// <returns>True if Update should be called again, or False if not (fatal error / quit command received)</returns>
+        [PreserveBody] // Workaround for case 1276535
         public bool Update(double timestampInSeconds)
         {
             var shouldContinue = true;
 
             if (m_BootPhase == BootPhase.Running)
             {
-                double dt = GetDeltaTime(timestampInSeconds);
+                switch (m_RunState)
+                {
+                    case RunState.Resuming:
+                        m_RunState = RunState.Running;
 
-                DotsRuntime.UpdatePreFrame();
+                        m_StartTimeInSeconds = timestampInSeconds - m_ElapsedTimeInSeconds;
+                        m_PreviousElapsedTimeInSeconds = m_ElapsedTimeInSeconds;
+                        goto case RunState.Running;
 
-                // If elapsed time starts from a non-zero point in time, it can break assumptions made in other code
-                // (with Entities fixed time stepping logic being a prime example). Even if our code is protected against
-                // this, users will often expect elapsed time to accumulate from 0.
-                m_World.SetTime(new TimeData(elapsedTime: m_ElapsedTimeInSeconds, deltaTime: (float)dt));
-                m_World.Update();
+                    case RunState.Running:
+                        ComputeTime(timestampInSeconds);
+                        *m_TimeData = new TimeData(
+                            elapsedTime: m_ElapsedTimeInSeconds,
+                            deltaTime: (float)m_DeltaTimeInSeconds);
 
-                shouldContinue = !m_World.QuitUpdate;
+                        DotsRuntime.UpdatePreFrame();
 
-                DotsRuntime.UpdatePostFrame(shouldContinue);
+                        m_World.Update();
+                        shouldContinue = !m_World.QuitUpdate;
+
+                        DotsRuntime.UpdatePostFrame(shouldContinue);
+                        break;
+                }
             }
             else
             {
@@ -176,8 +198,8 @@ namespace Unity.Tiny
                     if (m_BootPhase == BootPhase.Running)
                     {
                         // Loaded - set up dots runtime with config info
-                        var env = World.TinyEnvironment();
-                        var config = env.GetConfigData<CoreConfig>();
+                        var config = m_EntityManager.GetComponentData<CoreConfig>(m_ConfigEntity);
+
 #if ENABLE_PLAYERCONNECTION
                         Connection.InitializeMulticast(config.editorGuid32, "DOTS_Runtime_Game");
 #endif
@@ -189,15 +211,18 @@ namespace Unity.Tiny
                         ProfilerStats.Stats.debugStats.m_UnityVersionReleaseType = config.editorVersionReleaseType;
                         ProfilerStats.Stats.debugStats.m_UnityVersionIncrementalVersion = config.editorVersionInc;
 #endif
-
-                        // Start now so fixed stepping doesn't try to catch up after time spent in booting and loading
-                        m_StartTimeInSeconds = timestampInSeconds;
-                        m_PreviousElapsedTimeInSeconds = 0;
+                        // Hook instance time into each world if the required system exists
+                        foreach (var world in World.All)
+                        {
+                            var timeSystem = world.GetExistingSystem<UpdateWorldTimeSystem>();
+                            if (timeSystem == null) continue;
+                            timeSystem.SetInstanceTime(m_TimeData);
+                        }
                     }
                 }
                 else
                 {
-                    throw new Exception("Invalid BootPhase specified");
+                    throw new Exception($"Invalid BootPhase specified: {(int)m_BootPhase}");
                 }
                 TempMemoryScope.ExitScope();
             }
@@ -208,10 +233,10 @@ namespace Unity.Tiny
         private void UpdateBooting()
         {
             // Destroy current config entity
-            if (m_EntityManager.Exists(m_Environment.configEntity))
+            if (m_EntityManager.Exists(m_ConfigEntity))
             {
-                m_EntityManager.DestroyEntity(m_Environment.configEntity);
-                m_Environment.configEntity = Entity.Null;
+                m_EntityManager.DestroyEntity(m_ConfigEntity);
+                m_ConfigEntity = Entity.Null;
             }
 
             LoadConfigScene();
@@ -230,7 +255,7 @@ namespace Unity.Tiny
             {
                 if (m_ElapsedTimeInSeconds > 5.0)
                 {
-                    Debug.LogError("Failed to load the configuration scene at boot. Shutting down....");
+                    UnityEngine.Debug.LogError("Failed to load the configuration scene at boot. Shutting down....");
                     return false;
                 }
             }
@@ -241,7 +266,7 @@ namespace Unity.Tiny
 
             if (IsSceneLoaded(m_ConfigScene))
             {
-                if (m_Environment.configEntity == Entity.Null)
+                if (m_ConfigEntity == Entity.Null)
                 {
                     using (var configurationQuery = m_EntityManager.CreateEntityQuery(typeof(ConfigurationTag)))
                     {
@@ -254,12 +279,12 @@ namespace Unity.Tiny
                             if (configEntityList.Length > 1)
                                 throw new Exception($"More than one configuration entity found in boot configuration scene.");
 
-                            m_Environment.configEntity = configEntityList[0];
+                            m_ConfigEntity = configEntityList[0];
                         }
                     }
                     return true;
                 }
-                else if (!LoadStartupScenes(m_Environment))
+                else if (!LoadStartupScenes())
                     return true;
                 else if (!IsStartupDataLoaded())
                     return true;
@@ -273,37 +298,21 @@ namespace Unity.Tiny
 
         void LoadConfigScene()
         {
-#if !EXPERIMENTAL_SCENE_LOADING
-            m_ConfigScene = SceneService.LoadConfigAsync(m_World);
-#else
             // TODO: Emscripten seems to have problems loading statics so reading
             // from ConfigurationScene.Guid will pretty reliably come back as all zeros
             var configGuid = new Hash128("46b433b264c69cbd39f04ad2e5d12be8"); // ConfigurationScene.Guid; 
             m_ConfigScene = m_SceneSystem.LoadSceneAsync(configGuid, new SceneSystem.LoadParameters() { AutoLoad = true, Flags = SceneLoadFlags.LoadAdditive });
             m_CatalogOp = IOService.RequestAsyncRead(SceneSystem.GetSceneInfoPath());
-#endif
         }
 
         void UpdateSceneSystems()
         {
-#if !EXPERIMENTAL_SCENE_LOADING
-            m_SceneSystem.Update();
-#else
             m_SceneSystemGroup.Update();
-#endif
         }
 
         bool IsSceneLoaded(Entity sceneEntity)
         {
-#if !EXPERIMENTAL_SCENE_LOADING
-            var status = SceneService.GetSceneStatus(m_World, sceneEntity);
-            if (status == SceneStatus.FailedToLoad)
-                throw new Exception("Failed to load scene during boot-up. Aborting...");
-
-            return status == SceneStatus.Loaded;
-#else
             return m_SceneSystem.IsSceneLoaded(sceneEntity);
-#endif
         }
 
         private unsafe bool IsStartupDataLoaded()
@@ -318,22 +327,11 @@ namespace Unity.Tiny
             return allLoaded;
         }
 
-        private unsafe bool LoadStartupScenes(TinyEnvironment environment)
+        private unsafe bool LoadStartupScenes()
         {
             if (m_StartupScenes.IsCreated)
                 return true;
 
-#if !EXPERIMENTAL_SCENE_LOADING
-            using (var startupScenes = environment.GetConfigBufferData<StartupScenes>().ToNativeArray(Allocator.Temp))
-            {
-                m_StartupScenes = new NativeList<Entity>(startupScenes.Length, Allocator.Persistent);
-                for (var i = 0; i < startupScenes.Length; ++i)
-                {
-                    m_StartupScenes.Add(SceneService.LoadSceneAsync(m_World, startupScenes[i].SceneReference));
-                }
-            }
-            return true;
-#else
             var status = m_CatalogOp.GetStatus();
             if (status <= AsyncOp.Status.InProgress)
                 return false;
@@ -342,7 +340,7 @@ namespace Unity.Tiny
             {
                 var failureStatus = m_CatalogOp.GetErrorStatus();
                 if (failureStatus == AsyncOp.ErrorStatus.FileNotFound)
-                    Debug.LogWarning("Missing catalog file from '" + SceneSystem.GetSceneInfoPath() + "'");
+                    UnityEngine.Debug.LogWarning("Missing catalog file from '" + SceneSystem.GetSceneInfoPath() + "'");
                 else
                     throw new ArgumentException("Failed to load catalog from '" + SceneSystem.GetSceneInfoPath() + "'. status=" + status + ", errorStatus=" + failureStatus);
 
@@ -376,7 +374,44 @@ namespace Unity.Tiny
             }
 
             return true;
-#endif
+        }
+    }
+
+    [UpdateInGroup(typeof(InitializationSystemGroup))]
+    public unsafe class UpdateWorldTimeSystem : ComponentSystem
+    {
+        private TimeData* m_TimeData;
+
+        internal void SetInstanceTime(TimeData* timeData)
+        {
+            m_TimeData = timeData;
+        }
+
+        protected override void OnUpdate()
+        {
+            if (m_TimeData == null)
+            {
+                // Look for a valid Time reference (NB: assumes one UnityInstance!)
+                foreach (var world in World.All)
+                {
+                    var timeSystem = world.GetExistingSystem<UpdateWorldTimeSystem>();
+                    if (timeSystem == null) continue;
+                    m_TimeData = timeSystem.m_TimeData;
+                    break;
+                }
+
+                if (m_TimeData == null)
+                {
+                    throw new Exception(
+                          "UpdateWorldTimeSystem must either be disabled "
+                        + "or initialized with SetInstanceTime(TimeData*) before use.");
+                }
+            }
+
+            // If elapsed time starts from a non-zero point in time, it can break assumptions made in other code
+            // (with Entities fixed time stepping logic being a prime example). Even if our code is protected against
+            // this, users will often expect elapsed time to accumulate from 0.
+            World.SetTime(*m_TimeData);
         }
     }
 }

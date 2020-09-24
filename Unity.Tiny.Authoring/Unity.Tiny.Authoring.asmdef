@@ -7,6 +7,7 @@
         "Unity.Entities",
         "Unity.Entities.Hybrid",
         "Unity.Entities.Runtime",
+        "Unity.Entities.Runtime.Authoring",
         "Unity.Mathematics",
         "Unity.Build.DotsRuntime",
         "Unity.Properties",
@@ -18,9 +19,7 @@
         "Unity.Tiny.Codec.Editor",
         "Unity.Tiny.Core",
         "Unity.Tiny.Rendering",
-        "Unity.Tiny.Image2D",
-        "Unity.Tiny.Scenes",
-        "Unity.Tiny.Scenes.Authoring"
+        "Unity.Tiny.Image2D"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

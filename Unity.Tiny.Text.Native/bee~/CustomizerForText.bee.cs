@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using Bee.Toolchain.Xcode;
 using JetBrains.Annotations;
-using Unity.BuildSystem.NativeProgramSupport;
+using Bee.NativeProgramSupport;
 
 [UsedImplicitly]
 class CustomizerForTinyTextNative : AsmDefCSharpProgramCustomizer

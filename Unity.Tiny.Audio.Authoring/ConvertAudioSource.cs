@@ -1,18 +1,28 @@
+using System;
 using Unity.Entities;
+using Unity.Tiny;
 using Unity.Tiny.Audio;
 
 namespace Unity.TinyConversion
 {
     [WorldSystemFilter(WorldSystemFilterFlags.DotsRuntimeGameObjectConversion)]
     [UpdateInGroup(typeof(GameObjectDeclareReferencedObjectsGroup))]
+    [ConverterVersion("gwenaelle", 1)]
     class AudioClipDeclareAssets : GameObjectConversionSystem
     {
         protected override void OnUpdate()
         {
             Entities.ForEach((UnityEngine.AudioSource audioSource) =>
             {
-                DeclareReferencedAsset(audioSource.clip);
-                DeclareAssetDependency(audioSource.gameObject, audioSource.clip);
+                if (audioSource.clip != null)
+                {
+                    DeclareReferencedAsset(audioSource.clip);
+                    DeclareAssetDependency(audioSource.gameObject, audioSource.clip);
+                }
+                else
+                {
+                    Debug.LogError($"The {nameof(UnityEngine.AudioSource)} component is missing a {nameof(UnityEngine.AudioClip)} reference on GameObject: {audioSource.gameObject.name}");
+                }
             });
         }
     }

@@ -11,8 +11,6 @@ namespace Unity.Tiny.Animation.Editor
 {
     class GetBindingInfoOperation : PropertyVisitor
     {
-        readonly string m_PropertyPath;
-
         // None of these types are worth visiting since they will never be animated but but they show up everywhere
         static readonly HashSet<Type> k_SkipVisiting = new HashSet<Type>
         {

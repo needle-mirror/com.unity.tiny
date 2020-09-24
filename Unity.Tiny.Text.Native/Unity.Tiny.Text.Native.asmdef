@@ -14,7 +14,6 @@
         "Unity.Tiny.Rendering",
         "Unity.Tiny.Rendering.Native",
         "Unity.Mathematics.Extensions",
-        "Unity.Tiny.Scenes",
         "Unity.Tiny.Text",
         "Unity.Platforms.Common"
     ],
@@ -25,6 +24,6 @@
     "overrideReferences": false,
     "precompiledReferences": [],
     "autoReferenced": false,
-    "defineConstraints": [],
+    "defineConstraints": ["UNITY_DOTSRUNTIME"],
     "versionDefines": []
 }

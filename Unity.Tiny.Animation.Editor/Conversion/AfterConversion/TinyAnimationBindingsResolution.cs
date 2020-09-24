@@ -1,5 +1,6 @@
 using Unity.Collections;
 using Unity.Entities;
+using UnityEngine;
 
 namespace Unity.Tiny.Animation.Editor
 {
@@ -43,7 +44,8 @@ namespace Unity.Tiny.Animation.Editor
 
                     for (int i = bindingNameBuffer.Length - 1; i >= 0; --i)
                     {
-                        var propertyPath = bindingNameBuffer[i].Value;
+                        var bindingName = bindingNameBuffer[i];
+                        var propertyPath = bindingName.Value;
                         var discardEntry = true;
 
                         // A 0-length property path had no ECS equivalent at build time
@@ -65,6 +67,11 @@ namespace Unity.Tiny.Animation.Editor
 
                                 discardEntry = false;
                             }
+                            else
+                            {
+                                WarnDiscardedBinding(bindingName.Value.ToString(), bindingName.TargetGameObjectName.ToString(),
+                                    bindingName.ClipName.ToString(), bindingName.SourceGameObjectName.ToString());
+                            }
                         }
 
                         if (discardEntry)
@@ -80,17 +87,9 @@ namespace Unity.Tiny.Animation.Editor
 
                     if (bindingBuffer.Length == 0)
                     {
-                        // Nothing to animate
+                        // Nothing remains to animate
                         ecb.RemoveComponent<AnimationBinding>(entity);
                         ecb.RemoveComponent<AnimationBindingRetarget>(entity);
-                        ecb.RemoveComponent<TinyAnimationTime>(entity);
-                        ecb.RemoveComponent<TinyAnimationPlaybackInfo>(entity);
-
-                        if (DstEntityManager.HasComponent<UpdateAnimationTimeTag>(entity))
-                            ecb.RemoveComponent<UpdateAnimationTimeTag>(entity);
-
-                        if (DstEntityManager.HasComponent<ApplyAnimationResultTag>(entity))
-                            ecb.RemoveComponent<ApplyAnimationResultTag>(entity);
                     }
                     else
                     {
@@ -124,7 +123,8 @@ namespace Unity.Tiny.Animation.Editor
 
                     for (int i = bindingNameBuffer.Length - 1; i >= 0; --i)
                     {
-                        var propertyPath = bindingNameBuffer[i].Value;
+                        var bindingName = bindingNameBuffer[i];
+                        var propertyPath = bindingName.Value;
                         var discardEntry = true;
 
                         // A 0-length property path had no ECS equivalent at build time
@@ -145,6 +145,11 @@ namespace Unity.Tiny.Animation.Editor
 
                                 discardEntry = false;
                             }
+                            else
+                            {
+                                WarnDiscardedBinding(bindingName.Value.ToString(), bindingName.TargetGameObjectName.ToString(),
+                                    bindingName.ClipName.ToString(), bindingName.SourceGameObjectName.ToString());
+                            }
                         }
 
                         if (discardEntry)
@@ -160,17 +165,9 @@ namespace Unity.Tiny.Animation.Editor
 
                     if (bindingBuffer.Length == 0)
                     {
-                        // Nothing to animate
+                        // Nothing remains to animate
                         ecb.RemoveComponent<AnimationPPtrBinding>(entity);
                         ecb.RemoveComponent<AnimationPPtrBindingRetarget>(entity);
-                        ecb.RemoveComponent<TinyAnimationTime>(entity);
-                        ecb.RemoveComponent<TinyAnimationPlaybackInfo>(entity);
-
-                        if (DstEntityManager.HasComponent<UpdateAnimationTimeTag>(entity))
-                            ecb.RemoveComponent<UpdateAnimationTimeTag>(entity);
-
-                        if (DstEntityManager.HasComponent<ApplyAnimationResultTag>(entity))
-                            ecb.RemoveComponent<ApplyAnimationResultTag>(entity);
                     }
                     else
                     {
@@ -180,5 +177,9 @@ namespace Unity.Tiny.Animation.Editor
                 }
             }
         }
+
+        static void WarnDiscardedBinding(string bindingName, string targetName, string clipName, string sourceName) =>
+            Debug.LogWarning(
+                $"The binding to {bindingName} ({targetName}) could not be created for the animation clip {clipName} ({sourceName}). It will be discarded.");
     }
 }

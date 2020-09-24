@@ -1,0 +1,59 @@
+#pragma vertex Vert
+#pragma fragment Frag
+
+#include "UnityCG.cginc"
+
+struct VertexInput
+{
+    float4 position : POSITION;
+    float2 texcoord : TEXCOORD0;
+    float4 color : COLOR;
+};
+
+struct VertexOutput 
+{
+    float4 position : SV_POSITION;
+    float4 color : COLOR;
+    float2 texcoord : TEXCOORD0;
+    float4 mask : TEXCOORD2;
+};
+
+//uniform float u_VertexOffsetX;
+//uniform float u_VertexOffsetY;
+//uniform float4 u_Color;
+//uniform float u_DiffusePower;
+
+uniform float4 u_ClipRect;
+uniform float4 u_MaskSoftness;
+
+sampler2D u_MainTex;
+
+VertexOutput Vert(VertexInput input) 
+{
+    VertexOutput output;
+
+    float4 vert = input.position;
+    //vert.x += u_VertexOffsetX;
+    //vert.y += u_VertexOffsetY;
+
+    output.position = UnityObjectToClipPos(vert.xyz);
+    output.color = input.color;
+    //output.color *= u_Color;
+    //output.color.rgb *= u_DiffusePower;
+    output.texcoord = input.texcoord;
+
+    float2 pixelSize = output.position.ww;
+    float4 clampedRect = clamp(u_ClipRect, -2e10, 2e10);
+    output.mask = float4(vert.xy * 2. - clampedRect.xy - clampedRect.zw,
+                  float2(0.25, 0.25) / (0.25 * float2(u_MaskSoftness.x, u_MaskSoftness.y) + pixelSize.xy));
+
+    return output;
+}
+
+float4 Frag(VertexOutput input) : SV_TARGET 
+{
+    float4 color = float4(input.color.rgb, input.color.a * tex2D(u_MainTex, input.texcoord).a);
+    // some UNITY_UI_CLIP_RECT stuff
+    // some UNITY_UI_ALPHACLIP stuff
+    return color;
+}

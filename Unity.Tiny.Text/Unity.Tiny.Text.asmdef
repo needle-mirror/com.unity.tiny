@@ -13,7 +13,6 @@
         "Unity.Tiny.GLFW",
         "Unity.Tiny.Rendering",
         "Unity.Mathematics.Extensions",
-        "Unity.Tiny.Scenes",
         "Unity.Platforms.Common"
     ],
     "optionalUnityReferences": [],

@@ -1,38 +1,29 @@
 using System;
 using System.Diagnostics;
-using Unity.Tiny;
-using Unity.Tiny.Utils;
+using Unity.Collections;
 
 namespace Unity.Tiny.Assertions
 {
     public static class Assert
     {
         [Conditional("DEBUG")]
+        [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS")]
         public static void IsTrue(bool condition)
         {
             if (condition)
                 return;
 
-            throw new InvalidOperationException();
+            throw new InvalidOperationException("Assertion failed.");
         }
 
         [Conditional("DEBUG")]
-        public static void IsTrue(bool condition, string message)
+        [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS")]
+        public static void IsTrue(bool condition, FixedString512 message)
         {
             if (condition)
                 return;
 
-            throw new InvalidOperationException(message);
-        }
-
-        [Conditional("DEBUG")]
-        public static void IsTrue(bool condition, string formatString, params object[] args)
-        {
-            if (condition)
-                return;
-
-            var message = StringFormatter.Format(formatString, args);
-            throw new InvalidOperationException(message);
+            throw new InvalidOperationException(message.ToString());
         }
     }
 }

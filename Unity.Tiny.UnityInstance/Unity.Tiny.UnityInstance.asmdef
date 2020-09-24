@@ -6,9 +6,7 @@
         "Unity.Entities.Runtime",
         "Unity.Mathematics",
         "Unity.Platforms.RunLoop",
-        "Unity.Scenes",
-        "Unity.Tiny.Core",
-        "Unity.Tiny.Scenes"
+        "Unity.Scenes"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

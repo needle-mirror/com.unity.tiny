@@ -282,7 +282,7 @@ namespace Unity.Tiny.Audio
     }
 
     /// <summary>
-    ///  Configures the global audio state, which you can access via TinyEnvironment.GetConfigData
+    ///  Configures the global audio state, which you can access via GetSingleton<AudioConfig>()
     ///  This component is attached to the Config entity.
     /// </summary>
     public struct AudioConfig : IComponentData

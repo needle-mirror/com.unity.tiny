@@ -74,7 +74,7 @@ ut::assertFailed(const char* const exprstring, const char* const file, uint32_t 
     }
 #endif
     printf("Assertion failed!\n");
-    if (msg && msg[0]) {
+    if (msg[0] != '\0') {
         printf("    %s\n", msg);
     }
     printf("    %s  at %s:%d\n", exprstring, file, line);

@@ -25,14 +25,7 @@ namespace Unity.Tiny.Text
 
         internal static unsafe void SetEntityTextRendererString(DynamicBuffer<TextRendererString> buffer, string newText)
         {
-            fixed(char* s = newText)
-            {
-                var array = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<char>(s, newText.Length, Allocator.None);
-#if ENABLE_UNITY_COLLECTIONS_CHECKS
-                NativeArrayUnsafeUtility.SetAtomicSafetyHandle(ref array, AtomicSafetyHandle.Create());
-#endif
-                buffer.Reinterpret<char>().CopyFrom(array);
-            }
+            buffer.Reinterpret<char>().FromString(newText);
         }
 
         // NB: vertexColor needs to be as srgb when in gamma space, and in linear otherwise

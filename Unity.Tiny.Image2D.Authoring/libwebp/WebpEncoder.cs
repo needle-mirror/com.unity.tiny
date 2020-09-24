@@ -179,41 +179,42 @@ namespace WebP
     //WebpEncoding c# wrapper
     public static class WebpEncoderNativeCalls
     {
-#if UNITY_STANDALONE_WIN || UNITY_STANDALONE_OSX
-        const string LibName = "libwebp";
-#elif UNITY_STANDALONE_LINUX
-	    const string LibName = "webp";
+
+#if UNITY_EDITOR_LINUX
+	    const string k_LibName = "webp";
+#else
+        const string k_LibName = "libwebp";
 #endif
 
         //Advanced encoding API
-        [DllImport(LibName, EntryPoint = "WebPGetEncoderVersion")]
+        [DllImport(k_LibName, EntryPoint = "WebPGetEncoderVersion")]
         public static extern int WebPGetEncoderVersion();
 
-        [DllImport(LibName, EntryPoint = "WebPConfigInitInternal")]
+        [DllImport(k_LibName, EntryPoint = "WebPConfigInitInternal")]
         public static extern int WebPConfigInitInternal(ref WebPConfig config, WebPPreset preset, float quality, int version);
 
-        [DllImport(LibName, EntryPoint = "WebPConfigLosslessPreset")]
+        [DllImport(k_LibName, EntryPoint = "WebPConfigLosslessPreset")]
         public static extern int WebPConfigLosslessPreset(ref WebPConfig config, int level);
 
-        [DllImport(LibName, EntryPoint = "WebPValidateConfig")]
+        [DllImport(k_LibName, EntryPoint = "WebPValidateConfig")]
         public static extern int WebPValidateConfig(ref WebPConfig config);
 
-        [DllImport(LibName, EntryPoint = "WebPPictureAlloc")]
+        [DllImport(k_LibName, EntryPoint = "WebPPictureAlloc")]
         public static extern int WebPPictureAlloc(ref WebPPicture picture);
 
-        [DllImport(LibName, EntryPoint = "WebPPictureFree")]
+        [DllImport(k_LibName, EntryPoint = "WebPPictureFree")]
         public static extern void WebPPictureFree(ref WebPPicture picture);
 
-        [DllImport(LibName, EntryPoint = "WebPPictureInitInternal")]
+        [DllImport(k_LibName, EntryPoint = "WebPPictureInitInternal")]
         public static extern int WebPPictureInitInternal(ref WebPPicture picture, int version);
 
-        [DllImport(LibName, EntryPoint = "WebPPictureImportRGB")]
+        [DllImport(k_LibName, EntryPoint = "WebPPictureImportRGB")]
         public static extern unsafe int WebPPictureImportRGB(ref WebPPicture picture, byte* rgb, int rgb_stride);
 
-        [DllImport(LibName, EntryPoint = "WebPPictureImportRGBA")]
+        [DllImport(k_LibName, EntryPoint = "WebPPictureImportRGBA")]
         public static extern unsafe int WebPPictureImportRGBA(ref WebPPicture picture, byte* rgba, int rgba_stride);
 
-        [DllImport(LibName, EntryPoint = "WebPEncode")]
+        [DllImport(k_LibName, EntryPoint = "WebPEncode")]
         public static extern int WebPEncode(ref WebPConfig config, ref WebPPicture picture);
     }
 }

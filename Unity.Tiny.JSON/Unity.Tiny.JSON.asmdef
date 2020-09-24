@@ -1,0 +1,18 @@
+{
+    "name": "Unity.Tiny.JSON",
+    "references": [
+        "Unity.Collections",
+        "Unity.Burst",
+        "Unity.Serialization",
+        "Unity.Tiny.Core"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

@@ -386,7 +386,7 @@ void sendFramesToDevice(ma_device* pDevice, void* pSamples, const void* pInput, 
     if ((mixBuffer == nullptr) || (mixBufferSize < frameCount*2*sizeof(float)))
         return;
 
-    for (int i = 0; i < frameCount*2; i++)
+    for (ma_uint32 i = 0; i < frameCount*2; i++)
         mixBuffer[i] = 0.0f;
 
     UserData* pUser = (UserData*)(pDevice->pUserData);
@@ -443,7 +443,7 @@ void sendFramesToDevice(ma_device* pDevice, void* pSamples, const void* pInput, 
 
     // Find the maximum sample in this buffer.
     float maxSampleInBuffer = 1.0f;
-    for (int i = 0; i < frameCount*2; i++)
+    for (ma_uint32 i = 0; i < frameCount*2; i++)
     {
         maxSampleInBuffer = mixBuffer[i] > maxSampleInBuffer ? mixBuffer[i] : maxSampleInBuffer;
         maxSampleInBuffer = mixBuffer[i] < -1.0f*maxSampleInBuffer ? -1.0f*mixBuffer[i] : maxSampleInBuffer;
@@ -455,7 +455,7 @@ void sendFramesToDevice(ma_device* pDevice, void* pSamples, const void* pInput, 
     // Apply our float-to-short conversion and limiter factors together.
     float conversionAndLimiterFactor = maxSample > 1.0f ? SHRT_MAX_FLOAT/maxSample : SHRT_MAX_FLOAT;
     int16_t* pSamplesShort = (int16_t*)pSamples;
-    for (int i = 0; i < frameCount*2; i++)
+    for (ma_uint32 i = 0; i < frameCount*2; i++)
         pSamplesShort[i] = (int16_t)(mixBuffer[i] * conversionAndLimiterFactor);
 
     // Tally up how many samples have passed since we were close to our max sample.

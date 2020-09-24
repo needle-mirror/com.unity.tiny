@@ -107,19 +107,19 @@ const float* SoundSource::fetchAndResample(uint32_t frameCount, uint32_t* delive
         resampledFramesAvailable = (uint32_t)((numFrames - m_framePosResample) / m_pitch);
 
     uint32_t resampledFrameCount = (frameCount <= resampledFramesAvailable) ? frameCount : resampledFramesAvailable;
-    for (int i = 0; i < resampledFrameCount; i++)
+    for (uint32_t i = 0; i < resampledFrameCount; i++)
     {            
-        uint64_t framePosResample1 = (uint64_t)m_framePosResample;
+        uint64_t framePosResample1 = (uint64_t) m_framePosResample;
         uint64_t framePosResample0 = (framePosResample1 == 0) ? numFrames-1 : framePosResample1-1;
         uint64_t framePosResample2 = framePosResample1+1 >= numFrames ? framePosResample1+1-numFrames : framePosResample1+1;
         uint64_t framePosResample3 = framePosResample1+2 >= numFrames ? framePosResample1+2-numFrames : framePosResample1+2;
 
         for (int iSample = 0; iSample < 2; iSample++)
         {
-            uint32_t samplePosTemp0 = framePosResample0*2 + iSample;
-            uint32_t samplePosTemp1 = framePosResample1*2 + iSample;
-            uint32_t samplePosTemp2 = framePosResample2*2 + iSample;
-            uint32_t samplePosTemp3 = framePosResample3*2 + iSample;
+            uint32_t samplePosTemp0 = (uint32_t) (framePosResample0*2 + iSample);
+            uint32_t samplePosTemp1 = (uint32_t) (framePosResample1*2 + iSample);
+            uint32_t samplePosTemp2 = (uint32_t) (framePosResample2*2 + iSample);
+            uint32_t samplePosTemp3 = (uint32_t) (framePosResample3*2 + iSample);
 
             float mu = (float)(m_framePosResample - (double)framePosResample1);
             

@@ -5,7 +5,6 @@ using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Tiny.Assertions;
 using Unity.Tiny.Rendering;
-using Unity.Tiny.Scenes;
 using Unity.Transforms;
 using Unity.Platforms;
 
@@ -112,13 +111,13 @@ namespace Unity.Tiny.Text.Native
 
             // TODO -- need a better way to find a shader given a guid
             int foundShaders = 0;
-            Entities.ForEach((ref PrecompiledShader shader, ref VertexShaderBinData vbin, ref FragmentShaderBinData fbin) =>
+            Entities.ForEach((ref BuiltInShader builtInShader, ref ShaderBinData shaders) =>
             {
                 foundShaders++;
-                if (shader.Guid == BitmapFontMaterial.ShaderGuid)
-                    m_TextShader.Init(BGFXShaderHelper.GetPrecompiledShaderData(m_BGFXInstance->m_rendererType, vbin, fbin, ref shader.Name));
-                else if (shader.Guid == SDFFontMaterial.ShaderGuid)
-                    m_TextSDFShader.Init(BGFXShaderHelper.GetPrecompiledShaderData(m_BGFXInstance->m_rendererType, vbin, fbin, ref shader.Name));
+                if (builtInShader.Guid == BitmapFontMaterial.ShaderGuid)
+                    m_TextShader.Init(BGFXShaderHelper.GetPrecompiledShaderData(m_BGFXInstance->m_rendererType, shaders, ref builtInShader.Name));
+                else if (builtInShader.Guid == SDFFontMaterial.ShaderGuid)
+                    m_TextSDFShader.Init(BGFXShaderHelper.GetPrecompiledShaderData(m_BGFXInstance->m_rendererType, shaders, ref builtInShader.Name));
                 else
                     foundShaders--;
             });
@@ -232,7 +231,11 @@ namespace Unity.Tiny.Text.Native
                 .WithNone<RenderToPasses>()
                 .WithAll<MeshRenderer, TextRenderer>()
                 .ForEach((Entity e) => {
-                    CameraMask cameraMask = new CameraMask { mask = ulong.MaxValue };
+                    CameraMask cameraMask;
+                    if ( EntityManager.HasComponent<CameraMask>(e) )
+                        cameraMask = EntityManager.GetComponentData<CameraMask>(e);
+                    else
+                        cameraMask = new CameraMask { mask = ulong.MaxValue };
                     if (EntityManager.HasComponent<CameraMask>(e))
                         cameraMask = EntityManager.GetComponentData<CameraMask>(e);
                     ShadowMask shadowMask = new ShadowMask { mask = ulong.MaxValue };
