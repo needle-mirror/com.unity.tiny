@@ -13,11 +13,21 @@ namespace Unity.TinyConversion
             Entities.ForEach((UnityEngine.AudioClip audioClip) =>
             {
                 var entity = GetPrimaryEntity(audioClip);
-                DstEntityManager.AddComponent<AudioClip>(entity);
+
+                AudioClip tinyAudioClip = new AudioClip();
+                tinyAudioClip.loadType = (audioClip.loadType == UnityEngine.AudioClipLoadType.CompressedInMemory) ? AudioClipLoadType.CompressedInMemory : AudioClipLoadType.DecompressOnPlay;
+                tinyAudioClip.channels = audioClip.channels;
+                tinyAudioClip.samples = audioClip.samples;
+                tinyAudioClip.frequency = audioClip.frequency;
+
+                DstEntityManager.AddComponentData<AudioClip>(entity, tinyAudioClip);
+                DstEntityManager.AddComponent<AudioClipUsage>(entity);
+                DstEntityManager.AddBuffer<AudioClipCompressed>(entity);
+                DstEntityManager.AddBuffer<AudioClipUncompressed>(entity);                
                 DstEntityManager.AddComponent<AudioClipLoadFromFile>(entity);
-                DstEntityManager.AddComponent<AudioClipLoadFromFileAudioFile>(entity);
 
                 var exportGuid = GetGuidForAssetExport(audioClip);
+                DstEntityManager.AddComponent<AudioClipLoadFromFileAudioFile>(entity);
                 DstEntityManager.SetBufferFromString<AudioClipLoadFromFileAudioFile>(entity, "Data/" + exportGuid.ToString());
             });
         }

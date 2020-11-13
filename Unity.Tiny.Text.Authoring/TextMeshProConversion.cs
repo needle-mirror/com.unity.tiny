@@ -1,7 +1,5 @@
 using TMPro;
 using Unity.Entities;
-using Unity.Tiny.Rendering;
-using Unity.Entities.Runtime.Build;
 using Unity.TinyConversion;
 
 namespace Unity.Tiny.Text.Authoring

@@ -24,18 +24,6 @@ using Unity.Development.Profiling;
 using Unity.Profiling.LowLevel.Unsafe;
 #endif
 
-[assembly: InternalsVisibleTo("Unity.Tiny.RendererExtras")]
-[assembly: InternalsVisibleTo("Unity.Tiny.Rendering.Tests")]
-[assembly: InternalsVisibleTo("Unity.Tiny.Android")]
-[assembly: InternalsVisibleTo("Unity.Tiny.2D.Native")]
-[assembly: InternalsVisibleTo("Unity.Tiny.2D.Tests")]
-[assembly: InternalsVisibleTo("Unity.Tiny.Text.Native")]
-[assembly: InternalsVisibleTo("Unity.UIElements.Entities")]
-[assembly: InternalsVisibleTo("Unity.UIElements.RuntimeShim")]
-[assembly: InternalsVisibleTo("Unity.Tiny.CloudBuild")]
-[assembly: InternalsVisibleTo("Unity.Tiny.Tests.Common")]
-[assembly: InternalsVisibleTo("DearImGui.Tiny")]
-[assembly: InternalsVisibleTo("Unity.Tiny.UnityInstance.Tests")]
 
 namespace Unity.Tiny.Rendering
 {
@@ -269,7 +257,6 @@ namespace Unity.Tiny.Rendering
         public LineShader m_lineShader;
         public LitShader m_litShader;
         public LitSkinnedMeshShader m_litSkinnedMeshShader;
-        public ZOnlyShader m_zOnlyShader;
         public BlitShader m_blitShader;
         public ShadowMapShader m_shadowMapShader;
         public SkinnedMeshShadowMapShader m_skinnedMeshShadowMapShader;
@@ -397,9 +384,11 @@ namespace Unity.Tiny.Rendering
 #endif
         }
 
-        private static bgfx.ProfilerBeginCallback m_profilerBeginCallback = ProfilerBeginCallbackFunc;
+        static class Managed {
+            public static bgfx.ProfilerBeginCallback m_profilerBeginCallback = ProfilerBeginCallbackFunc;
 
-        private static bgfx.ProfilerEndCallback m_profilerEndCallback = ProfilerEndCallbackFunc;
+            public static bgfx.ProfilerEndCallback m_profilerEndCallback = ProfilerEndCallbackFunc;
+        }
 #endif
 
         public void SetFlagThisFrame(bgfx.DebugFlags flag)
@@ -449,7 +438,6 @@ namespace Unity.Tiny.Rendering
             m_litShader.Destroy();
             m_litSkinnedMeshShader.Destroy();
             m_lineShader.Destroy();
-            m_zOnlyShader.Destroy();
             m_blitShader.Destroy();
             m_shadowMapShader.Destroy();
             m_skinnedMeshShadowMapShader.Destroy();
@@ -524,7 +512,7 @@ namespace Unity.Tiny.Rendering
             init.allocator = bgfx.AllocatorInit();
 #if ENABLE_DOTSRUNTIME_PROFILER
             init.profile = 1;
-            init.callback = bgfx.CallbacksInit(Marshal.GetFunctionPointerForDelegate(m_profilerBeginCallback), Marshal.GetFunctionPointerForDelegate(m_profilerEndCallback));
+            init.callback = bgfx.CallbacksInit(Marshal.GetFunctionPointerForDelegate(Managed.m_profilerBeginCallback), Marshal.GetFunctionPointerForDelegate(Managed.m_profilerEndCallback));
 #else
             init.profile = 0;
             init.callback = bgfx.CallbacksInit(IntPtr.Zero, IntPtr.Zero);
@@ -652,8 +640,6 @@ namespace Unity.Tiny.Rendering
                             m_litSkinnedMeshShader.Init(BGFXShaderHelper.GetPrecompiledShaderData(backend, shaders, ref builtInShader.Name));
                         else if (builtInShader.Guid == BuiltInShaderType.line)
                             m_lineShader.Init(BGFXShaderHelper.GetPrecompiledShaderData(backend, shaders, ref builtInShader.Name));
-                        else if (builtInShader.Guid == BuiltInShaderType.zonly)
-                            m_zOnlyShader.Init(BGFXShaderHelper.GetPrecompiledShaderData(backend, shaders, ref builtInShader.Name));
                         else if (builtInShader.Guid == BuiltInShaderType.blitsrgb)
                             m_blitShader.Init(BGFXShaderHelper.GetPrecompiledShaderData(backend, shaders, ref builtInShader.Name));
                         else if (builtInShader.Guid == BuiltInShaderType.shadowmap)
@@ -667,7 +653,7 @@ namespace Unity.Tiny.Rendering
             }
 
             // must have all shaders
-            int totalShadersCount = 9;
+            int totalShadersCount = 8;
             if (foundShaders != totalShadersCount)
                 throw new Exception("Couldn't find all needed core precompiled shaders, only found " + foundShaders + "/" + totalShadersCount);
 

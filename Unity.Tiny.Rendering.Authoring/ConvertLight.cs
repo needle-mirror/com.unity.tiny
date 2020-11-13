@@ -3,10 +3,8 @@ using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Tiny.Rendering;
 using UnityEngine;
-using UnityEngine.Rendering;
 using Debug = UnityEngine.Debug;
 using Light = UnityEngine.Light;
-using Unity.Entities.Runtime.Build;
 using Unity.Transforms;
 
 namespace Unity.TinyConversion
@@ -14,51 +12,17 @@ namespace Unity.TinyConversion
     [UpdateInGroup(typeof(GameObjectBeforeConversionGroup))]
     [UpdateAfter(typeof(TransformConversion))]
     [WorldSystemFilter(WorldSystemFilterFlags.DotsRuntimeGameObjectConversion)]
+    [ConverterVersion("gwenaelle", 1)]
     public class LightConversion : GameObjectConversionSystem
     {
-        void CheckLightLimitations()
+        protected override void OnUpdate()
         {
-            int numberOfPointOrDirLights = 0;
-            int numberOfShadowMappedLights = 0;
-            int numberOfCascadedShadowMappedLights = 0;
             Entities.ForEach((Light uLight) =>
             {
                 var cascadeComp = uLight.gameObject.GetComponent<Tiny.Authoring.CascadedShadowMappedLight>();
-
-                if (uLight.type == LightType.Directional || uLight.type == LightType.Point)
-                    numberOfPointOrDirLights++;
-                if (uLight.type == LightType.Directional || uLight.type == LightType.Spot)
-                {
-                    if (uLight.shadows != LightShadows.None)
-                    {
-                        if (cascadeComp != null)
-                        {
-                            numberOfCascadedShadowMappedLights++;
-                        }
-                        else
-                        {
-                            numberOfShadowMappedLights++;
-                        }
-                    }
-                }
                 if (uLight.type != LightType.Directional && cascadeComp != null)
                     throw new ArgumentException($"The {nameof(Tiny.Authoring.CascadedShadowMappedLight)} component is only supported for Directional Lights. Use it on only one Directional light.");
-            });
 
-            if (numberOfPointOrDirLights > LightingSetup.maxPointOrDirLights)
-                throw new ArgumentException($"Only a maximum of a total of {LightingSetup.maxPointOrDirLights} directional or point lights is supported. Please reduce the number of directional and/or point lights in your scene.");
-            if (numberOfShadowMappedLights > LightingSetup.maxMappedLights)
-                throw new ArgumentException($"Only a maximum of {LightingSetup.maxMappedLights} shadow mapped lights is supported. Please reduce the number of shadow mapped lights (directional or spot) in your scene.");
-            if (numberOfCascadedShadowMappedLights > LightingSetup.maxCsmLights)
-                throw new ArgumentException($"Only a maximum of {LightingSetup.maxCsmLights} cascaded shadow mapped directional lights is supported. Use only one {nameof(Tiny.Authoring.CascadedShadowMappedLight)} component in your scene on a Directional Light.");
-        }
-
-        protected override void OnUpdate()
-        {
-            CheckLightLimitations();
-
-            Entities.ForEach((Light uLight) =>
-            {
                 Entity eLighting = GetPrimaryEntity(uLight);
                 DstEntityManager.AddComponentData(eLighting, new Unity.Tiny.Rendering.Light()
                 {

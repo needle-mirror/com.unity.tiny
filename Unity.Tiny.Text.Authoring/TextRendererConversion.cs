@@ -1,9 +1,6 @@
 using TMPro;
 using Unity.Entities;
-using Unity.Tiny.Rendering;
-using Unity.Entities.Runtime.Build;
 using Unity.TinyConversion;
-using UnityEngine.TextCore.LowLevel;
 
 namespace Unity.Tiny.Text.Authoring
 {
@@ -14,6 +11,7 @@ namespace Unity.Tiny.Text.Authoring
     {
         protected override void OnUpdate()
         {
+            // Custom authoring component text conversion
             Entities.ForEach((TextRenderer displayText) =>
             {
                 DeclareReferencedAsset(displayText.Font);
@@ -30,6 +28,7 @@ namespace Unity.Tiny.Text.Authoring
     {
         protected override void OnUpdate()
         {
+            // Custom authoring component text conversion
             Entities.ForEach((TextRenderer displayText) =>
             {
                 var textEntity = GetPrimaryEntity(displayText);
@@ -40,7 +39,8 @@ namespace Unity.Tiny.Text.Authoring
                     FontMaterial = fontAsset,
                     MeshColor = displayText.Color.linear.ToTiny(),
                     Size = displayText.Size,
-                    HorizontalAlignment = displayText.Alignment
+                    HorizontalAlignment = displayText.Alignment,
+                    VerticalAlignment = VerticalAlignment.Baseline
                 });
                 DstEntityManager.AddComponentData(textEntity, new Unity.Tiny.Rendering.CameraMask {
                    mask = (ulong)(1<<displayText.gameObject.layer)

@@ -36,10 +36,12 @@
 
 using namespace Unity::LowLevel;
 
-// Need a mutex to protect access to the SoundSources 
-// that are used by the callback. The SoundClips are
-// refCounted; so they are safe.
-static baselib::Lock soundSourceMutex;
+static baselib::Lock soundSourcePropertyMutex;
+
+// Need a mutex to protect access to the SoundSources that are used by the callback. The SoundClips are
+// refCounted, so they are safe.
+static baselib::Lock soundSourceSampleMutex;
+
 static uint32_t clipIDPool = 0;
 static std::map<uint32_t, SoundClip*> clipMap;
 static uint32_t sourceIDPool = 0;
@@ -65,24 +67,35 @@ static const uint32_t mixBufferSize = 8192*2*sizeof(float);
 static const float limiterHeadroom = 0.1f;
 static const uint32_t limiterWindowInFrames = 22050;
 
+DOTS_EXPORT(void)
+soundSourcePropertyMutexLock()
+{
+    soundSourcePropertyMutex.Acquire();
+}
+
+DOTS_EXPORT(void)
+soundSourcePropertyMutexUnlock()
+{
+    soundSourcePropertyMutex.Release();
+}
+
+DOTS_EXPORT(void)
+soundSourceSampleMutexLock()
+{
+    soundSourceSampleMutex.Acquire();
+}
+
+DOTS_EXPORT(void)
+soundSourceSampleMutexUnlock()
+{
+    soundSourceSampleMutex.Release();
+}
+
 void flushMemory()
 {
     std::vector<std::map<uint32_t, SoundClip*>::iterator> clipDeleteList;
     std::vector<std::map<uint32_t, SoundSource*>::iterator> sourceDeleteList;
 
-    for (auto it = clipMap.begin(); it != clipMap.end(); ++it) {
-        SoundClip* clip = it->second;
-        if (clip->isQueuedForDeletion() && clip->refCount() == 0) {
-            clipDeleteList.push_back(it);
-        }
-    }
-    for (int i = 0; i < (int)clipDeleteList.size(); ++i) {
-        SoundClip* clip = clipDeleteList[i]->second;
-        delete clip;
-        clipMap.erase(clipDeleteList[i]);
-    }
-
-    BaselibLock lock(soundSourceMutex);
     for (auto it = sourceMap.begin(); it != sourceMap.end(); ++it) {
         SoundSource* source = it->second;
         if (source->readyToDelete()) {
@@ -96,31 +109,40 @@ void flushMemory()
         LOGE("Deleting sound source.");
         sourceMap.erase(sourceDeleteList[i]);
     }
+
+    for (auto it = clipMap.begin(); it != clipMap.end(); ++it) {
+        SoundClip* clip = it->second;
+        if (clip->isQueuedForDeletion() && clip->refCount() == 0) {
+            clipDeleteList.push_back(it);
+        }
+    }
+    for (int i = 0; i < (int)clipDeleteList.size(); ++i) {
+        SoundClip* clip = clipDeleteList[i]->second;
+        delete clip;
+        clipMap.erase(clipDeleteList[i]);
+    }
 }
 
-void freeAllSources()
+void freeAllSourcesAndClips()
 {
-    BaselibLock lock(soundSourceMutex);
-    while (!sourceMap.empty()) {
-        auto it = sourceMap.begin();
+    BaselibLock propertyMutex(soundSourcePropertyMutex);
+    BaselibLock sampleMutex(soundSourceSampleMutex);
+
+    for (auto it = sourceMap.begin(); it != sourceMap.end(); ++it)
+    {
         SoundSource* source = it->second;
         source->stop();
-        delete source;
-        sourceMap.erase(it);
     }
 
-    sourceIDPool = 0;
-}
-
-void freeAllClips()
-{
-    for (auto it = clipMap.begin(); it != clipMap.end(); ++it) {
+    for (auto it = clipMap.begin(); it != clipMap.end(); ++it)
+    {
         SoundClip* clip = it->second;
         clip->queueDeletion();
     }
-    flushMemory();
-    assert(clipMap.empty());
 
+    flushMemory();
+
+    sourceIDPool = 0;
     clipIDPool = 0;
 }
 
@@ -130,6 +152,8 @@ freeAudio(uint32_t clipID)
     if (!audioInitialized) return;
 
     LOGE("freeAudio(%d)", clipID);
+
+    soundSourcePropertyMutex.Acquire();
     auto it = clipMap.find(clipID);
     if (it != clipMap.end()) {
         SoundClip* clip = it->second;
@@ -138,7 +162,7 @@ freeAudio(uint32_t clipID)
     else {
         LOGE("freeAudio(%d) not found.", clipID);
     }
-    flushMemory();
+    soundSourcePropertyMutex.Release();
 }
 
 void* createTestWAV(const char* name, size_t* size)
@@ -171,7 +195,7 @@ extern "C" void* loadAsset(const char* path, int* size, void* (*alloc)(size_t));
 #endif
 
 DOTS_EXPORT(uint32_t)
-startLoad(const char* path)
+startLoadFromDisk(const char* path)
 {
     if (!audioInitialized) return 0;
 
@@ -202,12 +226,24 @@ startLoad(const char* path)
     return clipIDPool;
 }
 
+DOTS_EXPORT(uint32_t)
+startLoadFromMemory(void* compressedBuffer, int compressedBufferSize)
+{
+    if (!audioInitialized) return 0;
+
+    ++clipIDPool;
+    clipMap[clipIDPool] = new SoundClip(compressedBuffer, compressedBufferSize);
+    return clipIDPool;
+}
+
 // Testing
 DOTS_EXPORT(int32_t)
 numSourcesAllocated()
 {
-    flushMemory();
-    BaselibLock lock(soundSourceMutex);
+    BaselibLock propertyMutex(soundSourcePropertyMutex);
+    BaselibLock sampleMutex(soundSourceSampleMutex);
+
+    flushMemory();    
     LOGE("numSourcesAllocated=%d", (int)sourceMap.size());
     return (int)sourceMap.size();
 }
@@ -216,8 +252,10 @@ numSourcesAllocated()
 DOTS_EXPORT(int32_t)
 numClipsAllocated()
 {
+    BaselibLock propertyMutex(soundSourcePropertyMutex);
+    BaselibLock sampleMutex(soundSourceSampleMutex);
     flushMemory();
-    BaselibLock lock(soundSourceMutex);
+
     LOGE("numClipsAllocated=%d", (int)clipMap.size());
     return (int)clipMap.size();
 }
@@ -226,8 +264,10 @@ numClipsAllocated()
 DOTS_EXPORT(int32_t)
 sourcePoolID()
 {
+    BaselibLock propertyMutex(soundSourcePropertyMutex);
+    BaselibLock sampleMutex(soundSourceSampleMutex);
     flushMemory();
-    BaselibLock lock(soundSourceMutex);
+
     LOGE("sourcePoolID=%d", (int)sourcePoolID);
     return sourceIDPool;
 }
@@ -235,7 +275,10 @@ sourcePoolID()
 DOTS_EXPORT(int32_t)
 clipPoolID()
 {
+    BaselibLock propertyMutex(soundSourcePropertyMutex);
+    BaselibLock sampleMutex(soundSourceSampleMutex);
     flushMemory();
+
     LOGE("clipPoolID=%d", (int)clipPoolID);
     return clipIDPool;
 }
@@ -244,7 +287,6 @@ DOTS_EXPORT(int)
 checkLoading(uint32_t id)
 {
     if (!audioInitialized) return SoundClip::SoundClipStatus::FAIL;
-    flushMemory();
 
     auto it = clipMap.find(id);
     if (it == clipMap.end()) {
@@ -297,55 +339,46 @@ getAudioOutputTimeInFrames()
     return audioOutputTimeInFrames;
 }
 
-DOTS_EXPORT(bool)
+DOTS_EXPORT(void)
 setVolume(uint32_t sourceID, float volume)
 {
-    if (!audioInitialized) return 0;
-    flushMemory();
+    if (!audioInitialized) return;
 
-    BaselibLock lock(soundSourceMutex);
     auto it = sourceMap.find(sourceID);
     if (it == sourceMap.end()) {
         LOGE("setVolume() sourceID=%d failed.", sourceID);
-        return false;
     }
-
-    it->second->setVolume(volume);
-    return true;
+    else {
+        it->second->setVolume(volume);
+    }
 }
 
-DOTS_EXPORT(bool)
+DOTS_EXPORT(void)
 setPan(uint32_t sourceID, float pan)
 {
-    if (!audioInitialized) return 0;
-    flushMemory();
+    if (!audioInitialized) return;
 
-    BaselibLock lock(soundSourceMutex);
     auto it = sourceMap.find(sourceID);
     if (it == sourceMap.end()) {
         LOGE("setPan() sourceID=%d failed.", sourceID);
-        return false;
     }
-
-    it->second->setPan(pan);
-    return true;
+    else {
+        it->second->setPan(pan);
+    }
 }
 
-DOTS_EXPORT(bool)
+DOTS_EXPORT(void)
 setPitch(uint32_t sourceID, float pitch)
 {
-    if (!audioInitialized) return 0;
-    flushMemory();
+    if (!audioInitialized) return;
 
-    BaselibLock lock(soundSourceMutex);
     auto it = sourceMap.find(sourceID);
     if (it == sourceMap.end()) {
         LOGE("setPitch() sourceID=%d failed.", sourceID);
-        return false;
     }
-
-    it->second->setPitch(pitch);
-    return true;
+    else {
+        it->second->setPitch(pitch);
+    }
 }
 
 DOTS_EXPORT(void)
@@ -362,6 +395,14 @@ static int callbackCpuIndex = 0;
 static Baselib_Timer_Ticks callbackCpuPercent[kCallbackCpuCount] = { 0 };
 #endif
 
+struct SoundSourcePlaying
+{
+    SoundSource* source;
+    float coeffL;
+    float coeffR;
+    float pitch;
+};
+
 // At 44,100 hz, stereo, 16-bit
 // 44100 frames / second.
 // Typical callback = 223 frames
@@ -375,6 +416,9 @@ void sendFramesToDevice(ma_device* pDevice, void* pSamples, const void* pInput, 
     const uint32_t bytesPerSample = ma_get_bytes_per_sample(pDevice->playback.format);
     const uint32_t bytesPerFrame = ma_get_bytes_per_frame(pDevice->playback.format, pDevice->playback.channels);
     const float SHRT_MAX_FLOAT = (float)SHRT_MAX;
+    const int soundSourcesPlayingMax = 128;
+    SoundSourcePlaying soundSourcesPlaying[soundSourcesPlayingMax];
+    int numSoundSourcesPlaying = 0;
 
     ASSERT(bytesPerSample == 2);
     ASSERT(bytesPerFrame == 4);
@@ -386,64 +430,86 @@ void sendFramesToDevice(ma_device* pDevice, void* pSamples, const void* pInput, 
     if ((mixBuffer == nullptr) || (mixBufferSize < frameCount*2*sizeof(float)))
         return;
 
-    for (ma_uint32 i = 0; i < frameCount*2; i++)
-        mixBuffer[i] = 0.0f;
-
-    UserData* pUser = (UserData*)(pDevice->pUserData);
-
-    BaselibLock lock(soundSourceMutex);
-
+    soundSourcePropertyMutex.Acquire();
+    int sourceIndex = 0;
     for (auto it = sourceMap.begin(); it != sourceMap.end(); ++it) 
     {
         SoundSource* source = it->second;
-        if (source->isPlaying()) 
+        if (source->isPlaying())
         {
-            bool done = false;
-
-            uint32_t totalFrames = 0;
-            float* target = mixBuffer;
+            float volume = audioMuted ? 0.0f : source->volume();
+            float pan = source->pan();
+            float pitch = source->pitch();
 
             // when pan is at center, setting both channels to .7 instead of .5 sounds more natural
             // this is an approximation to sqrt(2) = 45 degree angle on unit circle, and for now
             // we'll linearly interpolate to the extremes rather than rotate
-            float volume = audioMuted ? 0.0f : source->volume();
-            float pan = source->pan();
-            float coeffL = (.7f - (pan > 0 ? pan * .7f : pan * .3f)) * volume;
-            float coeffR = (.7f + (pan < 0 ? pan * .7f : pan * .3f)) * volume;
+            soundSourcesPlaying[sourceIndex].source = source;
+            soundSourcesPlaying[sourceIndex].coeffL = (.7f - (pan > 0 ? pan * .7f : pan * .3f)) * volume;
+            soundSourcesPlaying[sourceIndex].coeffR = (.7f + (pan < 0 ? pan * .7f : pan * .3f)) * volume;
+            soundSourcesPlaying[sourceIndex].pitch = pitch;
+            
+            sourceIndex++;
+            if (sourceIndex >= soundSourcesPlayingMax)
+                break;
+        }
+    }
+    numSoundSourcesPlaying = sourceIndex;
+    soundSourcePropertyMutex.Release();
 
-            while (!done)
+    for (uint32_t i = 0; i < frameCount*2; i++)
+        mixBuffer[i] = 0.0f;
+
+    soundSourceSampleMutex.Acquire();
+    for (int i = 0; i < numSoundSourcesPlaying; i++) 
+    {
+        SoundSource* source = soundSourcesPlaying[i].source;
+        bool done = false;
+        uint32_t totalFrames = 0;
+        float* target = mixBuffer;
+        float coeffL = soundSourcesPlaying[i].coeffL;
+        float coeffR = soundSourcesPlaying[i].coeffR;
+        float pitch = soundSourcesPlaying[i].pitch;
+
+        int numFailedFetches = 0;
+        while (!done)
+        {
+            uint32_t decodedFrames = 0;
+            uint32_t requestedFrames = frameCount - totalFrames;
+
+            const float* src = source->fetch(requestedFrames, &decodedFrames, pitch);
+            totalFrames += decodedFrames;
+
+            // Now 'buffer' is the source. Apply the volume and copy to 'pSamples'
+            for (uint32_t i = 0; i < decodedFrames; ++i) 
+            {   
+                *target += *src * coeffL;
+                ++target;
+                ++src;
+
+                *target += *src * coeffR;
+                ++target;
+                ++src;
+            }
+
+            if (decodedFrames == 0)
+                numFailedFetches++;
+            else
+                numFailedFetches = 0;
+
+            done = true;
+            if (source->loop() && (totalFrames < frameCount) && (numFailedFetches < 2)) 
             {
-                uint32_t decodedFrames = 0;
-                uint32_t requestedFrames = frameCount - totalFrames;
-
-                const float* src = source->fetch(requestedFrames, &decodedFrames);
-                totalFrames += decodedFrames;
-
-                // Now 'buffer' is the source. Apply the volume and copy to 'pSamples'
-                for (uint32_t i = 0; i < decodedFrames; ++i) 
-                {   
-                    *target += *src * coeffL;
-                    ++target;
-                    ++src;
-
-                    *target += *src * coeffR;
-                    ++target;
-                    ++src;
-                }
-
-                done = true;
-                if (source->loop() && totalFrames < frameCount) 
-                {
-                    done = false;
-                    source->rewind();
-                }
+                source->rewind();
+                done = false;
             }
         }
     }
+    soundSourceSampleMutex.Release();
 
     // Find the maximum sample in this buffer.
     float maxSampleInBuffer = 1.0f;
-    for (ma_uint32 i = 0; i < frameCount*2; i++)
+    for (uint32_t i = 0; i < frameCount*2; i++)
     {
         maxSampleInBuffer = mixBuffer[i] > maxSampleInBuffer ? mixBuffer[i] : maxSampleInBuffer;
         maxSampleInBuffer = mixBuffer[i] < -1.0f*maxSampleInBuffer ? -1.0f*mixBuffer[i] : maxSampleInBuffer;
@@ -455,7 +521,7 @@ void sendFramesToDevice(ma_device* pDevice, void* pSamples, const void* pInput, 
     // Apply our float-to-short conversion and limiter factors together.
     float conversionAndLimiterFactor = maxSample > 1.0f ? SHRT_MAX_FLOAT/maxSample : SHRT_MAX_FLOAT;
     int16_t* pSamplesShort = (int16_t*)pSamples;
-    for (ma_uint32 i = 0; i < frameCount*2; i++)
+    for (uint32_t i = 0; i < frameCount*2; i++)
         pSamplesShort[i] = (int16_t)(mixBuffer[i] * conversionAndLimiterFactor);
 
     // Tally up how many samples have passed since we were close to our max sample.
@@ -473,6 +539,12 @@ void sendFramesToDevice(ma_device* pDevice, void* pSamples, const void* pInput, 
     }
 
     audioOutputTimeInFrames += frameCount;
+
+    soundSourcePropertyMutex.Acquire();
+    soundSourceSampleMutex.Acquire();
+    flushMemory();
+    soundSourceSampleMutex.Release();
+    soundSourcePropertyMutex.Release();
 
 #ifdef ENABLE_PROFILER
     Baselib_Timer_Ticks end = Baselib_Timer_GetHighPrecisionTimerTicks();
@@ -494,23 +566,71 @@ getCpuUsage()
         total += callbackCpuPercent[i];
     return (float)(total / kCallbackCpuCount) / 10.0f;
 }
+#endif
 
-DOTS_EXPORT(int)
-getRequiredMemory(uint32_t clipID)
+DOTS_EXPORT(uint32_t)
+getUncompressedMemorySize(uint32_t clipID)
 {
     if (!audioInitialized) return 0;
 
-    LOGE("getRequiredMemory(%d)", clipID);
+    LOGE("getUncompressedMemorySize(%d)", clipID);
     auto it = clipMap.find(clipID);
     if (it != clipMap.end()) {
         SoundClip* clip = it->second;
-        return (int)(ma_get_bytes_per_frame(maConfig.playback.format, maConfig.playback.channels) * clip->numFrames());
+        return (uint32_t)(ma_get_bytes_per_frame(maConfig.playback.format, maConfig.playback.channels) * clip->numFrames());
     }
 
-    LOGE("getRequiredMemory(%d) not found.", clipID);
+    LOGE("getUncompressedMemorySize(%d) not found.", clipID);
     return 0;
 }
-#endif
+
+DOTS_EXPORT(uint32_t)
+getCompressedMemorySize(uint32_t clipID)
+{
+    if (!audioInitialized) return 0;
+
+    LOGE("getCompressedMemorySize(%d)", clipID);
+    auto it = clipMap.find(clipID);
+    if (it != clipMap.end()) {
+        SoundClip* clip = it->second;
+        return (uint32_t)clip->getCompressedMemorySize();
+    }
+
+    LOGE("getCompressedMemorySize(%d) not found.", clipID);
+    return 0;
+}
+
+DOTS_EXPORT(int16_t*)
+getUncompressedMemory(uint32_t clipID)
+{
+    if (!audioInitialized) return 0;
+
+    LOGE("getUncompressedMemory(%d)", clipID);
+    auto it = clipMap.find(clipID);
+    if (it != clipMap.end()) {
+        SoundClip* clip = it->second;
+        return (int16_t*)clip->frames();
+    }
+
+    LOGE("getUncompressedMemory(%d) not found.", clipID);
+    return nullptr;
+}
+
+DOTS_EXPORT(void)
+setUncompressedMemory(uint32_t clipID, int16_t* uncompressedMemory, uint32_t uncompressedSizeFrames)
+{
+    if (!audioInitialized) return;
+
+    LOGE("setUncompressedMemory(%d)", clipID);
+    auto it = clipMap.find(clipID);
+    if (it != clipMap.end()) {
+        SoundClip* clip = it->second;
+        clip->setFrames(uncompressedMemory, uncompressedSizeFrames);
+    }
+    else {
+        LOGE("setUncompressedMemory(%d) not found.", clipID);
+    }
+}
 
 DOTS_EXPORT(void)
 initAudio() {
@@ -556,11 +676,10 @@ initAudio() {
     audioInitialized = true;
 }
 
-
 DOTS_EXPORT(void)
 destroyAudio() {
-    freeAllSources();
-    freeAllClips();
+    freeAllSourcesAndClips();
+
     if (audioInitialized) {
         ma_device_uninit(maDevice);
     }
@@ -589,10 +708,9 @@ reinitAudio()
 }
 
 DOTS_EXPORT(uint32_t)
-playSource(uint32_t clipID, float volume, float pan, bool loop)
+playSource(uint32_t clipID, float volume, float pan, int loop)
 {
     if (!audioInitialized) return 0;
-    flushMemory();
 
     auto it = clipMap.find(clipID);
     if (it == clipMap.end()) {
@@ -612,53 +730,43 @@ playSource(uint32_t clipID, float volume, float pan, bool loop)
 
     if (source->getStatus() == SoundSource::SoundStatus::Playing)
     {
-        BaselibLock lock(soundSourceMutex);
         sourceMap[++sourceIDPool] = source;
         LOGE("SoundSource %d created", sourceIDPool);
         return sourceIDPool;
     }
     source->stop();
-    delete source;
     return 0;
 }
 
-
-DOTS_EXPORT(bool)
+DOTS_EXPORT(int)
 isPlaying(uint32_t sourceID)
 {
-    if (!audioInitialized) return false;
+    if (!audioInitialized) return 0;
 
-    BaselibLock lock(soundSourceMutex);
     auto it = sourceMap.find(sourceID);
     if (it == sourceMap.end()) {
         // This isn't an error; the lifetime of an Audio object on the C#
         // side doesn't match the object here. If it's deleted, it just isn't playing.
-        return false;
+        return 0;
     }
     const SoundSource* source = it->second;
-    return source->getStatus() == SoundSource::SoundStatus::NotYetStarted ||
-        source->getStatus() == SoundSource::SoundStatus::Playing;
+    return (source->getStatus() == SoundSource::SoundStatus::NotYetStarted ||
+        source->getStatus() == SoundSource::SoundStatus::Playing) ? 1 : 0;
 }
 
-
-DOTS_EXPORT(bool)
+DOTS_EXPORT(int)
 stopSource(uint32_t sourceID)
 {
-    if (!audioInitialized) return false;
+    if (!audioInitialized) return 0;
 
-    BaselibLock lock(soundSourceMutex);
     auto it = sourceMap.find(sourceID);
     if (it == sourceMap.end()) {
-        return false;
+        return 0;
     }
 
     LOGE("stopSource() source=%d", sourceID);
 
     SoundSource* source = it->second;
     source->stop();
-    LOGE("SoundSource %d deleted", sourceID);
-    delete source;
-    sourceMap.erase(it);
-    return true;
+    return 1;
 }
-

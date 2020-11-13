@@ -124,7 +124,7 @@ namespace Unity.Tiny.Rendering
         public bgfx.UniformHandle m_samplerMetal;
         public bgfx.UniformHandle m_samplerNormal;
 
-        public bgfx.UniformHandle m_uniformAmbient;
+        public bgfx.UniformHandle m_uniformAmbientProbe;
         public bgfx.UniformHandle m_uniformEmissiveNormalZScale;
         public bgfx.UniformHandle m_uniformOutputDebugSelect;
 
@@ -176,7 +176,7 @@ namespace Unity.Tiny.Rendering
             m_uniformAlbedoOpacity = bgfx.create_uniform("u_albedo_opacity", bgfx.UniformType.Vec4, 1);
             m_uniformMetalSmoothnessBillboarded = bgfx.create_uniform("u_metal_smoothness_billboarded", bgfx.UniformType.Vec4, 1);
 
-            m_uniformAmbient = bgfx.create_uniform("u_ambient", bgfx.UniformType.Vec4, 1);
+            m_uniformAmbientProbe = bgfx.create_uniform("u_ambientProbe", bgfx.UniformType.Vec4, 7);
             m_uniformTexMad = bgfx.create_uniform("u_texmad", bgfx.UniformType.Vec4, 1);
             m_uniformModelInverseTranspose = bgfx.create_uniform("u_modelInverseTranspose", bgfx.UniformType.Mat4, 1);
             m_uniformEmissiveNormalZScale = bgfx.create_uniform("u_emissive_normalz", bgfx.UniformType.Vec4, 1);
@@ -218,7 +218,7 @@ namespace Unity.Tiny.Rendering
             bgfx.destroy_uniform(m_uniformAlbedoOpacity);
             bgfx.destroy_uniform(m_uniformMetalSmoothnessBillboarded);
 
-            bgfx.destroy_uniform(m_uniformAmbient);
+            bgfx.destroy_uniform(m_uniformAmbientProbe);
             bgfx.destroy_uniform(m_uniformEmissiveNormalZScale);
             bgfx.destroy_uniform(m_uniformOutputDebugSelect);
 
@@ -356,25 +356,6 @@ namespace Unity.Tiny.Rendering
         public void Destroy()
         {
             bgfx.destroy_program(m_prog);
-        }
-    }
-
-    public struct ZOnlyShader
-    {
-        public bgfx.ProgramHandle m_prog;
-
-        public bgfx.UniformHandle m_uniformDebugColor;
-
-        public void Init(bgfx.ProgramHandle program)
-        {
-            m_prog = program;
-            m_uniformDebugColor = bgfx.create_uniform("u_colorDebug", bgfx.UniformType.Vec4, 1);
-        }
-
-        public void Destroy()
-        {
-            bgfx.destroy_program(m_prog);
-            bgfx.destroy_uniform(m_uniformDebugColor);
         }
     }
 

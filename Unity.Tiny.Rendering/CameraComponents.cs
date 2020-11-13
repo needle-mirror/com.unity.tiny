@@ -192,7 +192,7 @@ namespace Unity.Tiny.Rendering
         public static float4 InitPlane(float3 pos, float3 normal)
         {
             Assert.IsTrue(0.99f < math.lengthsq(normal) && math.lengthsq(normal) < 1.01f);
-            return new float4(normal.x, normal.y, normal.z, math.dot(pos, normal));
+            return new float4(normal.x, normal.y, normal.z, -math.dot(pos, normal));
         }
 
         public static float4 NormalizePlane(float4 p)
@@ -228,12 +228,12 @@ namespace Unity.Tiny.Rendering
                 float3 p;
                 if ((i & 1) == 0)
                 {
-                    n[i >> 1] = 1.0f;
+                    n[i >> 1] = -1.0f;
                     p = bMax;
                 }
                 else
                 {
-                    n[i >> 1] = -1.0f;
+                    n[i >> 1] = 1.0f;
                     p = bMin;
                 }
                 dest.SetPlane(i, InitPlane(p, n));
@@ -250,7 +250,7 @@ namespace Unity.Tiny.Rendering
                 float s = (i & 1) == 0 ? 1.0f : -1.0f;
                 pp[i >> 1] += size * s;
                 float3 n = new float3(0.0f);
-                n[i >> 1] = s;
+                n[i >> 1] = -s;
                 dest.SetPlane(i, InitPlane(pp, n));
             }
         }

@@ -1,0 +1,14 @@
+{
+    "name": "Unity.Tiny.GameSave.Native",
+    "references": [
+        "Unity.Entities",
+        "Unity.Collections",
+        "Unity.Collections.LowLevel.Unsafe",
+        "Unity.ZeroJobs"
+    ],
+    "optionalUnityReferences": [],
+    "includePlatforms": [],
+    "excludePlatforms": ["Editor", "WebGL"],
+	"allowUnsafeCode": true,
+    "defineConstraints": ["UNITY_DOTSRUNTIME"]
+}

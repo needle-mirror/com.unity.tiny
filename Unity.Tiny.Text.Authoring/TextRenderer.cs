@@ -102,7 +102,7 @@ namespace Unity.Tiny.Text.Authoring
             unsafe
             {
                 fixed (char* chars = Text)
-                    TextLayout.LayoutString(chars, Text.Length, Size, Alignment, Color.ToTiny().AsFloat4(), ref m_GeneratedFontData.Value,
+                    TextLayout.LayoutString(chars, Text.Length, Size, Alignment, VerticalAlignment.Baseline, Color.ToTiny().AsFloat4(), ref m_GeneratedFontData.Value,
                         vdata, idata, out AABB bbox);
 
                 // Flip vdata.TexCoord0.y for Unity's UV direction.  Do this here to make

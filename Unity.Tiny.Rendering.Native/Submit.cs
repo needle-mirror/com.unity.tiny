@@ -24,7 +24,7 @@ namespace Unity.Tiny.Rendering
                 return;
             Dependency.Complete();
 
-            Entities.WithoutBurst().ForEach((Entity e, ref BlitRenderer br) =>
+            Entities.WithNone<DisableRendering>().WithoutBurst().ForEach((Entity e, ref BlitRenderer br) =>
             {
                 if (!EntityManager.HasComponent<RenderToPasses>(e))
                     return;
@@ -71,7 +71,7 @@ namespace Unity.Tiny.Rendering
             // this list is usually very shared - all opaque meshes will render to all ZOnly and Opaque passes
             // this shared data is not dynamically updated - other systems are responsible to update them if needed
             // simple
-            Entities.WithAll<SimpleMeshRenderer>().WithoutBurst().ForEach((Entity e, ref MeshRenderer mr, ref LocalToWorld tx, in WorldBounds wb, in WorldBoundingSphere wbs) =>
+            Entities.WithNone<DisableRendering>().WithAll<SimpleMeshRenderer>().WithoutBurst().ForEach((Entity e, ref MeshRenderer mr, ref LocalToWorld tx, in WorldBounds wb, in WorldBoundingSphere wbs) =>
             {
                 if (!EntityManager.HasComponent<RenderToPasses>(e))
                     return;
@@ -91,11 +91,8 @@ namespace Unity.Tiny.Rendering
                     uint depth = 0;
                     switch (pass.passType)
                     {
-                        case RenderPassType.ZOnly:
-                            SubmitHelper.SubmitZOnlyMeshDirect(sys, pass.viewId, ref mesh, ref tx.Value, mr.startIndex, mr.indexCount, pass.GetFlipCulling());
-                            break;
                         case RenderPassType.ShadowMap:
-                            SubmitHelper.SubmitZOnlyMeshDirect(sys, pass.viewId, ref mesh, ref tx.Value, mr.startIndex, mr.indexCount, pass.GetFlipCullingInverse());
+                            SubmitHelper.SubmitShadowMapMeshDirect(sys, pass.viewId, ref mesh, ref tx.Value, mr.startIndex, mr.indexCount, pass.GetFlipCullingInverse(), default);
                             break;
                         case RenderPassType.Transparent:
                             depth = pass.ComputeSortDepth(tx.Value.c3);
@@ -183,9 +180,6 @@ namespace Unity.Tiny.Rendering
                             uint depth = 0;
                             switch (pass.passType)   // TODO: we can hoist this out of the loop
                             {
-                                case RenderPassType.ZOnly:
-                                    SubmitHelper.EncodeZOnlyMesh(BGFXInstancePtr, encoder, pass.viewId, ref mesh, ref tx, meshRenderer.startIndex, meshRenderer.indexCount, pass.GetFlipCulling());
-                                    break;
                                 case RenderPassType.ShadowMap:
                                     float4 bias = new float4(0);
                                     SubmitHelper.EncodeShadowMapMesh(BGFXInstancePtr, encoder, pass.viewId, ref mesh, ref tx, meshRenderer.startIndex, meshRenderer.indexCount, pass.GetFlipCullingInverse(), bias);
@@ -223,7 +217,8 @@ namespace Unity.Tiny.Rendering
                 ComponentType.ReadOnly<WorldBoundingSphere>(),
                 ComponentType.ChunkComponentReadOnly<ChunkWorldBoundingSphere>(),
                 ComponentType.ChunkComponentReadOnly<ChunkWorldBounds>(),
-                ComponentType.ReadOnly<RenderToPasses>()
+                ComponentType.ReadOnly<RenderToPasses>(),
+                ComponentType.Exclude<DisableRendering>()
             );
         }
 
@@ -292,7 +287,7 @@ namespace Unity.Tiny.Rendering
             // this list is usually very shared - all opaque meshes will render to all ZOnly and Opaque passes
             // this shared data is not dynamically updated - other systems are responsible to update them if needed
             // simple
-            Entities.WithAll<SimpleParticleRenderer>().WithoutBurst().ForEach((Entity e, ref MeshRenderer mr, ref LocalToWorld tx, in WorldBounds wb, in WorldBoundingSphere wbs) =>
+            Entities.WithNone<DisableRendering>().WithAll<SimpleParticleRenderer>().WithoutBurst().ForEach((Entity e, ref MeshRenderer mr, ref LocalToWorld tx, in WorldBounds wb, in WorldBoundingSphere wbs) =>
             {
                 if (!EntityManager.HasComponent<RenderToPasses>(e))
                     return;
@@ -321,11 +316,8 @@ namespace Unity.Tiny.Rendering
                     uint depth = 0;
                     switch (pass.passType)
                     {
-                        case RenderPassType.ZOnly:
-                            SubmitHelper.SubmitSimpleZOnlyTransientDirect(sys, &tib, &tvb, nvertices, nindices, pass.viewId, ref tx.Value, pass.GetFlipCulling());
-                            break;
                         case RenderPassType.ShadowMap:
-                            SubmitHelper.SubmitSimpleZOnlyTransientDirect(sys, &tib, &tvb, nvertices, nindices, pass.viewId, ref tx.Value, pass.GetFlipCullingInverse());
+                            SubmitHelper.SubmitSimpleShadowMapTransientDirect(sys, &tib, &tvb, nvertices, nindices, pass.viewId, ref tx.Value, pass.GetFlipCullingInverse(), default);
                             break;
                         case RenderPassType.Transparent:
                             depth = pass.ComputeSortDepth(new float4(wbs.position, 1.0f));
@@ -418,9 +410,6 @@ namespace Unity.Tiny.Rendering
                         uint depth = 0;
                         switch (pass.passType)   // TODO: we can hoist this out of the loop
                         {
-                            case RenderPassType.ZOnly:
-                                SubmitHelper.EncodeLitZOnlyTransient(BGFXInstancePtr, encoder, &tib, &tvb, nvertices, nindices, pass.viewId, ref tx, pass.GetFlipCulling());
-                                break;
                             case RenderPassType.ShadowMap:
                                 float4 bias = new float4(0);
                                 SubmitHelper.EncodeShadowMapTransient(BGFXInstancePtr, encoder, &tib, &tvb, nvertices, nindices, pass.viewId, ref tx, pass.GetFlipCullingInverse(), bias);
@@ -453,7 +442,8 @@ namespace Unity.Tiny.Rendering
                 ComponentType.ReadOnly<WorldBoundingSphere>(),
                 ComponentType.ChunkComponentReadOnly<ChunkWorldBoundingSphere>(),
                 ComponentType.ChunkComponentReadOnly<ChunkWorldBounds>(),
-                ComponentType.ReadOnly<RenderToPasses>()
+                ComponentType.ReadOnly<RenderToPasses>(),
+                ComponentType.Exclude<DisableRendering>()
             );
         }
 
@@ -605,9 +595,6 @@ namespace Unity.Tiny.Rendering
 
                             uint depth = 0;
                             switch (pass.passType) { // TODO: we can hoist this out of the loop
-                                case RenderPassType.ZOnly:
-                                    SubmitHelper.EncodeZOnlyMesh(BGFXInstancePtr, encoder, pass.viewId, ref mesh, ref tx, meshRenderer.startIndex, meshRenderer.indexCount, pass.GetFlipCulling());
-                                    break;
                                 case RenderPassType.ShadowMap:
                                     if (meshRenderer.shadowCastingMode != ShadowCastingMode.Off)
                                     {
@@ -666,7 +653,8 @@ namespace Unity.Tiny.Rendering
                 ComponentType.ReadOnly<WorldBoundingSphere>(),
                 ComponentType.ChunkComponentReadOnly<ChunkWorldBoundingSphere>(),
                 ComponentType.ChunkComponentReadOnly<ChunkWorldBounds>(),
-                ComponentType.ReadOnly<RenderToPasses>()
+                ComponentType.ReadOnly<RenderToPasses>(),
+                ComponentType.Exclude<DisableRendering>()
             );
         }
 
@@ -674,7 +662,7 @@ namespace Unity.Tiny.Rendering
         {
         }
 
-        protected unsafe override void OnUpdate()
+        protected override unsafe void OnUpdate()
         {
             var sys = World.GetExistingSystem<RendererBGFXSystem>().InstancePointer();
             if (!sys->m_initialized)

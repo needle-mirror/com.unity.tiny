@@ -104,7 +104,6 @@ namespace Unity.Tiny.Rendering
                 default:
                     m_cfgIndex = -1;
                     return new RenderGraphConfig { RenderBufferWidth = 1280, RenderBufferHeight = 720, Mode = RenderGraphMode.FixedRenderBuffer };
-
             }
         }
 
@@ -259,6 +258,8 @@ namespace Unity.Tiny.Rendering
             }
 
             if (input.GetKeyDown(KeyCode.F5) || (input.GetKeyDown(KeyCode.Alpha5) && anyAlt)) {
+                var s = GetSingleton<RenderGraphState>();
+                Debug.LogFormatAlways ( "Render buffer size was: {0}*{1}.", s.RenderBufferCurrentWidth, s.RenderBufferCurrentHeight );
                 RenderGraphConfig cfg = GetNextConfig();
                 SetSingleton(cfg);
                 Debug.LogFormatAlways("Target config is now {0}*{1} {2}.", cfg.RenderBufferHeight, cfg.RenderBufferWidth, cfg.Mode==RenderGraphMode.DirectToFrontBuffer?"direct":"buffer" );

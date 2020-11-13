@@ -6,10 +6,12 @@
         "Unity.Collections.LowLevel.Unsafe",
         "Unity.Tiny.Core",
         "Unity.ZeroJobs",
-        "Unity.Platforms.Common"
+        "Unity.Platforms.Common",
+        "Unity.Tiny.GameSave.Native",
+        "Unity.Tiny.GameSave.Web"
     ],
     "optionalUnityReferences": [],
     "includePlatforms": [],
-    "excludePlatforms": ["Editor", "WebGL"],
+    "excludePlatforms": ["Editor"],
 	"allowUnsafeCode": true
 }

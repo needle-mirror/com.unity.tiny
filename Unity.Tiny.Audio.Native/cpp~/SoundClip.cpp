@@ -14,52 +14,57 @@ SoundClip::SoundClipStatus SoundClip::checkLoad()
     config.format = ma_format_s16;
     config.channels = 2;
     config.sampleRate = 44100;
-    void* mem = 0;
 
-    if (this->m_status == WORKING) {
-        if (m_memory) {
-            auto result = ma_decode_memory(m_memory, m_memorySize, &config, &m_nFrames, &mem);
-            if (result != MA_SUCCESS) {
-                free(m_memory);
-                m_memory = 0;
-                m_memorySize = 0;
-                
-                LOGE("Error decoding memory (in SoundClip::checkLoad())");
-                this->m_status = FAIL;
-                return this->m_status;
-            }
-        }
-        else {
-            int rc = ma_decode_file(m_fileName.c_str(), &config, &m_nFrames, &mem);
-            if (rc != MA_SUCCESS) {
-                LOGE("Error decoding file `%s` (in SoundClip::checkLoad()). Error=%d", m_fileName.c_str(), rc);
-                this->m_status = FAIL;
-                return this->m_status;
-            }
-        }
-        if (config.channels != 2 || config.sampleRate != 44100) {
-            LOGE("Error bad config (in SoundClip::checkLoad())");
+    if (m_memory) 
+    {    
+        ma_result result  = ma_decode_memory_init(m_memory, m_memorySize, &config, &m_decoder, &m_config);
+        if (result != MA_SUCCESS) 
+        {
+            m_memory = 0;
+            m_memorySize = 0;
+            
+            LOGE("Error decoding memory (in SoundClip::checkLoad())");
             this->m_status = FAIL;
             return this->m_status;
         }
-        m_frames = (int16_t*) mem;
-        m_status = (m_frames && m_nFrames > 0) ? OK : FAIL;    // once status goes OK the buffer will be decoded() on a separate thread!
 
-        LOGE("Decoded: %s status=%d nFrames=%d config: format=%d channels=%d sampleRate=%d", m_fileName.c_str(), m_status, m_nFrames, 
-            config.format, config.channels, config.sampleRate);
+        int frameSize = 2*sizeof(int16_t);
+        ma_uint64 frameCountOut = 0;   
+        void* pPCMFramesOut = nullptr;
+        ma_decode_memory_frame(&m_decoder, &m_config, m_nFrames, &frameCountOut, &pPCMFramesOut);
+        memcpy(m_frames, pPCMFramesOut, frameCountOut*frameSize);
+
+        ma_decode_memory_uninit(&m_decoder);
     }
+
+    if (config.channels != 2 || config.sampleRate != 44100) {
+        LOGE("Error bad config (in SoundClip::checkLoad())");
+        this->m_status = FAIL;
+        return this->m_status;
+    }
+
+    m_status = (m_frames && m_nFrames > 0) ? OK : FAIL;
+
+    LOGE("Decoded: %s status=%d nFrames=%d config: format=%d channels=%d sampleRate=%d", m_fileName.c_str(), m_status, (int)m_nFrames, 
+        config.format, config.channels, config.sampleRate);
     return m_status;
 }
 
 
 SoundClip::~SoundClip()
 {
-    if (m_frames) {
-        ma_free(m_frames);
-    }
-    if (m_memory) {
-        unsafeutility_free(m_memory, Allocator::Persistent);
-    }
+
+}
+
+uint64_t SoundClip::numFrames() 
+{
+    return m_nFrames;
+}
+
+void SoundClip::setFrames(int16_t* frames, uint32_t numFrames)
+{
+    m_frames = frames;
+    m_nFrames = numFrames;
 }
 
 

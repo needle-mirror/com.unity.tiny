@@ -165,7 +165,7 @@ namespace Unity.Tiny.Text.Native
             // this list is usually very shared - all opaque meshes will render to all ZOnly and Opaque passes
             // this shared data is not dynamically updated - other systems are responsible to update them if needed
             // simple
-            Entities.WithAll<TextRenderer>().ForEach((Entity e, ref MeshRenderer mr, ref LocalToWorld tx, ref WorldBounds wb, ref WorldBoundingSphere wbs) =>
+            Entities.WithAll<TextRenderer>().WithNone<DisableRendering>().ForEach((Entity e, ref MeshRenderer mr, ref LocalToWorld tx, ref WorldBounds wb, ref WorldBoundingSphere wbs) =>
             {
                 if (!EntityManager.HasComponent<RenderToPasses>(e))
                     return;
@@ -182,10 +182,6 @@ namespace Unity.Tiny.Text.Native
                     uint depth = 0;
                     switch (pass.passType)
                     {
-                        case RenderPassType.ZOnly:
-                            // TODO -- need to do alpha kill to get the proper depth written here (and to support shadows)
-                            SubmitHelper.SubmitZOnlyMeshDirect(m_BGFXInstance, pass.viewId, ref mesh, ref tx.Value, mr.startIndex, mr.indexCount, pass.GetFlipCulling());
-                            break;
                         case RenderPassType.Transparent:
                             depth = pass.ComputeSortDepth(tx.Value.c3);
                             goto case RenderPassType.Opaque;

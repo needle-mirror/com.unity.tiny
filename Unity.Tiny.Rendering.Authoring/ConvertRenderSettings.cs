@@ -51,12 +51,32 @@ namespace Unity.TinyConversion
             DstEntityManager.AddSharedComponentData(e, new SceneSection(){ SceneGUID = Settings.SceneGUID, Section = 0});
 
             // Ambient light
-            DstEntityManager.AddComponentData<Unity.Tiny.Rendering.Light>(e, new Unity.Tiny.Rendering.Light()
             {
-                color = new float3(RenderSettings.ambientLight.r, RenderSettings.ambientLight.g, RenderSettings.ambientLight.b),
-                intensity = 1.0f
-            });
-            DstEntityManager.AddComponent<Unity.Tiny.Rendering.AmbientLight>(e);
+                var ambientLight = new Unity.Tiny.Rendering.AmbientLight
+                {
+                    ambientSkyColor = ToFloat3(RenderSettings.ambientSkyColor), // used only for selection when multiple render settings are present.
+                    intensity = 1.0f,
+                };
+
+                if (RenderSettings.ambientMode == UnityEngine.Rendering.AmbientMode.Flat)
+                {
+                    ambientLight.SetAmbientColor(ToFloat3(RenderSettings.ambientSkyColor.linear));
+                }
+                else if (RenderSettings.ambientMode == UnityEngine.Rendering.AmbientMode.Trilight)
+                {
+                    ambientLight.SetAmbientColor(
+                        ToFloat3(RenderSettings.ambientSkyColor.linear),
+                        ToFloat3(RenderSettings.ambientEquatorColor.linear),
+                        ToFloat3(RenderSettings.ambientGroundColor.linear)
+                        );
+                }
+                else
+                {
+                    ambientLight.ambientProbe = ToSHCoefficients(RenderSettings.ambientProbe);
+                }
+
+                DstEntityManager.AddComponentData(e, ambientLight);
+            }
 
             // Fog
             var fogLinear = RenderSettings.fogColor.linear;
@@ -85,6 +105,57 @@ namespace Unity.TinyConversion
             }
 
             return convertingRootScene;
+        }
+
+        static float3 ToFloat3(Color color)
+        {
+            return new float3(color.r, color.g, color.b);
+        }
+
+        static Unity.Tiny.Rendering.SHCoefficients ToSHCoefficients(UnityEngine.Rendering.SphericalHarmonicsL2 sh)
+        {
+            var result = new Unity.Tiny.Rendering.SHCoefficients();
+
+            // Constant (DC terms):
+            result.SHAr.w = sh[0, 0];
+            result.SHAg.w = sh[1, 0];
+            result.SHAb.w = sh[2, 0];
+
+            // Linear: (used by L1 and L2)
+            // Swizzle the coefficients to be in { x, y, z } order.
+            result.SHAr.x = sh[0, 3];
+            result.SHAr.y = sh[0, 1];
+            result.SHAr.z = sh[0, 2];
+
+            result.SHAg.x = sh[1, 3];
+            result.SHAg.y = sh[1, 1];
+            result.SHAg.z = sh[1, 2];
+
+            result.SHAb.x = sh[2, 3];
+            result.SHAb.y = sh[2, 1];
+            result.SHAb.z = sh[2, 2];
+
+            // Quadratic: (used by L2)
+            result.SHBr.x = sh[0, 4];
+            result.SHBr.y = sh[0, 5];
+            result.SHBr.z = sh[0, 6];
+            result.SHBr.w = sh[0, 7];
+
+            result.SHBg.x = sh[1, 4];
+            result.SHBg.y = sh[1, 5];
+            result.SHBg.z = sh[1, 6];
+            result.SHBg.w = sh[1, 7];
+
+            result.SHBb.x = sh[2, 4];
+            result.SHBb.y = sh[2, 5];
+            result.SHBb.z = sh[2, 6];
+            result.SHBb.w = sh[2, 7];
+
+            result.SHC.x = sh[0, 8];
+            result.SHC.y = sh[1, 8];
+            result.SHC.z = sh[2, 8];
+
+            return result;
         }
     }
 }

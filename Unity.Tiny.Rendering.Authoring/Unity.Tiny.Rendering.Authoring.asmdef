@@ -20,7 +20,9 @@
         "Unity.Assertions",
         "Unity.Burst",
         "Unity.Properties",
-        "Unity.Transforms.Hybrid"
+        "Unity.Transforms.Hybrid",
+        "Unity.Scenes",
+        "Unity.Scenes.Editor"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

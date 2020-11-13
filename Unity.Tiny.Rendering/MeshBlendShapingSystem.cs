@@ -9,7 +9,7 @@ namespace Unity.Tiny.Rendering
 {
     [UpdateInGroup(typeof(PresentationSystemGroup))]
     [UpdateAfter(typeof(ConvertMeshAssetToDynamicMeshSystem))]
-    [UpdateBefore(typeof(CPUMeshSkinningSystem))]
+    [UpdateAfter(typeof(CPUMeshSkinningSystem))]
     public class MeshBlendShapingSystem : SystemBase
     {
         [BurstCompile]
@@ -27,6 +27,7 @@ namespace Unity.Tiny.Rendering
             public ComponentDataFromEntity<DynamicMeshData> ComponentDataFromEntity_DynamicMeshData;
             [ReadOnly] public ComponentDataFromEntity<MeshBlendShapeData> ComponentDataFromEntity_MeshBlendShapeData;
             [ReadOnly] public EntityTypeHandle ChunkEntityType;
+            [ReadOnly] public bool UsingCPUSkinning;
 
             public EntityCommandBuffer.ParallelWriter CommandBuffer;
 
@@ -120,29 +121,35 @@ namespace Unity.Tiny.Rendering
                 int chunkCount = chunk.Count;
                 for (int entityIndex = 0; entityIndex < chunkCount; entityIndex++)
                 {
-                    Entity entity = chunkEntities[entityIndex];
-                    CommandBuffer.AddComponent<BlendShapeUpdated>(chunkIndex, entity);
-
-                    DynamicBuffer<BlendShapeWeight> smrBlendShapeWeightBuffer = smrBlendShapeWeightBufferAccessor[entityIndex];
                     SkinnedMeshRenderer smr = chunkSkinnedMeshRenderer[entityIndex];
+                    if (smr.dynamicMesh == Entity.Null)
+                        continue;
 
+                    Entity entity = chunkEntities[entityIndex];
+                    DynamicBuffer<BlendShapeWeight> smrBlendShapeWeightBuffer = smrBlendShapeWeightBufferAccessor[entityIndex];
                     MeshBlendShapeData meshBlendShapeData = ComponentDataFromEntity_MeshBlendShapeData[smr.sharedMesh];
                     ref BlendShapeData blendShapeData = ref meshBlendShapeData.BlendShapeDataRef.Value;
 
                     DynamicMeshData dynamicMeshData = ComponentDataFromEntity_DynamicMeshData[smr.dynamicMesh];
+                    bool needUpdateEveryTime = UsingCPUSkinning && dynamicMeshData.Dirty;
                     dynamicMeshData.Dirty = true;
                     CommandBuffer.SetComponent(chunkIndex, smr.dynamicMesh, dynamicMeshData);
+
+                    if (!needUpdateEveryTime)
+                        CommandBuffer.AddComponent<BlendShapeUpdated>(chunkIndex, entity);
 
                     if (ComponentLitMeshRenderData.HasComponent(smr.sharedMesh))
                     {
                         LitMeshRenderData litMeshRenderData = ComponentLitMeshRenderData[smr.sharedMesh];
-                        ref LitMeshData staticMesh = ref litMeshRenderData.Mesh.Value;
-                        void* originalVerticesPtr = staticMesh.Vertices.GetUnsafePtr();
-                        int size = staticMesh.Vertices.Length * UnsafeUtility.SizeOf<LitVertex>();
-
                         DynamicBuffer<DynamicLitVertex> dlvBuffer = BufferFromDynamicLitVertex[smr.dynamicMesh];
-                        void* dlvBufferPtr = dlvBuffer.GetUnsafePtr();
-                        UnsafeUtility.MemCpy(dlvBufferPtr, originalVerticesPtr, size);
+                        if (!needUpdateEveryTime)
+                        {
+                            void* dlvBufferPtr = dlvBuffer.GetUnsafePtr();
+                            ref LitMeshData staticMesh = ref litMeshRenderData.Mesh.Value;
+                            void* originalVerticesPtr = staticMesh.Vertices.GetUnsafePtr();
+                            int size = staticMesh.Vertices.Length * UnsafeUtility.SizeOf<LitVertex>();
+                            UnsafeUtility.MemCpy(dlvBufferPtr, originalVerticesPtr, size);
+                        }
 
                         int shapeCount = smrBlendShapeWeightBuffer.Length;
                         for (int shapeIndex = 0; shapeIndex < shapeCount; shapeIndex++)
@@ -156,13 +163,15 @@ namespace Unity.Tiny.Rendering
                     else
                     {
                         SimpleMeshRenderData simpleMeshRenderData = ComponentSimpleMeshRenderData[smr.sharedMesh];
-                        ref SimpleMeshData simpleMeshData = ref simpleMeshRenderData.Mesh.Value;
-                        void* originalVerticesPtr = simpleMeshData.Vertices.GetUnsafePtr();
-                        int size = simpleMeshData.Vertices.Length * UnsafeUtility.SizeOf<SimpleVertex>();
-
                         DynamicBuffer<DynamicSimpleVertex> dlvBuffer = BufferFromDynamicSimpleVertex[smr.dynamicMesh];
-                        void* dlvBufferPtr = dlvBuffer.GetUnsafePtr();
-                        UnsafeUtility.MemCpy(dlvBufferPtr, originalVerticesPtr, size);
+                        if (!needUpdateEveryTime)
+                        {
+                            void* dlvBufferPtr = dlvBuffer.GetUnsafePtr();
+                            ref SimpleMeshData simpleMeshData = ref simpleMeshRenderData.Mesh.Value;
+                            void* originalVerticesPtr = simpleMeshData.Vertices.GetUnsafePtr();
+                            int size = simpleMeshData.Vertices.Length * UnsafeUtility.SizeOf<SimpleVertex>();
+                            UnsafeUtility.MemCpy(dlvBufferPtr, originalVerticesPtr, size);
+                        }
 
                         int shapeCount = smrBlendShapeWeightBuffer.Length;
                         for (int shapeIndex = 0; shapeIndex < shapeCount; shapeIndex++)
@@ -179,6 +188,7 @@ namespace Unity.Tiny.Rendering
 
         protected override void OnUpdate()
         {
+            DisplayInfo di = GetSingleton<DisplayInfo>();
             EntityCommandBuffer ecb = new EntityCommandBuffer(Allocator.TempJob);
             MeshBlendShapingJob shapingJob = new MeshBlendShapingJob()
             {
@@ -191,6 +201,7 @@ namespace Unity.Tiny.Rendering
                 ComponentDataFromEntity_DynamicMeshData = GetComponentDataFromEntity<DynamicMeshData>(),
                 ComponentDataFromEntity_MeshBlendShapeData = GetComponentDataFromEntity<MeshBlendShapeData>(true),
                 ChunkEntityType = EntityManager.GetEntityTypeHandle(),
+                UsingCPUSkinning = !di.gpuSkinning,
                 CommandBuffer = ecb.AsParallelWriter()
             };
 

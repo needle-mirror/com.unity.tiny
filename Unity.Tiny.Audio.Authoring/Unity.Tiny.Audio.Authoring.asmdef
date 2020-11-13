@@ -4,6 +4,12 @@
         "Unity.Collections",
         "Unity.Entities",
         "Unity.Entities.Hybrid",
+        "Unity.Entities.Runtime",
+        "Unity.Entities.Runtime.Build",
+        "Unity.Entities.Runtime.Authoring",
+        "Unity.Build.DotsRuntime",
+        "Unity.Build",
+        "Unity.Properties",
         "Unity.Tiny.Core",
         "Unity.Tiny.Audio",
         "Unity.Tiny.Authoring"

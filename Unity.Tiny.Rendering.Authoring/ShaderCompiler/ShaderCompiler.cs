@@ -223,7 +223,7 @@ namespace Unity.Tiny.ShaderCompiler
         bool k_DebugUnityShaderCompiler = false;
 #endif
 
-        public void Open(string buildOutputPath)
+        public void Open(string logOutputPath)
         {
             if (IsOpen)
             {
@@ -257,11 +257,10 @@ namespace Unity.Tiny.ShaderCompiler
                 throw new InvalidDataException($"Invalid filepath for Unity Shader Compiler '{shaderCompilerFilePath}'");
 
             string compilerLogPath = string.Empty;
-            if (buildOutputPath != null)
+            if (logOutputPath != null)
             {
-                string logsPath = Path.Combine(buildOutputPath, "Logs");
-                Directory.CreateDirectory(logsPath);
-                compilerLogPath = Path.Combine(logsPath, "UnityShaderCompiler.log");
+                Directory.CreateDirectory(logOutputPath);
+                compilerLogPath = Path.Combine(logOutputPath, "UnityShaderCompiler.log");
             }
 
             try
@@ -465,7 +464,11 @@ namespace Unity.Tiny.ShaderCompiler
             var platforms = UnityHelper.k_ShaderCompilerPlatformCount;
             for (int i = 0; i < platforms; i++)
             {
-                m_Socket.ReceiveInt();  // ShaderRequirements
+#if UNITY_2021_1_OR_NEWER
+                m_Socket.ReceiveUint64(); // ShaderRequirements
+#else
+                m_Socket.ReceiveUint();
+#endif
                 m_Socket.ReceiveUint(); // shader compiler version
             }
         }
@@ -501,7 +504,11 @@ namespace Unity.Tiny.ShaderCompiler
             m_Socket.SendInt((int)UnityHelper.ShaderSourceLanguage.kShaderSourceLanguageHLSL);
             m_Socket.SendInt((int)programType);
             m_Socket.SendInt((int)platform);
+#if UNITY_2021_1_OR_NEWER
+            m_Socket.SendInt64(UnityHelper.ShaderRequirements.kShaderRequireShaderModel25_93);
+#else
             m_Socket.SendInt(UnityHelper.ShaderRequirements.kShaderRequireShaderModel25_93);
+#endif
             m_Socket.SendInt(0); // program mask
             m_Socket.SendInt(startLine); // code start line
 
@@ -746,13 +753,20 @@ namespace Unity.Tiny.ShaderCompiler
                     {
                         break;
                     }
-
+#if UNITY_2021_1_OR_NEWER
+                    m_Socket.ReceiveUint64();
+#else
                     m_Socket.ReceiveInt();
+#endif
                     uint count = m_Socket.ReceiveUint();
                     for (int i = 0; i < count; i++)
                     {
                         string kw = m_Socket.ReceiveLine();
+#if UNITY_2021_1_OR_NEWER
+                        ulong kwMask = m_Socket.ReceiveUint64();
+#else
                         int kwMask = m_Socket.ReceiveInt();
+#endif
                     }
                 }
                 else if (tokens[0] == "shader:" && tokens.Length == 3)
@@ -859,6 +873,12 @@ namespace Unity.Tiny.ShaderCompiler
         {
             socket.Send(BitConverter.GetBytes(message));
         }
+
+        internal static void SendInt64(this Socket socket, long message)
+        {
+            socket.Send(BitConverter.GetBytes(message));
+        }
+
         internal static void SendUint(this Socket socket, uint message)
         {
             socket.Send(BitConverter.GetBytes(message));
@@ -903,6 +923,13 @@ namespace Unity.Tiny.ShaderCompiler
             byte[] buffer = new byte[sizeof(uint)];
             socket.Receive(buffer, buffer.Length, SocketFlags.None);
             return BitConverter.ToUInt32(buffer, 0);
+        }
+
+        internal static ulong ReceiveUint64(this Socket socket)
+        {
+            byte[] buffer = new byte[sizeof(ulong)];
+            socket.Receive(buffer, buffer.Length, SocketFlags.None);
+            return BitConverter.ToUInt64(buffer, 0);
         }
     }
 }

@@ -9,6 +9,10 @@ using UnityObject = UnityEngine.Object;
 
 namespace Unity.Tiny.Animation.Editor
 {
+    /// <summary>
+    /// Contains the state accumulated during the conversion of animation clips
+    /// by TinyAnimation.
+    /// </summary>
     public static class TinyAnimationConversionState
     {
         static readonly HashSet<UnityObject> k_DeclaredPPtrCurveAssets = new HashSet<UnityObject>();
@@ -16,12 +20,30 @@ namespace Unity.Tiny.Animation.Editor
         static readonly Dictionary<AnimationClip, AnimationClipSettings> k_ClipSettingsCache = new Dictionary<AnimationClip, AnimationClipSettings>(32);
         static readonly Dictionary<GameObject, bool> k_GameObjectValidityMap = new Dictionary<GameObject, bool>(16);
 
+        /// <summary>
+        /// Gets a list of all the assets referenced by all the animation clips converted
+        /// by TinyAnimation.
+        /// </summary>
+        /// <remarks>
+        /// This list is populated during the discovery phase of conversion, taking place in
+        /// <see cref="GameObjectDeclareReferencedObjectsGroup"/>.
+        /// </remarks>
+        /// <returns>An untyped list of all the assets referenced by converted clips.</returns>
         [PublicAPI]
         public static IEnumerable<UnityObject> GetDeclaredPPtrCurvesAssets()
         {
             return k_DeclaredPPtrCurveAssets;
         }
 
+        /// <summary>
+        /// Gets a list of all the assets of a specific type referenced by all the animation clips
+        /// converted by TinyAnimation.
+        /// </summary>
+        /// <remarks>
+        /// This list is populated during the discovery phase of conversion, taking place in
+        /// <see cref="GameObjectDeclareReferencedObjectsGroup"/>.
+        /// </remarks>
+        /// <returns>A list of all the assets of the specified type referenced by converted clips.</returns>
         [PublicAPI]
         public static IEnumerable<T> GetDeclaredPPtrCurvesAssets<T>()
         {

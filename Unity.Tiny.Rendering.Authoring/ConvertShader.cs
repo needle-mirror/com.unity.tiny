@@ -3,6 +3,7 @@ using Unity.Build.Common;
 using Unity.Build.DotsRuntime;
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Entities.Runtime.Build;
 using Unity.Tiny.Rendering;
 using Unity.Tiny.Rendering.Settings;
 using Unity.Tiny.ShaderCompiler;
@@ -25,9 +26,9 @@ namespace Unity.TinyConversion
         protected void InitShaderCompiler()
         {
             string outputDir = null;
-            if (TryGetBuildConfigurationComponent<OutputBuildDirectory>(out var outputBuildDirectory))
+            if (TryGetBuildConfigurationComponent<DotsRuntimeRootAssembly>(out var rootAssembly))
             {
-                outputDir = outputBuildDirectory.OutputDirectory;
+                outputDir = WorldExport.GetOrCreateLogDirectoryFrom(rootAssembly.MakeBeeTargetName(Settings.BuildConfiguration.name)).FullName;
             }
 
             m_Client = new ShaderCompilerClient();

@@ -4,7 +4,9 @@
         "Unity.Entities",
         "Unity.Tiny.Core",
         "Unity.Transforms",
-        "Unity.Mathematics"
+        "Unity.Mathematics",
+        "Unity.Collections",
+        "Unity.Collections.LowLevel.Unsafe"
     ],
     "optionalUnityReferences": [],
     "includePlatforms": [],

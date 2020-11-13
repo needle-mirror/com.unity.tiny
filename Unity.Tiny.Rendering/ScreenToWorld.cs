@@ -9,18 +9,10 @@ using Unity.Transforms;
 
 namespace Unity.Tiny.Rendering
 {
-    public enum ScreenToWorldId : int
-    {
-        MainCamera = 0,
-        UILayer = 1,
-        DebugLayer = 2,
-        Sprites = 3
-    }
-
     // a pickable root with an optional ScreenToWorldPassList entry next to it
     public struct ScreenToWorldRoot : IComponentData
     {
-        public ScreenToWorldId id;
+        public Entity camera;
         public Entity pass;         // first pass, used for grabbing the viewport transform from.
     }
 
@@ -78,41 +70,40 @@ namespace Unity.Tiny.Rendering
         public float2 AdjustInputPositionToPixels(float2 inputPos)
         {
             var di = GetSingleton<DisplayInfo>();
-            return inputPos * new float2(di.framebufferWidth / (float) di.width, di.framebufferHeight / (float) di.height);
+            return inputPos * new float2(di.framebufferWidth / (float)di.width, di.framebufferHeight / (float)di.height);
         }
 
-        protected void FindPickRoot(out Entity eOutPickRoot, out Entity eOutPass, ScreenToWorldId id)
+        protected void FindPickRoot(out Entity eOutPickRoot, out Entity eOutPass, Entity ecam)
         {
+            Assert.IsTrue(ecam != Entity.Null);
             var ePickRoot = Entity.Null;
             var ePass = Entity.Null;
             Entities.ForEach((Entity e, ref ScreenToWorldRoot root) => {
-                if (root.id == id)
-                {
-                    Assert.IsTrue(ePickRoot == Entity.Null); // Multiple roots with same pick id found
+                if (root.camera == ecam) {
+                    Assert.IsTrue(ePickRoot == Entity.Null); // Multiple roots with same camera found
                     ePickRoot = e;
                     ePass = root.pass;
                     Assert.IsTrue(ePass != Entity.Null);
                 }
             }).Run();
-            Assert.IsTrue(ePickRoot != Entity.Null); // No root for picking with this id found
+            Assert.IsTrue(ePickRoot != Entity.Null); // No root for picking with this camera found
             eOutPickRoot = ePickRoot;
             eOutPass = ePass;
         }
 
         // return value xy is in pixels, z is normalized -1..1 where -1 is near and 1 far
-        public float3 WorldSpaceToScreenSpace(float3 worldPos, ScreenToWorldId id)
+        public float3 WorldSpaceToScreenSpace(float3 worldPos, Entity ecam)
         {
+            Assert.IsTrue(ecam != Entity.Null);
             Entity ePickRoot, ePass;
-            FindPickRoot(out ePickRoot, out ePass, id);
+            FindPickRoot(out ePickRoot, out ePass, ecam);
             if (ePickRoot == Entity.Null)
                 return new float3(0);
             // apply all the pass transforms back to front, if there are any
             var pp = new float4(worldPos, 1.0f);
-            if (EntityManager.HasComponent<ScreenToWorldPassList>(ePickRoot))
-            {
+            if (EntityManager.HasComponent<ScreenToWorldPassList>(ePickRoot)) {
                 var l = EntityManager.GetBuffer<ScreenToWorldPassList>(ePickRoot);
-                for (int i = l.Length - 1; i >= 0; i--)
-                {
+                for (int i = l.Length - 1; i >= 0; i--) {
                     var lp = EntityManager.GetComponentData<RenderPass>(l[i].pass);
                     pp = PassTransform(pp, lp);
                 }
@@ -126,10 +117,11 @@ namespace Unity.Tiny.Rendering
 
         // screenPos is in pixels. Note that this is pixels, not points. So for platforms where pixels != points, this need to be adjusted first.
         // depth is normalized -1..1, where -1 is near and 1 far
-        public float3 ScreenSpaceToWorldSpace(float2 screenPos, float normalizedZ, ScreenToWorldId id)
+        public float3 ScreenSpaceToWorldSpace(float2 screenPos, float normalizedZ, Entity ecam)
         {
+            Assert.IsTrue(ecam != Entity.Null);
             Entity ePickRoot, ePass;
-            FindPickRoot(out ePickRoot, out ePass, id);
+            FindPickRoot(out ePickRoot, out ePass, ecam);
             if (ePickRoot == Entity.Null)
                 return new float3(0);
             // root and viewport transform
@@ -142,8 +134,7 @@ namespace Unity.Tiny.Rendering
                 return pp2.xyz;
             }
             var l = EntityManager.GetBuffer<ScreenToWorldPassList>(ePickRoot);
-            for (int i = 0; i < l.Length; i++)
-            {
+            for (int i = 0; i < l.Length; i++) {
                 var lp = EntityManager.GetComponentData<RenderPass>(l[i].pass);
                 pp2 = InversePassTransform(pp2, lp);
             }
@@ -151,36 +142,20 @@ namespace Unity.Tiny.Rendering
             return pp2.xyz;
         }
 
-        protected Entity CameraFromPass(Entity ePass)
+        public Entity DefaultCamera()
         {
-            if (EntityManager.HasComponent<RenderPassUpdateFromCamera>(ePass))
-            {
-                var rpufc = EntityManager.GetComponentData<RenderPassUpdateFromCamera>(ePass);
-                return rpufc.camera;
-            }
-            return Entity.Null;
-        }
-
-        protected Entity FindCamera(ScreenToWorldId id = ScreenToWorldId.MainCamera)
-        {
-            Entity ePickRoot, ePass;
-            FindPickRoot(out ePickRoot, out ePass, id);
-            if (ePickRoot == Entity.Null)
-                return Entity.Null;
-            Entity eC = CameraFromPass(ePass);
-            if (eC != Entity.Null)
-                return eC;
-            if (EntityManager.HasComponent<ScreenToWorldPassList>(ePickRoot))
-            {
-                var l = EntityManager.GetBuffer<ScreenToWorldPassList>(ePickRoot);
-                for (int i = 0; i < l.Length; i++)
-                {
-                    eC = CameraFromPass(l[i].pass);
-                    if (eC != Entity.Null)
-                        return eC;
+            // need some heuristic here, could require some tag...
+            // for now, pick the one with the lowest depth
+            Entity efound = Entity.Null;
+            float bestdepth = float.MaxValue;
+            Entities.WithAll<Camera>().ForEach((Entity e, in Camera cam) => {
+                if (cam.depth < bestdepth) {
+                    bestdepth = cam.depth;
+                    efound = e;
                 }
-            }
-            return Entity.Null;
+            }).Run();
+            Assert.IsTrue(efound != Entity.Null);
+            return efound;
         }
 
         // gets the transform and returns a plane at distance distanceToCamera in front of the camera.
@@ -188,14 +163,14 @@ namespace Unity.Tiny.Rendering
         // the plane is centered on the camera view axis and up and left are normalized
         public void GetWorldSpaceCameraPlane(out float3 pos, out float3 up, out float3 left, float distanceToCamera, Entity eCam = default)
         {
-            pos = new float3(0);
-            up = new float3(0, 1, 0);
-            left = new float3(1, 0, 0);
             if (eCam == Entity.Null)
-                eCam = FindCamera();
-            Assert.IsTrue(eCam != Entity.Null);
-            if (eCam == Entity.Null)
+                eCam = DefaultCamera();
+            if (eCam == Entity.Null) {
+                pos = new float3(0);
+                up = new float3(0, 1, 0);
+                left = new float3(1, 0, 0);
                 return;
+            }
             var camMatrix = EntityManager.GetComponentData<LocalToWorld>(eCam).Value;
             pos = camMatrix.c3.xyz + camMatrix.c2.xyz * distanceToCamera;
             up = camMatrix.c1.xyz;
@@ -209,41 +184,64 @@ namespace Unity.Tiny.Rendering
         }
 
         // start with a screen space position (in pixels) and return a world space ray
-        public void ScreenSpaceToWorldSpaceRay(float2 screenPos, out float3 origin, out float3 direction, ScreenToWorldId id = ScreenToWorldId.MainCamera)
+        public void ScreenSpaceToWorldSpaceRay(float2 screenPos, out float3 origin, out float3 direction, Entity ecam = default)
         {
-            origin = ScreenSpaceToWorldSpace(screenPos, 0, id);
-            direction = ScreenSpaceToWorldSpace(screenPos, 1, id) - origin;
+            if (ecam == Entity.Null)
+                ecam = DefaultCamera();
+            if (ecam == Entity.Null) {
+                origin = new float3(0);
+                direction = new float3(0, 0, 1);
+                return;
+            }
+            origin = ScreenSpaceToWorldSpace(screenPos, 0, ecam);
+            direction = ScreenSpaceToWorldSpace(screenPos, 1, ecam) - origin;
             direction = math.normalizesafe(direction);
         }
 
         // start with an input position (in pixels)and return a world space point, which is distanceToCamera world space units in front of the picking camera
-        public float3 ScreenSpaceToWorldSpacePos(float2 screenPos, float distanceToCamera, ScreenToWorldId id = ScreenToWorldId.MainCamera)
+        public float3 ScreenSpaceToWorldSpacePos(float2 screenPos, float distanceToCamera, Entity ecam = default)
         {
+            if (ecam == Entity.Null)
+                ecam = DefaultCamera();
+            if (ecam == Entity.Null)
+                return new float3(0);
             float3 origin, direction;
-            ScreenSpaceToWorldSpaceRay(screenPos, out origin, out direction, id);
+            ScreenSpaceToWorldSpaceRay(screenPos, out origin, out direction, ecam);
             float3 camPos, camUp, camLeft;
             GetWorldSpaceCameraPlane(out camPos, out camUp, out camLeft, distanceToCamera);
             return IntersectPlaneRay(camPos, math.cross(camUp, camLeft), origin, direction);
         }
 
         // start with an input position (in points) and return a world space ray
-        public void InputPosToWorldSpaceRay(float2 inputPos, out float3 origin, out float3 direction, ScreenToWorldId id = ScreenToWorldId.MainCamera)
+        public void InputPosToWorldSpaceRay(float2 inputPos, out float3 origin, out float3 direction, Entity ecam = default)
         {
+            if (ecam == Entity.Null)
+                ecam = DefaultCamera();
+            if (ecam == Entity.Null) {
+                origin = new float3(0);
+                direction = new float3(0, 0, 1);
+                return;
+            }
             float2 screenPos = AdjustInputPositionToPixels(inputPos);
-            ScreenSpaceToWorldSpaceRay(screenPos, out origin, out direction, id);
+            ScreenSpaceToWorldSpaceRay(screenPos, out origin, out direction, ecam);
         }
 
         // start with an input position (in points) and return a world space point, which is distanceToCamera world space units in front of the picking camera
-        public float3 InputPosToWorldSpacePos(float2 inputPos, float distanceToCamera, ScreenToWorldId id = ScreenToWorldId.MainCamera)
+        public float3 InputPosToWorldSpacePos(float2 inputPos, float distanceToCamera, Entity ecam = default)
         {
+            if (ecam == Entity.Null)
+                ecam = DefaultCamera();
+            if (ecam == Entity.Null)
+                return new float3(0);
             float2 screenPos = AdjustInputPositionToPixels(inputPos);
-            return ScreenSpaceToWorldSpacePos(screenPos, distanceToCamera, id);
+            return ScreenSpaceToWorldSpacePos(screenPos, distanceToCamera, ecam);
         }
 
         protected override void OnUpdate()
         {
             // TODO: if the transforms ever become a speed issue, we can cache
-            //       the whole pipeline as premultiplied matrices here
+            //       the whole pipeline as premultiplied matrices here, including default camera
+            //       but then we have a toctou issue... 
         }
     }
 }

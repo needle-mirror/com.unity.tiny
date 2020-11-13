@@ -44,6 +44,9 @@ VertexOutput Vert(VertexInput input)
     float scale = rsqrt(dot(pixelSize, pixelSize));
     scale *= /*abs(input.texcoord1.y) **/ u_GradientScale * (u_Sharpness + 1.0);
 
+    // Works around this bug: https://unity3d.atlassian.net/browse/DOTSR-2371
+    scale = clamp(scale, 0, 1000.0);
+
 #if defined(OUTLINE_ON)
     scale /= 1.0f + (u_OutlineSoftness * u_ScaleRatioA * scale);
     float outline = u_OutlineWidth * u_ScaleRatioA * 0.5f * scale;

@@ -23,7 +23,7 @@ Don't care about multiple instances, it's all a single one and static anyway
 //#define BGFX_CALLBACK_PRINTF(...) printf(__VA_ARGS__);
 #define BGFX_CALLBACK_DO_ABORT
 #define BGFX_CALLBACK_PRINTF(...)
-#define BGFX_CALLBACK_WRITESCREENSHOT
+//#define BGFX_CALLBACK_WRITESCREENSHOT
 
 // gcc will complain if the return value of snprintf isn't used to validate truncation has occurred.
 // Should truncation occur, snprintf returns > 0. We only call abort if a real fatal error occurred.
@@ -191,7 +191,7 @@ typedef struct bgfx_callback_vtbl_s
     void(*capture_frame)(bgfx_callback_interface_t* _this, const void* _data, uint32_t _size);
 } bgfx_callback_vtbl_t;
 
-// must match c# 
+// must match c#
 enum class BGFXCallbackEntryType {
     Fatal = 0,
     Trace = 1,

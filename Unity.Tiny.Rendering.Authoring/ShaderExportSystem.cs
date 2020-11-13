@@ -36,7 +36,7 @@ namespace Unity.TinyConversion
         protected void InitShaderCompiler()
         {
             m_Client = new ShaderCompilerClient();
-            m_Client.Open(OutputDir);
+            m_Client.Open(LogDirectoryPath);
             if (!m_Client.IsOpen)
                 UnityEngine.Debug.LogError("Unable to launch instance of Unity shader compiler.");
         }

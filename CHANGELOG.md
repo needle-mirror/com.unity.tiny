@@ -4,6 +4,28 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [0.32.0] - 2020-11-13
+
+### Added
+
+* Added support for rendering layers in the 2D rendering pipeline
+* Documentation for all of the public APIs related to TinyAnimation
+
+### Changed
+
+* UI and 2D passes will now render before transparent 3D passes. This enables text and particles rendering above 2D.
+* Update minimum editor version to 2020.1.2f1
+
+### Removed
+
+* `UnityInstance` was removed from com.unity.tiny and added to com.unity.dots.runtime. As com.unity.dots.runtime is an existing dependency this should not be a breaking change.
+
+### Fixed
+
+* `TinyAnimation.SetTime` will now respect the clip's `WrapMode`
+
+
+
 ## [0.31.0] - 2020-09-24
 
 ### Added
@@ -12,7 +34,6 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 * TinyJsonStreamingWriter, performant stack-based json writer.
 * 2D conversions
 * 2D rendering pipeline for DotsRuntime
-* Added support for rendering layers in the 2D rendering pipeline
 * UpdateWorldTimeSystem to Tiny namespace
 * ElapsedTime and DeltaTime properties to UnityInstance
 * hook UnityInstance into worlds with UpdateWorldTimeSystem, after the Loading phase

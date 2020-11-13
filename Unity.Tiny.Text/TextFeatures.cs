@@ -9,4 +9,12 @@ namespace Unity.Tiny.Text
         Center,
         Right
     }
+
+    public enum VerticalAlignment
+    {
+        Top,        // The text is positioned from the top down (pivot at top)
+        Center,   // Text is centered at the visual middle of the font
+        Baseline,   // Normal mode - the text is positioned on the baseline
+        Bottom      // The tex is positioned above the bottom
+    }
 }

@@ -364,6 +364,23 @@ namespace Unity.Tiny.Rendering
             return Entity.Null;
         }
 
+        Entity FindPassOnNodeWithCamera(Entity node, RenderPassType pt, Entity ecam)
+        {
+            var passes = EntityManager.GetBuffer<RenderPassRef>(node);
+            for (int i = 0; i < passes.Length; i++) {
+                var e = passes[i].e;
+                var p = EntityManager.GetComponentData<RenderPass>(e);
+                if (p.passType == pt) {
+                    if (EntityManager.HasComponent<RenderPassUpdateFromCamera>(e)) {
+                        var ufc = EntityManager.GetComponentData<RenderPassUpdateFromCamera>(e);
+                        if (ufc.camera == ecam)
+                            return e;
+                    }
+                }
+            }
+            return Entity.Null;
+        }
+
         Entity CreateNodeEntity()
         {
             var e = EntityManager.CreateEntity();
@@ -389,8 +406,8 @@ namespace Unity.Tiny.Rendering
                 bufferH = (int)(targetH * scale);
                 Assert.IsTrue(bufferW <= maxSize && bufferH <= maxSize);
             }
-            if ( bufferW < 1 ) bufferW = 1;
-            if ( bufferH < 1 ) bufferH = 1;
+            if (bufferW < 1) bufferW = 1;
+            if (bufferH < 1) bufferH = 1;
         }
 
         unsafe static bool IsRectFullyCovered(Rect* coveringList, int n, in Rect r)
@@ -486,6 +503,14 @@ namespace Unity.Tiny.Rendering
                 EntityManager.AddComponent<MainViewNodeTag>(eMainViewNode);
                 eFrontBufferNode = eMainViewNode;
             }
+            if ( !HasSingleton<RenderGraphState>() ) {
+                Entity e = GetSingletonEntity<RenderGraphConfig>();
+                EntityManager.AddComponent<RenderGraphState>(e);
+            }
+            var temp = GetSingleton<RenderGraphState>();
+            temp.RenderBufferCurrentWidth = w;
+            temp.RenderBufferCurrentHeight = h;
+            SetSingleton<RenderGraphState>(temp);
 
             // init aspect and node for auto aspect cameras
             Entities.WithoutBurst().WithAll<CameraAutoAspectFromNode>().ForEach((Entity e, ref Camera cam) => {
@@ -513,10 +538,10 @@ namespace Unity.Tiny.Rendering
             cameras.Sort();
 
             if (DidCamerasChange(cameras)) {
-                #if DEBUG
+#if DEBUG
                 // check for cameras that are not visibly rendering
                 WarningCheckCameras(cameras);
-                #endif
+#endif
                 activeCameras.CopyFrom(cameras);
                 cameras.Dispose();
                 return true;
@@ -526,23 +551,22 @@ namespace Unity.Tiny.Rendering
             return false;
         }
 
-
-        Entity CreateScreenToWorldChain(RenderPassType rpt, ScreenToWorldId id)
+        Entity CreateScreenToWorldChain(RenderPassType rpt, Entity ecam)
         {
             Entity eBase = EntityManager.CreateEntity();
             if (eMainViewNode != eFrontBufferNode) {
                 EntityManager.AddComponentData<ScreenToWorldRoot>(eBase, new ScreenToWorldRoot {
                     pass = FindPassOnNode(eFrontBufferNode, RenderPassType.FullscreenQuad),
-                    id = id
+                    camera = ecam
                 });
                 var buf = EntityManager.AddBuffer<ScreenToWorldPassList>(eBase);
                 buf.Add(new ScreenToWorldPassList {
-                    pass = FindPassOnNode(eMainViewNode, rpt),
+                    pass = FindPassOnNodeWithCamera(eMainViewNode, rpt, ecam),
                 });
             } else {
                 EntityManager.AddComponentData<ScreenToWorldRoot>(eBase, new ScreenToWorldRoot {
-                    pass = FindPassOnNode(eFrontBufferNode, rpt),
-                    id = id
+                    pass = FindPassOnNodeWithCamera(eFrontBufferNode, rpt, ecam),
+                    camera = ecam
                 });
             }
             return eBase;
@@ -784,9 +808,8 @@ namespace Unity.Tiny.Rendering
                 // create/remove nodes and passes for light map rendering
                 BuildAllLightNodes(eMainViewNode);
 
-                CreateScreenToWorldChain(RenderPassType.Opaque, ScreenToWorldId.MainCamera);
-                CreateScreenToWorldChain(RenderPassType.Sprites, ScreenToWorldId.Sprites);
-                CreateScreenToWorldChain(RenderPassType.UI, ScreenToWorldId.UILayer);
+                for (int i = 0; i < activeCameras.Length; i++)
+                    CreateScreenToWorldChain(RenderPassType.Opaque, activeCameras[i].e);
             }
         }
 
@@ -849,8 +872,8 @@ namespace Unity.Tiny.Rendering
                     var pass = EntityManager.GetComponentData<RenderPass>(ePass);
                     if (((uint)pass.passType & (uint)key.passTypes) == 0)
                         continue;
-                    if ( (pass.shadowMask & key.shadowMask.mask) == 0 ||
-                         (pass.cameraMask & key.cameraMask.mask) == 0 )
+                    if ((pass.shadowMask & key.shadowMask.mask) == 0 ||
+                         (pass.cameraMask & key.cameraMask.mask) == 0)
                         continue;
                     groupTargetPasses.Add(new RenderToPassesEntry { e = ePass });
                 }
@@ -888,7 +911,7 @@ namespace Unity.Tiny.Rendering
             if (isTransparent)
                 eGroup = FindOrCreateRenderGroup(new BuildGroup { passTypes = RenderPassType.Transparent, cameraMask = cameraMask, shadowMask = shadowMask });
             else
-                eGroup = FindOrCreateRenderGroup(new BuildGroup { passTypes = RenderPassType.Opaque | RenderPassType.ZOnly | RenderPassType.ShadowMap, cameraMask = cameraMask, shadowMask = shadowMask });
+                eGroup = FindOrCreateRenderGroup(new BuildGroup { passTypes = RenderPassType.Opaque | RenderPassType.ShadowMap, cameraMask = cameraMask, shadowMask = shadowMask });
             OptionalSetSharedComponent(e, new RenderToPasses { e = eGroup });
         }
 

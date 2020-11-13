@@ -1,9 +1,9 @@
 {
   "name": "com.unity.tiny",
   "displayName": "Project Tiny",
-  "version": "0.31.0-preview.24",
+  "version": "0.32.0-preview.54",
   "unity": "2020.1",
-  "unityRelease": "0b15",
+  "unityRelease": "9f1",
   "description": "Project Tiny enables you to create lightweight Web-based games using the Unity Editor.",
   "keywords": [
     "tiny",
@@ -13,15 +13,15 @@
     "webgl"
   ],
   "dependencies": {
-    "com.unity.dots.runtime": "0.31.0-preview.24",
+    "com.unity.dots.runtime": "0.32.0-preview.54",
     "com.unity.textmeshpro": "2.0.0"
   },
   "upmCi": {
-    "footprint": "f8659d8bc1719a9132ed70bf44967f01986b63c6"
+    "footprint": "9c544c8e3f16af8de561cbbaa5f2442991e33623"
   },
   "repository": {
     "url": "https://github.com/Unity-Technologies/dots.git",
     "type": "git",
-    "revision": "de497b67a438b8d3251ec156c070239bb3d29fa5"
+    "revision": "2f43343f5cfab7d0468100ebf6094176b401978d"
   }
 }

@@ -1,6 +1,5 @@
 using JetBrains.Annotations;
 using Unity.Entities;
-using Unity.Jobs;
 
 namespace Unity.Tiny.Animation
 {

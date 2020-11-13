@@ -2,10 +2,16 @@
     "name": "Unity.Tiny.Audio.Native",
     "references": [
         "Unity.Entities",
+        "Unity.Transforms",
+        "Unity.Mathematics",
+        "Unity.Burst",
         "Unity.Tiny.Core",
         "Unity.Tiny.Audio",
         "Unity.Tiny.IO",
-        "Unity.Platforms.Common"
+        "Unity.Platforms.Common",
+        "Unity.Collections",
+        "Unity.Collections.LowLevel.Unsafe",
+        "Unity.ZeroJobs"
     ],
     "optionalUnityReferences": [],
     "includePlatforms": [],

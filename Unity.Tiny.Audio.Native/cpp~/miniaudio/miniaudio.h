@@ -3095,8 +3095,11 @@ ma_result ma_decode_file(const char* pFilePath, ma_decoder_config* pConfig, ma_u
 #endif
 ma_result ma_decode_memory(const void* pData, size_t dataSize, ma_decoder_config* pConfig, ma_uint64* pFrameCountOut, void** ppDataOut);
 
-#endif  /* MA_NO_DECODING */
+ma_result ma_decode_memory_init(const void* pData, size_t dataSize, ma_decoder_config* pConfigIn, ma_decoder* pDecoder, ma_decoder_config* pConfig);
+ma_result ma_decode_memory_frame(ma_decoder* pDecoder, ma_decoder_config* pConfig, ma_uint64 frameCountRequested, ma_uint64* pFrameCountOut, void** ppPCMFramesOut);
+ma_result ma_decode_memory_uninit(ma_decoder* pDecoder);
 
+#endif  /* MA_NO_DECODING */
 
 /************************************************************************************************************************************************************
 
@@ -32907,6 +32910,65 @@ ma_result ma_decode_memory(const void* pData, size_t dataSize, ma_decoder_config
     }
 
     return ma_decoder__full_decode_and_uninit(&decoder, pConfig, pFrameCountOut, ppPCMFramesOut);
+}
+
+ma_result ma_decode_memory_init(const void* pData, size_t dataSize, ma_decoder_config* pConfigIn, ma_decoder* pDecoder, ma_decoder_config* pConfig)
+{
+    memset(pConfig, 0x00, sizeof(ma_decoder_config));
+    memset(pDecoder, 0x00, sizeof(ma_decoder));
+
+    if (pData == NULL || dataSize == 0) {
+        return MA_INVALID_ARGS;
+    }
+
+    *pConfig = ma_decoder_config_init_copy(pConfigIn);
+    ma_result result = ma_decoder_init_memory(pData, dataSize, pConfig, pDecoder);
+
+    return result;
+}
+
+ma_result ma_decode_memory_frame(ma_decoder* pDecoder, ma_decoder_config* pConfig, ma_uint64 frameCountRequested, ma_uint64* pFrameCountOut, void** ppPCMFramesOut)
+{   
+    ma_assert(pDecoder != NULL);
+
+    if (pFrameCountOut != NULL) {
+      *pFrameCountOut = 0;
+    }
+    if (ppPCMFramesOut != NULL) {
+      *ppPCMFramesOut = NULL;
+    }
+
+    ma_uint64 bpf;
+    bpf = ma_get_bytes_per_frame(pDecoder->outputFormat, pDecoder->outputChannels);
+
+    /* The frame count is unknown until we try reading. Thus, we just run in a loop. */
+    void* pPCMFramesOut = (void*)ma_malloc((size_t)(frameCountRequested * bpf));
+    ma_uint64 framesJustRead = ma_decoder_read_pcm_frames(pDecoder, (ma_uint8*)pPCMFramesOut, frameCountRequested);
+
+    if (pConfig != NULL) {
+        pConfig->format = pDecoder->outputFormat;
+        pConfig->channels = pDecoder->outputChannels;
+        pConfig->sampleRate = pDecoder->outputSampleRate;
+        ma_channel_map_copy(pConfig->channelMap, pDecoder->outputChannelMap, pDecoder->outputChannels);
+    }
+
+    if (ppPCMFramesOut != NULL) {
+        *ppPCMFramesOut = pPCMFramesOut;
+    } else {
+        ma_free(pPCMFramesOut);
+    }
+
+    if (pFrameCountOut != NULL) {
+        *pFrameCountOut = framesJustRead;
+    }
+
+    return MA_SUCCESS;
+}
+
+ma_result ma_decode_memory_uninit(ma_decoder* pDecoder)
+{
+    ma_decoder_uninit(pDecoder);
+    return MA_SUCCESS;
 }
 
 #endif  /* MA_NO_DECODING */

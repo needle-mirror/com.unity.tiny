@@ -1,9 +1,20 @@
 using System;
 using Unity.Entities;
+using Unity.Jobs;
+using Unity.Transforms;
+using Unity.Mathematics;
+using Unity.Burst;
+using Unity.Tiny;
 using Unity.Tiny.GenericAssetLoading;
+using Unity.Tiny.IO;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using Unity.Platforms;
+using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
+using Unity.Baselib.LowLevel;
+using static Unity.Baselib.LowLevel.Binding;
+using Unity.Profiling;
 
 #if ENABLE_PLAYERCONNECTION
 using UnityEngine.Networking.PlayerConnection;
@@ -23,11 +34,6 @@ namespace Unity.Tiny.Audio
 
     struct AudioNativeLoading : ISystemStateComponentData
     {
-    }
-
-    struct AudioNativeSource : ISystemStateComponentData
-    {
-        public uint sourceID;
     }
 
     static class AudioNativeCalls
@@ -51,9 +57,24 @@ namespace Unity.Tiny.Audio
         [DllImport(DLL, EntryPoint = "getAudioOutputTimeInFrames")]
         public static extern ulong GetAudioOutputTimeInFrames();
 
+        [DllImport(DLL, EntryPoint = "soundSourcePropertyMutexLock")]
+        public static extern void SoundSourcePropertyMutexLock();
+
+        [DllImport(DLL, EntryPoint = "soundSourcePropertyMutexUnlock")]
+        public static extern void SoundSourcePropertyMutexUnlock();
+
+        [DllImport(DLL, EntryPoint = "soundSourceSampleMutexLock")]
+        public static extern void SoundSourceSampleMutexLock();
+
+        [DllImport(DLL, EntryPoint = "soundSourceSampleMutexUnlock")]
+        public static extern void SoundSourceSampleMutexUnlock();
+
         // Clip
-        [DllImport(DLL, EntryPoint = "startLoad", CharSet = CharSet.Ansi)]
-        public static extern uint StartLoad([MarshalAs(UnmanagedType.LPStr)] string imageFile);    // returns clipID
+        [DllImport(DLL, EntryPoint = "startLoadFromDisk", CharSet = CharSet.Ansi)]
+        public static extern uint StartLoadFromDisk([MarshalAs(UnmanagedType.LPStr)] string imageFile);    // returns clipID
+
+        [DllImport(DLL, EntryPoint = "startLoadFromMemory")]
+        public static extern unsafe uint StartLoadFromMemory(void* compressedBuffer, int compressedBufferSize);
 
         [DllImport(DLL, EntryPoint = "freeAudio")]
         public static extern void FreeAudio(uint clipID);
@@ -67,42 +88,47 @@ namespace Unity.Tiny.Audio
         [DllImport(DLL, EntryPoint = "finishedLoading")]
         public static extern void FinishedLoading(uint clipID);
 
+        [DllImport(DLL, EntryPoint = "getCompressedMemorySize")]
+        public static extern uint GetCompressedMemorySize(uint clipID);
+
+        [DllImport(DLL, EntryPoint = "getUncompressedMemorySize")]
+        public static extern uint GetUncompressedMemorySize(uint clipID);
+
+        [DllImport(DLL, EntryPoint = "getUncompressedMemory")]
+        public static extern IntPtr GetUncompressedMemory(uint clipID);        
+
+        [DllImport(DLL, EntryPoint = "setUncompressedMemory")]
+        public static extern void SetUncompressedMemory(uint clipID, IntPtr uncompressedMemory, uint uncompressedSizeFrames);
+
 #if ENABLE_DOTSRUNTIME_PROFILER
         [DllImport(DLL, EntryPoint = "getCpuUsage")]
         public static extern float GetCpuUsage();
-
-        [DllImport(DLL, EntryPoint = "getRequiredMemory")]
-        public static extern int GetRequiredMemory(uint clipID);
 #endif
+
         [DllImport(DLL, EntryPoint = "clipPoolID")]
         public static extern int ClipPoolID();      // Testing: the next ID that will be assigned to a clip.
 
-        // Source
+        // Source 
         [DllImport(DLL, EntryPoint = "playSource")]
-        public static extern uint Play(uint clipID, float volume, float pan, bool loop);    // returns sourceID (>0) or 0 or failure.
+        public static extern uint Play(uint clipID, float volume, float pan, int loop);    // returns sourceID (>0) or 0 for failure.
 
         [DllImport(DLL, EntryPoint = "isPlaying")]
-        [return : MarshalAs(UnmanagedType.I1)]
-        public static extern bool IsPlaying(uint sourceID);
+        public static extern int IsPlaying(uint sourceID);
 
         [DllImport(DLL, EntryPoint = "stopSource")]
-        [return : MarshalAs(UnmanagedType.I1)]
-        public static extern bool Stop(uint sourceID);    // returns success (or failure)
+        public static extern int Stop(uint sourceID);    // returns success (or failure)
 
         [DllImport(DLL, EntryPoint = "pauseAudio")]
         public static extern void PauseAudio(bool doPause);    // returns success (or failure)
 
         [DllImport(DLL, EntryPoint = "setVolume")]
-        [return : MarshalAs(UnmanagedType.I1)]
-        public static extern bool SetVolume(uint sourceId, float volume);    // returns success (or failure)
+        public static extern void SetVolume(uint sourceId, float volume);    // returns success (or failure)
 
         [DllImport(DLL, EntryPoint = "setPan")]
-        [return : MarshalAs(UnmanagedType.I1)]
-        public static extern bool SetPan(uint sourceId, float pan);    // returns success (or failure)
+        public static extern void SetPan(uint sourceId, float pan);    // returns success (or failure)
 
         [DllImport(DLL, EntryPoint = "setPitch")]
-        [return : MarshalAs(UnmanagedType.I1)]
-        public static extern bool SetPitch(uint sourceId, float pitch);    // returns success (or failure)
+        public static extern void SetPitch(uint sourceId, float pitch);    // returns success (or failure)
 
         [DllImport(DLL, EntryPoint = "setIsMuted")]
         public static extern void SetIsMuted(bool isMuted);
@@ -119,7 +145,7 @@ namespace Unity.Tiny.Audio
 
     class AudioNativeSystemLoadFromFile : IGenericAssetLoader<AudioClip, AudioNativeClip, AudioClipLoadFromFile, AudioNativeLoading>
     {
-        public void StartLoad(
+        public unsafe void StartLoad(
             EntityManager entityManager,
             Entity e,
             ref AudioClip audioClip,
@@ -137,56 +163,103 @@ namespace Unity.Tiny.Audio
                 return;
             }
 
-            string path = entityManager.GetBufferAsString<AudioClipLoadFromFileAudioFile>(e);
+            DynamicBuffer<AudioClipUncompressed> audioClipUncompressed = entityManager.GetBuffer<AudioClipUncompressed>(e);
+            if (audioClipUncompressed.Length > 0)
+                return;
 
-            audioNativeClip.clipID = AudioNativeCalls.StartLoad(path);
-            audioClip.status = audioNativeClip.clipID > 0 ? AudioClipStatus.Loading : AudioClipStatus.LoadError;
+            string path = entityManager.GetBufferAsString<AudioClipLoadFromFileAudioFile>(e);
+            if (path[0] == '!')
+            {
+                // This is a special path name that is used to load up a fake audio asset for our automated tests.
+                audioNativeClip.clipID = AudioNativeCalls.StartLoadFromDisk(path);
+                audioClip.status = audioNativeClip.clipID > 0 ? AudioClipStatus.Loading : AudioClipStatus.LoadError;
+            }
+            else
+            {
+                // Read the audio clip from disk into an AudioClipCompressed component.
+                LoadSoundClipFromDisk(entityManager, e, path);
+                DynamicBuffer<AudioClipCompressed> audioClipCompressed = entityManager.GetBuffer<AudioClipCompressed>(e);
+
+                audioNativeClip.clipID = AudioNativeCalls.StartLoadFromMemory(audioClipCompressed.GetUnsafeReadOnlyPtr(), audioClipCompressed.Length);
+                audioClip.status = audioNativeClip.clipID > 0 ? AudioClipStatus.Loading : AudioClipStatus.LoadError;
+            }
         }
 
-        public LoadResult CheckLoading(IntPtr wrapper,
+        public unsafe LoadResult CheckLoading(IntPtr wrapper,
             EntityManager man,
             Entity e,
             ref AudioClip audioClip, ref AudioNativeClip audioNativeClip, ref AudioClipLoadFromFile param, ref AudioNativeLoading nativeLoading)
         {
-            LoadResult result = (LoadResult)AudioNativeCalls.CheckLoading(audioNativeClip.clipID);
-
-            if (result == LoadResult.success)
-            {
-                audioClip.status = AudioClipStatus.Loaded;
-#if ENABLE_DOTSRUNTIME_PROFILER
-                ProfilerStats.AccumStats.memAudioCount.Accumulate(1);
-                int mem = AudioNativeCalls.GetRequiredMemory(audioNativeClip.clipID);
-                ProfilerStats.AccumStats.memAudio.Accumulate(mem);
-                ProfilerStats.AccumStats.memReservedAudio.Accumulate(mem);
-                ProfilerStats.AccumStats.memUsedAudio.Accumulate(mem);
-
-                // All audio clips in native Tiny audio are decompressed on load
-                ProfilerStats.AccumStats.audioSampleMemory.Accumulate(mem);
-#endif
-            }
-            else if (result == LoadResult.failed)
-                audioClip.status = AudioClipStatus.LoadError;
-
-            return result;
+            if (audioClip.status == AudioClipStatus.Loading)
+                return LoadResult.success;
+            else
+                return LoadResult.failed;
         }
 
         public void FreeNative(EntityManager man, Entity e, ref AudioNativeClip audioNativeClip)
         {
-#if ENABLE_DOTSRUNTIME_PROFILER
-            ProfilerStats.AccumStats.memAudioCount.Accumulate(-1);
-            int mem = AudioNativeCalls.GetRequiredMemory(audioNativeClip.clipID);
-            ProfilerStats.AccumStats.memAudio.Accumulate(-mem);
-            ProfilerStats.AccumStats.memReservedAudio.Accumulate(-mem);
-            ProfilerStats.AccumStats.memUsedAudio.Accumulate(-mem);
+            if (!man.HasComponent<AudioClipUsage>(e))
+                return;
+            AudioClipUsage audioClipUsage = man.GetComponentData<AudioClipUsage>(e);
+            bool clipIsPlaying = audioClipUsage.playingRefCount > 0;
 
-            ProfilerStats.AccumStats.audioSampleMemory.Accumulate(-mem);
-#endif
+            if (clipIsPlaying)
+            {
+                AudioNativeCalls.SoundSourcePropertyMutexLock();
+                AudioNativeCalls.SoundSourceSampleMutexLock();
+            }
+
             AudioNativeCalls.FreeAudio(audioNativeClip.clipID);
+            DynamicBuffer<AudioClipCompressed> audioClipCompressed = man.GetBuffer<AudioClipCompressed>(e);
+            audioClipCompressed.ResizeUninitialized(0);
+
+            if (clipIsPlaying)
+            {
+                AudioNativeCalls.SoundSourcePropertyMutexUnlock();
+                AudioNativeCalls.SoundSourceSampleMutexUnlock();
+            }
         }
 
         public void FinishLoading(EntityManager man, Entity e, ref AudioClip audioClip, ref AudioNativeClip audioNativeClip, ref AudioNativeLoading nativeLoading)
         {
             AudioNativeCalls.FinishedLoading(audioNativeClip.clipID);
+        }
+
+        public unsafe void LoadSoundClipFromDisk(EntityManager mgr, Entity e, string filePath)
+        {
+            DynamicBuffer<AudioClipCompressed> audioClipCompressed = mgr.GetBuffer<AudioClipCompressed>(e);
+            if (audioClipCompressed.Length > 0)
+                return;
+
+#if UNITY_ANDROID
+            var op = IOService.RequestAsyncRead(filePath);
+            while (op.GetStatus() <= AsyncOp.Status.InProgress);
+
+            op.GetData(out byte* data, out int sizeInBytes);
+            audioClipCompressed.ResizeUninitialized(sizeInBytes);
+            byte* audioClipCompressedBytes = (byte*)audioClipCompressed.GetUnsafePtr();
+            for (int i = 0; i < sizeInBytes; i++)
+                audioClipCompressedBytes[i] = data[i];
+
+            op.Dispose();
+#else
+            FixedString512 filePathFixedString = new FixedString512(filePath);
+            Baselib_ErrorState errorState = new Baselib_ErrorState();
+            Baselib_FileIO_SyncFile fileHandle = Baselib_FileIO_SyncOpen(filePathFixedString.GetUnsafePtr(), Baselib_FileIO_OpenFlags.Read, &errorState);
+            if (errorState.code != Baselib_ErrorCode.Success)
+                return;
+
+            UInt64 fileSize = Baselib_FileIO_SyncGetFileSize(fileHandle, &errorState);
+            if (fileSize > Int32.MaxValue)
+            {
+                Baselib_FileIO_SyncClose(fileHandle, &errorState);
+                return;
+            }
+            
+            audioClipCompressed.ResizeUninitialized((int)fileSize);
+            UInt64 bytesRead = Baselib_FileIO_SyncRead(fileHandle, 0, (IntPtr)audioClipCompressed.GetUnsafePtr(), (ulong)audioClipCompressed.Length, &errorState);
+            Baselib_FileIO_SyncClose(fileHandle, &errorState);
+#endif
         }
     }
 
@@ -204,8 +277,9 @@ namespace Unity.Tiny.Audio
     [UpdateInGroup(typeof(PresentationSystemGroup))]
     class AudioNativeSystem : AudioSystem
     {
-        private double lastWorldTimeAudioConsumed = 0.0;
-        private ulong lastAudioOutputTimeInFrames = 0;
+        private int m_uncompressedAudioMemoryBytes = 0;
+        private double m_lastWorldTimeAudioConsumed = 0.0;
+        private ulong m_lastAudioOutputTimeInFrames = 0;
 
         #if ENABLE_PLAYERCONNECTION
         static bool s_Muted;
@@ -217,13 +291,18 @@ namespace Unity.Tiny.Audio
         protected override void OnStartRunning()
         {
             PlatformEvents.OnSuspendResume += OnSuspendResume;
+            m_uncompressedAudioMemoryBytes = 0;
+
+            AudioConfig ac = GetSingleton<AudioConfig>();
+            ac.initialized = true;
+            ac.unlocked = true;
+            SetSingleton<AudioConfig>(ac);           
         }
 
         protected override void OnStopRunning()
         {
             PlatformEvents.OnSuspendResume -= OnSuspendResume;
         }
-
 
         #if ENABLE_PLAYERCONNECTION
         static void ToggleMuteFromEditor(MessageEventArgs args)
@@ -237,21 +316,9 @@ namespace Unity.Tiny.Audio
         {
             AudioNativeCalls.InitAudio();
 
-            AudioConfig ac = default;
-            Entity eAudioConfig = Entity.Null;
-            if (!HasSingleton<AudioConfig>())
-                eAudioConfig = EntityManager.CreateEntity(typeof(AudioConfig));
-            else
-                eAudioConfig = GetSingletonEntity<AudioConfig>();
-
             #if ENABLE_PLAYERCONNECTION
             PlayerConnection.instance.Register(k_EditorMuteMessageId, ToggleMuteFromEditor);
             #endif
-
-            ac.initialized = true;
-            ac.unlocked = true;
-
-            EntityManager.SetComponentData(eAudioConfig, ac);
         }
 
         protected override void DestroyAudioSystem()
@@ -261,30 +328,40 @@ namespace Unity.Tiny.Audio
             #endif
 
             AudioNativeCalls.DestroyAudio();
-
-            if (HasSingleton<AudioConfig>())
-                EntityManager.DestroyEntity(GetSingletonEntity<AudioConfig>());
         }
 
-        protected override bool PlaySource(Entity e)
+        [BurstCompile]
+        protected static unsafe uint PlaySource(EntityManager mgr, Entity e)
         {
-            var mgr = EntityManager;
-
             if (mgr.HasComponent<AudioSource>(e))
             {
                 AudioSource audioSource = mgr.GetComponentData<AudioSource>(e);
-
                 Entity clipEntity = audioSource.clip;
+                DynamicBuffer<AudioClipUncompressed> audioClipUncompressed = mgr.GetBuffer<AudioClipUncompressed>(clipEntity);
+
                 if (mgr.HasComponent<AudioNativeClip>(clipEntity))
                 {
-                    AudioNativeClip clip = mgr.GetComponentData<AudioNativeClip>(clipEntity);
-                    if (clip.clipID > 0)
+                    AudioNativeClip audioNativeClip = mgr.GetComponentData<AudioNativeClip>(clipEntity);
+                    if (audioNativeClip.clipID > 0)
                     {
+                        bool decompressOnPlay = false;
+                        if (mgr.HasComponent<AudioClip>(clipEntity))
+                        {
+                            AudioClip audioClip = mgr.GetComponentData<AudioClip>(clipEntity);
+                            decompressOnPlay = (audioClip.loadType == AudioClipLoadType.DecompressOnPlay);
+
+                            if (decompressOnPlay && (audioClipUncompressed.Length == 0))
+                                return 0;
+
+                            audioClip.status = AudioClipStatus.Loaded;
+                            mgr.SetComponentData<AudioClip>(clipEntity, audioClip);
+                        }
+
                         // If there is an existing source, it should re-start.
                         // Do this with a Stop() and let it play below.
-                        if (mgr.HasComponent<AudioNativeSource>(e))
+                        if (mgr.HasComponent<AudioSourceID>(e))
                         {
-                            AudioNativeSource ans = mgr.GetComponentData<AudioNativeSource>(e);
+                            AudioSourceID ans = mgr.GetComponentData<AudioSourceID>(e);
                             AudioNativeCalls.Stop(ans.sourceID);
                         }
 
@@ -296,94 +373,80 @@ namespace Unity.Tiny.Audio
                         if (mgr.HasComponent<Audio3dPanning>(e))
                             volume = 0.0f;
 
-                        uint sourceID = AudioNativeCalls.Play(clip.clipID, volume, pan, audioSource.loop);
-
-                        AudioNativeSource audioNativeSource = new AudioNativeSource()
-                        {
-                            sourceID = sourceID
-                        };
-                        if (mgr.HasComponent<AudioNativeSource>(e))
-                        {
-                            mgr.SetComponentData(e, audioNativeSource);
-                        }
-                        else
-                        {
-                            mgr.AddComponentData(e, audioNativeSource);
-                        }
-                        return true;
+                        uint sourceID = AudioNativeCalls.Play(audioNativeClip.clipID, volume, pan, audioSource.loop ? 1 : 0);
+                        return sourceID;
                     }
                 }
             }
 
-            return false;
+            return 0;
         }
 
-        protected override void StopSource(Entity e)
+        [BurstCompile]
+        protected static void StopSource(EntityManager mgr, Entity e)
         {
-            if (EntityManager.HasComponent<AudioNativeSource>(e))
+            if (mgr.HasComponent<AudioSourceID>(e))
             {
-                AudioNativeSource audioNativeSource = EntityManager.GetComponentData<AudioNativeSource>(e);
-                if (audioNativeSource.sourceID > 0)
+                AudioSourceID audioSourceID = mgr.GetComponentData<AudioSourceID>(e);
+                if (audioSourceID.sourceID > 0)
                 {
-                    AudioNativeCalls.Stop(audioNativeSource.sourceID);
+                    AudioNativeCalls.Stop(audioSourceID.sourceID);
                 }
             }
         }
 
-        protected override bool IsPlaying(Entity e)
+        [BurstCompile]
+        protected static int IsPlaying(EntityManager mgr, Entity e)
         {
-            if (EntityManager.HasComponent<AudioNativeSource>(e))
+            if (mgr.HasComponent<AudioSourceID>(e))
             {
-                AudioNativeSource audioNativeSource = EntityManager.GetComponentData<AudioNativeSource>(e);
-                if (audioNativeSource.sourceID > 0)
+                AudioSourceID audioSourceID = mgr.GetComponentData<AudioSourceID>(e);
+                if (audioSourceID.sourceID > 0)
                 {
-                    return AudioNativeCalls.IsPlaying(audioNativeSource.sourceID);
+                    return AudioNativeCalls.IsPlaying(audioSourceID.sourceID);
                 }
             }
 
-            return false;
+            return 0;
         }
 
-        protected override bool SetVolume(Entity e, float volume)
+        [BurstCompile]
+        protected static void SetVolume(EntityManager mgr, Entity e, float volume)
         {
-            if (EntityManager.HasComponent<AudioNativeSource>(e))
+            if (mgr.HasComponent<AudioSourceID>(e))
             {
-                AudioNativeSource audioNativeSource = EntityManager.GetComponentData<AudioNativeSource>(e);
-                if (audioNativeSource.sourceID > 0)
+                AudioSourceID audioSourceID = mgr.GetComponentData<AudioSourceID>(e);
+                if (audioSourceID.sourceID > 0)
                 {
-                    return AudioNativeCalls.SetVolume(audioNativeSource.sourceID, volume);
+                    AudioNativeCalls.SetVolume(audioSourceID.sourceID, volume);
                 }
             }
-
-            return false;
         }
 
-        protected override bool SetPan(Entity e, float pan)
+        [BurstCompile]
+        protected static void SetPan(EntityManager mgr, Entity e, float pan)
         {
-            if (EntityManager.HasComponent<AudioNativeSource>(e))
+            if (mgr.HasComponent<AudioSourceID>(e))
             {
-                AudioNativeSource audioNativeSource = EntityManager.GetComponentData<AudioNativeSource>(e);
-                if (audioNativeSource.sourceID > 0)
+                AudioSourceID audioSourceID = mgr.GetComponentData<AudioSourceID>(e);
+                if (audioSourceID.sourceID > 0)
                 {
-                    return AudioNativeCalls.SetPan(audioNativeSource.sourceID, pan);
+                    AudioNativeCalls.SetPan(audioSourceID.sourceID, pan);
                 }
             }
-
-            return false;
         }
 
-        protected override bool SetPitch(Entity e, float pitch)
+        [BurstCompile]
+        protected static void SetPitch(EntityManager mgr, Entity e, float pitch)
         {
-            if (EntityManager.HasComponent<AudioNativeSource>(e))
+            if (mgr.HasComponent<AudioSourceID>(e))
             {
-                AudioNativeSource audioNativeSource = EntityManager.GetComponentData<AudioNativeSource>(e);
-                if (audioNativeSource.sourceID > 0)
+                AudioSourceID audioSourceID = mgr.GetComponentData<AudioSourceID>(e);
+                if (audioSourceID.sourceID > 0)
                 {
-                    return AudioNativeCalls.SetPitch(audioNativeSource.sourceID, pitch);
+                    AudioNativeCalls.SetPitch(audioSourceID.sourceID, pitch);
                 }
             }
-
-            return false;
         }
 
         private void ReinitIfDefaultDeviceChanged()
@@ -397,52 +460,276 @@ namespace Unity.Tiny.Audio
             const double reinitTime = 0.25;
             double worldTime = World.Time.ElapsedTime;
             ulong audioOutputTimeInFrames = AudioNativeCalls.GetAudioOutputTimeInFrames();
-            bool audioConsumed = audioOutputTimeInFrames != lastAudioOutputTimeInFrames;
-            bool audioNeedsReinit = worldTime - lastWorldTimeAudioConsumed >= reinitTime;
+            bool audioConsumed = audioOutputTimeInFrames != m_lastAudioOutputTimeInFrames;
+            bool audioNeedsReinit = worldTime - m_lastWorldTimeAudioConsumed >= reinitTime;
 
             if (!audioConsumed && !paused && audioNeedsReinit)
                 AudioNativeCalls.ReinitAudio();
 
-            lastAudioOutputTimeInFrames = audioOutputTimeInFrames;
-            lastWorldTimeAudioConsumed = (audioConsumed || paused || audioNeedsReinit) ? worldTime : lastWorldTimeAudioConsumed;
+            m_lastAudioOutputTimeInFrames = audioOutputTimeInFrames;
+            m_lastWorldTimeAudioConsumed = (audioConsumed || paused || audioNeedsReinit) ? worldTime : m_lastWorldTimeAudioConsumed;
         }
 
-        protected override void OnUpdate()
+        protected override unsafe void OnUpdate()
         {
-            base.OnUpdate();
-
             var mgr = EntityManager;
+            Entity audioEntity = m_audioEntity;
+            double currentTime = World.Time.ElapsedTime;
+            int uncompressedAudioMemoryBytes = m_uncompressedAudioMemoryBytes;
+            double worldElapsedTime = World.Time.ElapsedTime;
             AudioConfig ac = GetSingleton<AudioConfig>();
-            AudioNativeCalls.PauseAudio(ac.paused);
 
+            NativeList<Entity> entitiesPlayed = new NativeList<Entity>(Allocator.Temp);
+            
+            base.OnUpdate();            
+
+            AudioNativeCalls.PauseAudio(ac.paused);
             ReinitIfDefaultDeviceChanged();
             ReinitIfNoAudioConsumed(ac.paused);
 
-            // Remove any lingering AudioNativeSources which may have had their AudioSource
-            // removed, otherwise we will continue playing looping clips
+            // We are starting to make AudioSource play/stop and property changes, so block the audio mixer thread from doing any work
+            // on this state until we are done.
+            AudioNativeCalls.SoundSourcePropertyMutexLock();
+
+            for (int i = 0; i < mgr.GetBuffer<SourceIDToStop>(audioEntity).Length; i++)
+            {
+                uint id = mgr.GetBuffer<SourceIDToStop>(audioEntity)[i];
+                AudioNativeCalls.Stop(id);
+            }
+
+            // Play sounds.
             Entities
-                .WithStructuralChanges()
-                .WithNone<AudioSource>()
-                .ForEach((Entity e, ref AudioNativeSource source) =>
+                .WithAll<AudioSource, AudioSourceStart>()
+                .ForEach((Entity e) =>
                 {
-                    AudioNativeCalls.Stop(source.sourceID);
-                    mgr.RemoveComponent<AudioNativeSource>(e);
+                    uint sourceID = PlaySource(mgr, e);
+                    if (sourceID > 0)
+                    {
+                        AudioSourceID audioSourceID = mgr.GetComponentData<AudioSourceID>(e);
+                        audioSourceID.sourceID = sourceID;
+                        mgr.SetComponentData<AudioSourceID>(e, audioSourceID);
+
+                        entitiesPlayed.Add(e);
+                    }
                 }).Run();
 
-            // Remove any lingering AudioNativeClips which may have had their AudioClip
-            // removed, otherwise we will continue holding on to those resources
+            for (int i = 0; i < entitiesPlayed.Length; i++)
+                mgr.RemoveComponent<AudioSourceStart>(entitiesPlayed[i]);
+            
+            Entities
+                .ForEach((Entity e, ref AudioClipUsage audioClipUsage) =>
+                {
+                    audioClipUsage.playingRefCount = 0;
+                }).Run();
+
+            // Re-calculate the playing ref count for each audio clip. Also, update AudioSource's isPlaying bool and remove
+            // any AudioSource entities from the list if they are no longer playing.
+            Entities
+                .ForEach((Entity e, in AudioSource audioSource) =>
+                {
+                    bool audioSourceStarting = mgr.HasComponent<AudioSourceStart>(e);
+                    if (audioSourceStarting || audioSource.isPlaying)
+                    {
+                        Entity clipEntity = audioSource.clip;
+                        AudioClipUsage audioClipUsage = mgr.GetComponentData<AudioClipUsage>(clipEntity);
+                        audioClipUsage.playingRefCount++;
+                        audioClipUsage.lastTimeUsed = currentTime;
+                        mgr.SetComponentData<AudioClipUsage>(clipEntity, audioClipUsage);
+                    }
+                }).Run();
+
+            if (uncompressedAudioMemoryBytes > ac.maxUncompressedAudioMemoryBytes)
+            {
+                Entities
+                    .ForEach((Entity e, ref DynamicBuffer<AudioClipUncompressed> audioClipUncompressed) =>
+                    {
+                        if (audioClipUncompressed.Length > 0)
+                        {
+                            AudioClipUsage audioClipUsage = mgr.GetComponentData<AudioClipUsage>(e);
+
+                            bool notRecentlyUsed = (audioClipUsage.lastTimeUsed + 15.0f < currentTime);
+                            bool largeAudioAsset = audioClipUncompressed.Length > 2*1024*1024;
+
+                            if ((uncompressedAudioMemoryBytes > ac.maxUncompressedAudioMemoryBytes) &&
+                                (audioClipUsage.playingRefCount <= 0) &&
+                                (notRecentlyUsed || largeAudioAsset))
+                            {
+                                int clipUncompressedAudioMemoryBytes = audioClipUncompressed.Length * sizeof(short);
+
+                                AudioNativeClip audioNativeClip = mgr.GetComponentData<AudioNativeClip>(e);
+                                AudioNativeCalls.SetUncompressedMemory(audioNativeClip.clipID, (IntPtr)null, 0);
+
+                                AudioClip audioClip = mgr.GetComponentData<AudioClip>(e);
+                                audioClip.status = AudioClipStatus.Loading;
+                                mgr.SetComponentData<AudioClip>(e, audioClip);
+
+                                audioClipUncompressed.ResizeUninitialized(0);
+                                uncompressedAudioMemoryBytes -= clipUncompressedAudioMemoryBytes;                     
+                            }
+                        }
+                    }).Run();
+
+                Entities
+                    .ForEach((Entity e, ref DynamicBuffer<AudioClipUncompressed> audioClipUncompressed) =>
+                    {
+                        if (audioClipUncompressed.Length > 0)
+                        {
+                            AudioClipUsage audioClipUsage = mgr.GetComponentData<AudioClipUsage>(e);
+                            
+                            if ((uncompressedAudioMemoryBytes > ac.maxUncompressedAudioMemoryBytes) &&
+                                (audioClipUsage.playingRefCount <= 0))
+                            {
+                                int clipUncompressedAudioMemoryBytes = audioClipUncompressed.Length * sizeof(short);
+
+                                AudioNativeClip audioNativeClip = mgr.GetComponentData<AudioNativeClip>(e);
+                                AudioNativeCalls.SetUncompressedMemory(audioNativeClip.clipID, (IntPtr)null, 0);
+
+                                AudioClip audioClip = mgr.GetComponentData<AudioClip>(e);
+                                audioClip.status = AudioClipStatus.Loading;
+                                mgr.SetComponentData<AudioClip>(e, audioClip);
+
+                                audioClipUncompressed.ResizeUninitialized(0);
+                                uncompressedAudioMemoryBytes -= clipUncompressedAudioMemoryBytes;                       
+                            }
+                        }
+                    }).Run();
+            }
+            
+            DynamicBuffer<EntityPlaying> entitiesPlaying = mgr.GetBuffer<EntityPlaying>(m_audioEntity);
+            for (int i = 0; i < entitiesPlaying.Length; i++)
+            {
+                Entity e = entitiesPlaying[i];
+                AudioSource audioSource = mgr.GetComponentData<AudioSource>(e);
+
+                audioSource.isPlaying = (IsPlaying(mgr, e) == 1) ? true : false;
+                mgr.SetComponentData<AudioSource>(e, audioSource);
+
+                if (audioSource.isPlaying)
+                {
+                    float volume = audioSource.volume;
+                    if (mgr.HasComponent<AudioDistanceAttenuation>(e))
+                    {
+                        AudioDistanceAttenuation distanceAttenuation = mgr.GetComponentData<AudioDistanceAttenuation>(e);
+                        volume *= distanceAttenuation.volume;
+                    }
+                    SetVolume(mgr, e, volume);
+
+                    if (mgr.HasComponent<Audio3dPanning>(e))
+                    {
+                        Audio3dPanning panning = mgr.GetComponentData<Audio3dPanning>(e);
+                        SetPan(mgr, e, panning.pan);
+                    }
+                    else if (mgr.HasComponent<Audio2dPanning>(e))
+                    {
+                        Audio2dPanning panning = mgr.GetComponentData<Audio2dPanning>(e);
+                        SetPan(mgr, e, panning.pan);
+                    }
+
+                    if (mgr.HasComponent<AudioPitch>(e))
+                    {
+                        AudioPitch pitchEffect = mgr.GetComponentData<AudioPitch>(e);
+                        float pitch = (pitchEffect.pitch > 0.0f) ? pitchEffect.pitch : 1.0f;
+                        SetPitch(mgr, e, pitch);
+                    }
+                } 
+            }
+
+            // We are done making AudioSource property changes, so unblock the audio mixer thread.
+            AudioNativeCalls.SoundSourcePropertyMutexUnlock();
+
+#if ENABLE_DOTSRUNTIME_PROFILER
+            ProfilerStats.GatheredStats |= ProfilerModes.ProfileAudio;
+            ProfilerStats.AccumStats.audioDspCPUx10.value = (long)(AudioNativeCalls.GetCpuUsage() * 10);
+            
+            ProfilerStats.AccumStats.memAudioCount.value = 0;
+            ProfilerStats.AccumStats.memAudio.value = 0;
+            ProfilerStats.AccumStats.memReservedAudio.value = 0;
+            ProfilerStats.AccumStats.memUsedAudio.value = 0;
+            ProfilerStats.AccumStats.audioStreamFileMemory.value = 0;
+            ProfilerStats.AccumStats.audioSampleMemory.value = 0;
+
+            Entities
+                .ForEach((Entity e, in DynamicBuffer<AudioClipCompressed> audioClipCompressed, in DynamicBuffer<AudioClipUncompressed> audioClipUncompressed) =>
+                {
+                    int audioClipCompressedBytes = audioClipCompressed.Length;
+                    int audioClipUncompressedBytes = audioClipUncompressed.Length * sizeof(short);
+                    int audioClipTotalBytes = audioClipCompressedBytes + audioClipUncompressedBytes;
+
+                    ProfilerStats.AccumStats.memAudioCount.Accumulate(1);
+                    ProfilerStats.AccumStats.memAudio.Accumulate(audioClipTotalBytes);
+                    ProfilerStats.AccumStats.memReservedAudio.Accumulate(audioClipTotalBytes);
+                    ProfilerStats.AccumStats.memUsedAudio.Accumulate(audioClipTotalBytes);
+                    ProfilerStats.AccumStats.audioSampleMemory.Accumulate(audioClipTotalBytes);
+                }).Run();
+#endif
+
             Entities
                 .WithStructuralChanges()
                 .WithNone<AudioClipLoadFromFileAudioFile>()
-                .ForEach((Entity e, ref AudioNativeClip tag) =>
+                .ForEach((Entity e, ref AudioNativeClip audioNativeClip) =>
                 {
-                    AudioNativeCalls.FreeAudio(tag.clipID);
-                    mgr.RemoveComponent<AudioNativeClip>(e);
+                    AudioClipUsage audioClipUsage = mgr.GetComponentData<AudioClipUsage>(e);
+                    bool clipIsPlaying = audioClipUsage.playingRefCount > 0;
+
+                    if (!clipIsPlaying)
+                    {
+                        AudioNativeCalls.FreeAudio(audioNativeClip.clipID);
+                        DynamicBuffer<AudioClipCompressed> audioClipCompressed = mgr.GetBuffer<AudioClipCompressed>(e);
+                        audioClipCompressed.ResizeUninitialized(0);
+                        mgr.RemoveComponent<AudioNativeClip>(e);
+                    }
+                }).Run();
+            
+            uncompressedAudioMemoryBytes = 0;
+            Entities
+                .ForEach((Entity e, in DynamicBuffer<AudioClipUncompressed> audioClipUncompressed) =>
+                {
+                    uncompressedAudioMemoryBytes += audioClipUncompressed.Length * sizeof(short);
+                }).Run();
+            m_uncompressedAudioMemoryBytes = uncompressedAudioMemoryBytes;
+
+            Entities
+                .ForEach((Entity e, ref DynamicBuffer<AudioClipUncompressed> audioClipUncompressed, in AudioClip audioClip, in AudioNativeClip audioNativeClip, in AudioClipUsage audioClipUsage) =>
+                {
+                    // For playing sounds that are not yet uncompressed, get their uncompressed size, and allocate a memory block for the decompression step.
+                    if ((audioClip.loadType == AudioClipLoadType.DecompressOnPlay) && 
+                        (audioClipUsage.playingRefCount > 0) && 
+                        (audioNativeClip.clipID > 0) && 
+                        (audioClipUncompressed.Length == 0))
+                    {   
+                        int uncompressedSizeInFrames = audioClip.samples / audioClip.channels;
+                        int uncompressedSizeInSamples = uncompressedSizeInFrames * 2;
+
+                        // Tiny native audio currently always decodes audio clips to 44.1KHz. While this constraint exists, we have to adjust the sample count here.
+                        const int uncompressedFrequency = 44100;
+                        if (audioClip.frequency != uncompressedFrequency)
+                        {
+                            float audioClipSeconds = (float)audioClip.samples / (float)audioClip.frequency;
+                            uncompressedSizeInFrames = (int)(audioClipSeconds * (float)uncompressedFrequency) + 1;
+                            uncompressedSizeInSamples = uncompressedSizeInFrames * 2;
+                        }
+
+                        audioClipUncompressed.ResizeUninitialized(uncompressedSizeInSamples);
+                        short* audioClipUncompressedBuffer = (short*)audioClipUncompressed.GetUnsafePtr();
+
+                        UnsafeUtility.MemSet(audioClipUncompressedBuffer, 0, audioClipUncompressed.Length*sizeof(short));
+                        AudioNativeCalls.SetUncompressedMemory(audioNativeClip.clipID, (IntPtr)audioClipUncompressedBuffer, (uint)uncompressedSizeInFrames);
+                    }
                 }).Run();
 
-#if ENABLE_DOTSRUNTIME_PROFILER
-            ProfilerStats.AccumStats.audioDspCPUx10.value = (long)(AudioNativeCalls.GetCpuUsage() * 10);
-#endif
+            // Decompress sounds. 
+            Entities
+                .WithAll<AudioClipUncompressed>()
+                .ForEach((Entity e, in AudioClip audioClip, in AudioNativeClip audioNativeClip, in AudioClipUsage audioClipUsage) =>
+                {
+                    if ((audioClip.loadType == AudioClipLoadType.DecompressOnPlay) &&
+                        (audioClipUsage.playingRefCount > 0) &&
+                        (audioNativeClip.clipID > 0) &&
+                        (audioClip.status != AudioClipStatus.Loaded))
+                    {
+                        AudioNativeCalls.CheckLoading(audioNativeClip.clipID);
+                    }
+                }).ScheduleParallel();
         }
 
         public void OnSuspendResume(object sender, SuspendResumeEvent evt)

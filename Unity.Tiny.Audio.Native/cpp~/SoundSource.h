@@ -22,7 +22,7 @@ public:
     void play();
     void stop();
     SoundStatus getStatus() const { return m_status; }
-    bool isPlaying() const { return m_status == Playing && m_clip->okay(); }
+    bool isPlaying() const { return m_status == Playing; }
 
     void setVolume(float v) { m_volume = v; }
     float volume() const { return m_volume; }
@@ -37,11 +37,7 @@ public:
         return m_status == Stopped;
     }
 
-    // Returns the number of frames fetched.
-    const float* fetch(uint32_t frameCount, uint32_t* delivered);
-
-    // Returns the number of frames fetched.
-    const float* fetchAndResample(uint32_t frameCount, uint32_t* delivered);
+    const float* fetch(uint32_t frameCount, uint32_t* delivered, float pitch = 1.0f);
 
     // Resets the decoding (used for looping)
     void rewind() 
@@ -52,9 +48,18 @@ public:
             m_framePosResample = 0.0f;
 
         m_status = Playing; 
+
+        if (m_decoderInitialized)
+        {
+            ma_decode_memory_uninit(&m_decoder);
+            m_decoderInitialized = false;
+        }
     }
 
 private:
+    const float* fetchAndResample(uint32_t frameCount, uint32_t* delivered, float pitch = 1.0f);
+    const int16_t* updateFrames(uint32_t frameCount, uint32_t* delivered, int32_t framePos = -1);
+
     SoundClip* m_clip;
 
     float m_volume = 1.0f;
@@ -65,6 +70,15 @@ private:
     uint64_t m_framePos = 0;
     double m_framePosResample = 0.0;
 
+    int16_t* m_uncompressedBuffer;
+    uint32_t m_uncompressedBufferFramePosStart;
+    uint32_t m_uncompressedBufferSize;
+
     float* m_sampleBuffer;
     uint32_t m_sampleBufferSize;
+
+    bool m_compressedInMemory = true;
+    bool m_decoderInitialized;
+    ma_decoder m_decoder;
+    ma_decoder_config m_config;
 };

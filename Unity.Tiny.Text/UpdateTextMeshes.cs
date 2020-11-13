@@ -77,8 +77,9 @@ namespace Unity.Tiny.Text
                         // as above, next to TextRendererString component).  But it doesn't need to be; there could be
                         // a shared mesh.  In that case though, this code will end up modifying every text string
                         // that uses that mesh, which is probably not what's desired!
-                        // We also don't really need a dozen meshes for the identical string/font.  All of this can
-                        // be significantly optimized.
+                        // We also don't really need a dozen meshes for the identical string/font.
+
+                        /**All of this can be SIGNIFICANTLY OPTIMIZED!!!.*/
                         var vertexBuffer = dsvFromEntity[meshEntity];
                         var indexBuffer = diFromEntity[meshEntity];
 
@@ -106,7 +107,7 @@ namespace Unity.Tiny.Text
                         }
 
                         TextLayout.LayoutString((char*) text.GetUnsafePtr(), text.Length,
-                            fontRef.Size, fontRef.HorizontalAlignment,
+                            fontRef.Size, fontRef.HorizontalAlignment, fontRef.VerticalAlignment,
                             vertexColor,
                             ref fontData.Value,
                             vertexBuffer, indexBuffer, out bounds);

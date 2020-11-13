@@ -23,6 +23,14 @@ namespace Unity.Tiny.Rendering
         DirectToFrontBuffer = 3 
     }
 
+    // Next to RenderGraphConfig singleton, shows state of render graph for inspection.
+    // Treat as read-only 
+    public struct RenderGraphState: IComponentData
+    {
+        public int RenderBufferCurrentWidth;    // read-only, set by render graph builder to the final render buffer size in pixels 
+        public int RenderBufferCurrentHeight;   // read-only, set by render graph builder to the final render buffer size in pixels 
+    }
+
     // Config singleton, usually found next to DisplayInfo on the config entity
     // Changing entries here will force a full render graph rebuild 
     public struct RenderGraphConfig : IComponentData, IEquatable<RenderGraphConfig>
@@ -163,7 +171,6 @@ namespace Unity.Tiny.Rendering
     [Flags]
     public enum RenderPassType : uint
     {
-        ZOnly = 1,
         Opaque = 2,
         Transparent = 4,
         UI = 8,

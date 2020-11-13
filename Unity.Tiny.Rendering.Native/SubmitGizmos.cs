@@ -58,7 +58,7 @@ namespace Unity.Tiny.Rendering
             bgfx.Encoder* encoder = bgfx.encoder_begin(false);
 
             // tangents & normals
-            Entities.WithoutBurst().WithAll<RenderToPasses>().ForEach((Entity e, ref MeshRenderer mr, ref LocalToWorld tx, ref GizmoNormalsAndTangents giz) =>
+            Entities.WithoutBurst().WithNone<DisableRendering>().WithAll<RenderToPasses>().ForEach((Entity e, ref MeshRenderer mr, ref LocalToWorld tx, ref GizmoNormalsAndTangents giz) =>
             {
                 RenderToPasses toPassesRef = EntityManager.GetSharedComponentData<RenderToPasses>(e);
                 DynamicBuffer<RenderToPassesEntry> toPasses = EntityManager.GetBufferRO<RenderToPassesEntry>(toPassesRef.e);
@@ -78,7 +78,7 @@ namespace Unity.Tiny.Rendering
             }).Run();
 
             // object bounding box
-            Entities.WithoutBurst().ForEach((Entity e, ref MeshRenderer mr, ref LocalToWorld tx, ref GizmoObjectBoundingBox giz) =>
+            Entities.WithoutBurst().WithNone<DisableRendering>().ForEach((Entity e, ref MeshRenderer mr, ref LocalToWorld tx, ref GizmoObjectBoundingBox giz) =>
             {
                 if (!EntityManager.HasComponent<RenderToPasses>(e))
                     return;
@@ -93,7 +93,7 @@ namespace Unity.Tiny.Rendering
             }).Run();
 
             // world bounds
-            Entities.WithoutBurst().ForEach((Entity e, ref WorldBounds b, ref LocalToWorld tx, ref GizmoWorldBoundingBox giz) =>
+            Entities.WithoutBurst().WithNone<DisableRendering>().ForEach((Entity e, ref WorldBounds b, ref LocalToWorld tx, ref GizmoWorldBoundingBox giz) =>
             {
                 if (!EntityManager.HasComponent<RenderToPasses>(e))
                     return;
@@ -117,7 +117,7 @@ namespace Unity.Tiny.Rendering
             }).Run();
 
             // transform
-            Entities.WithoutBurst().ForEach((Entity e, ref LocalToWorld tx, ref GizmoTransform giz) =>
+            Entities.WithoutBurst().WithNone<DisableRendering>().ForEach((Entity e, ref LocalToWorld tx, ref GizmoTransform giz) =>
             {
                 if (!EntityManager.HasComponent<RenderToPasses>(e))
                     return;
@@ -137,7 +137,7 @@ namespace Unity.Tiny.Rendering
             }).Run();
 
             // sphere
-            Entities.WithoutBurst().ForEach((Entity e, ref LocalToWorld tx, ref WorldBoundingSphere bs, ref GizmoBoundingSphere giz) =>
+            Entities.WithoutBurst().WithNone<DisableRendering>().ForEach((Entity e, ref LocalToWorld tx, ref WorldBoundingSphere bs, ref GizmoBoundingSphere giz) =>
             {
                 if (!EntityManager.HasComponent<RenderToPasses>(e))
                     return;
@@ -158,7 +158,7 @@ namespace Unity.Tiny.Rendering
             }).Run();
 
             // spot lights
-            Entities.WithoutBurst().ForEach((Entity e, ref LocalToWorld tx, ref Light l, ref SpotLight sl, ref GizmoLight giz) =>
+            Entities.WithoutBurst().WithNone<DisableRendering>().ForEach((Entity e, ref LocalToWorld tx, ref Light l, ref SpotLight sl, ref GizmoLight giz) =>
             {
                 if (!EntityManager.HasComponent<RenderToPasses>(e))
                     return;
@@ -184,7 +184,7 @@ namespace Unity.Tiny.Rendering
             }).Run();
 
             // directional lights
-            Entities.WithoutBurst().ForEach((Entity e, ref LocalToWorld tx, ref Light l, ref DirectionalLight dl, ref GizmoLight giz) =>
+            Entities.WithoutBurst().WithNone<DisableRendering>().ForEach((Entity e, ref LocalToWorld tx, ref Light l, ref DirectionalLight dl, ref GizmoLight giz) =>
             {
                 if (!EntityManager.HasComponent<RenderToPasses>(e))
                     return;
@@ -203,7 +203,7 @@ namespace Unity.Tiny.Rendering
             // point lights
 
             // cameras
-            Entities.WithoutBurst().ForEach((Entity e, ref LocalToWorld tx, ref Camera cam, ref GizmoCamera giz) =>
+            Entities.WithoutBurst().WithNone<DisableRendering>().ForEach((Entity e, ref LocalToWorld tx, ref Camera cam, ref GizmoCamera giz) =>
             {
                 if (!EntityManager.HasComponent<RenderToPasses>(e))
                     return;
@@ -238,7 +238,7 @@ namespace Unity.Tiny.Rendering
             }).Run();
 
             // auto bounds
-            Entities.WithoutBurst().ForEach((Entity e, ref LocalToWorld tx, ref AutoMovingDirectionalLight amd, ref GizmoAutoMovingDirectionalLight giz) =>
+            Entities.WithoutBurst().WithNone<DisableRendering>().ForEach((Entity e, ref LocalToWorld tx, ref AutoMovingDirectionalLight amd, ref GizmoAutoMovingDirectionalLight giz) =>
             {
                 if (!EntityManager.HasComponent<RenderToPasses>(e))
                     return;
@@ -254,7 +254,7 @@ namespace Unity.Tiny.Rendering
             }).Run();
 
             // debug display textures as overlays
-            Entities.WithoutBurst().ForEach((Entity e, ref TextureBGFX tex, ref GizmoDebugOverlayTexture giz) => {
+            Entities.WithoutBurst().WithNone<DisableRendering>().ForEach((Entity e, ref TextureBGFX tex, ref GizmoDebugOverlayTexture giz) => {
                 if (!EntityManager.HasComponent<RenderToPasses>(e))
                     return;
                 RenderToPasses toPassesRef = EntityManager.GetSharedComponentData<RenderToPasses>(e);

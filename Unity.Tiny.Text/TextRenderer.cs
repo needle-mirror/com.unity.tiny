@@ -40,6 +40,11 @@ namespace Unity.Tiny.Text
         /// The horizontal alignment, relative to this entity's position.
         /// </summary>
         public HorizontalAlignment HorizontalAlignment;
+
+        /// <summary>
+        /// The vertical alignment, relative to this entity's position.
+        /// </summary>
+        public VerticalAlignment VerticalAlignment;
     }
 
     /// <summary>

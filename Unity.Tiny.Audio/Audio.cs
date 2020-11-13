@@ -1,4 +1,5 @@
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Tiny;
 using Unity.Transforms;
@@ -28,9 +29,26 @@ namespace Unity.Tiny.Audio
         LoadError
     }
 
+    /// <summary>
+    /// An enum that tells which audio clip loading strategy is being used.
+    /// </summary>
+    public enum AudioClipLoadType
+    {
+        /// <summary>When first played, this clip is fully decompressed into memory. THe uncompressed version of the clip may be de-allocated later to free up memory.</summary>
+        DecompressOnPlay,
+
+        /// <summary>The clip is always compressed in memory. When played back, it is decoded as it is being played. The uncompressed data is always de-allocated immediately after it is used.</summary>
+        CompressedInMemory
+    }
+
+    /// <summary>
+    /// When a 3d sound is played, it is distance-attenuated; its volume is lowered as the sound moves away from the listener.
+    /// </summary>
     public enum AudioRolloffMode
     {
+        /// <summary>In logarithmic rolloff mode, the volume drops logarithmically/steeply after the sound is minDistance units from the listener.</summary>
         Logarithmic = 0,
+        /// <summary>In linear rolloff mode, the volume drops linearly from full volume at minDistance units (from the listener) to zero at maxDistance units.</summary>
         Linear = 1
     }
 
@@ -66,6 +84,44 @@ namespace Unity.Tiny.Audio
         ///  The AudioClip load status. The AudioClipStatus enum defines the possible states.
         /// </summary>
         public AudioClipStatus status;
+        /// <summary>The loading and decompression strategy used for this clip.
+        public AudioClipLoadType loadType;
+        /// <summary>The clip's channel count.
+        public int channels;
+        /// <summary>The uncompressed size of the audio clip in samples.
+        public int samples;
+        /// <summary>The frequence of the audio clip in samples/second.
+        public int frequency;
+    }
+
+    /// <summary>
+    ///  AudioClipCompressed is the audio clip's compressed data, in MP3 or Vorbis format.
+    /// </summary>
+    public struct AudioClipCompressed : IBufferElementData
+    {
+        public byte data;
+    }
+
+    /// <summary>
+    ///  AudioClipUncompressed is the audio clip's uncompressed data. It is in stereo, 16-bits-per-sample format.
+    ///  Audio clips are originally loaded into memory in AudioClipCompressed components. In the AudioClipLoadType is
+    ///  DecompressOnPlay, the AudioClipUncompressed component will be filled in after decompression is first performed.
+    ///  There is a build setting that affects the uncompressed audio memory limit. When it is exceeded, some AudioClipUncompressed
+    ///  components will be cleared out to save memory based on a least-recently-used policy.
+    /// </summary>
+    public struct AudioClipUncompressed : IBufferElementData
+    {
+        public short sample;
+    }
+
+    /// <summary>
+    /// AudioClipUsage stores data regarding if its associated AudioClip is being played and how recently it was played. This is
+    /// used when determining which AudioClipUncompressed components to clear to reduce memory usage.
+    /// </summary>
+    public struct AudioClipUsage : IComponentData
+    {
+        public int playingRefCount;
+        public double lastTimeUsed;
     }
 
     /// <summary>
@@ -89,232 +145,54 @@ namespace Unity.Tiny.Audio
     {
     }
 
-
-    [UpdateInGroup(typeof(PresentationSystemGroup))]
-    public abstract class AudioSystem : SystemBase
+    public struct AudioSourceID : ISystemStateComponentData
     {
-        protected abstract void InitAudioSystem();
-        protected abstract void DestroyAudioSystem();
+        public uint sourceID;
+    }
 
-        protected abstract bool PlaySource(Entity e);
-        protected abstract void StopSource(Entity e);
-        protected abstract bool IsPlaying(Entity e);
-        protected abstract bool SetVolume(Entity e, float volume);
-        protected abstract bool SetPan(Entity e, float pan);
-        protected abstract bool SetPitch(Entity e, float pitch);
+    public struct EntityToStop : IBufferElementData
+    {
+        public Entity e;
 
-        protected override void OnCreate()
+        public static implicit operator Entity(EntityToStop entityToStop)
         {
-            InitAudioSystem();
+            return entityToStop.e;
         }
 
-        protected override void OnDestroy()
+        public static implicit operator EntityToStop(Entity entity)
         {
-            DestroyAudioSystem();
-        }
-
-        protected override void OnUpdate()
-        {
-            var mgr = EntityManager;
-            LocalToWorld listenerLocalToWorld = new LocalToWorld();
-            bool foundListener = false;
-
-            // Get the listener position.
-            Entities.ForEach((Entity e, ref LocalToWorld localToWorld, ref AudioListener listener) =>
-            {
-                if (!foundListener)
-                {
-                    listenerLocalToWorld = localToWorld;
-                    foundListener = true;
-                }
-            }).Run();
-
-            // Stop sounds.
-            {
-                Entities
-                    .WithStructuralChanges()
-                    .WithoutBurst()
-                    .WithAll<AudioSource>()
-                    .ForEach((Entity e, ref AudioSourceStop tag) =>
-                    {
-                        StopSource(e);
-                        mgr.RemoveComponent<AudioSourceStop>(e);
-                    }).Run();
-                Entities
-                    .WithoutBurst()
-                    .WithAll<AudioSource>()
-                    .ForEach((Entity e, ref Disabled tag) =>
-                    {
-                        StopSource(e);
-                    }).Run();
-            }
-
-            // Play sounds.
-            {
-                Entities
-                    .WithStructuralChanges()
-                    .WithAll<AudioSource>()
-                    .ForEach((Entity e, ref AudioSourceStart tag) =>
-                    {
-                        if (PlaySource(e))
-                        {
-                            mgr.RemoveComponent<AudioSourceStart>(e);
-                        }
-                    }).Run();
-            }
-
-            // Update isPlaying.
-#if ENABLE_DOTSRUNTIME_PROFILER
-            ProfilerStats.GatheredStats |= ProfilerModes.ProfileAudio;
-            ProfilerStats.AccumStats.audioPlayingSources.value = 0;
-            ProfilerStats.AccumStats.audioPausedSources.value = 0;
-#endif
-            Entities
-                .WithoutBurst()
-                .ForEach((Entity e, ref AudioSource source) =>
-                {
-                    source.isPlaying = IsPlaying(e);
-#if ENABLE_DOTSRUNTIME_PROFILER
-                    if (source.isPlaying)
-                        ProfilerStats.AccumStats.audioPlayingSources.Accumulate(1);
-                    else
-                        ProfilerStats.AccumStats.audioPausedSources.Accumulate(1);
-#endif
-                }).Run();
-#if ENABLE_DOTSRUNTIME_PROFILER
-            // No concept of multiple clips playing per audio source in Tiny Audio
-            ProfilerStats.AccumStats.audioNumSoundChannelInstances = ProfilerStats.AccumStats.audioPlayingSources;
-#endif
-
-            // Update volume for sources that are not distance-attenuated.
-            Entities
-                .WithoutBurst()
-                .WithNone<AudioDistanceAttenuation>()
-                .ForEach((Entity e, ref AudioSource source) =>
-                {
-                    SetVolume(e, source.volume);
-                }).Run();
-
-            // Update volume for sources that are distance-attenuated.
-            Entities
-                .WithoutBurst()
-                .ForEach((Entity e, ref AudioSource source, ref AudioDistanceAttenuation distanceAttenuation) =>
-                {
-                    float distanceAttenuationVolume = 0.0f;
-
-                    if (foundListener && HasComponent<LocalToWorld>(e))
-                    {
-                        LocalToWorld localToWorld = GetComponent<LocalToWorld>(e);
-                        float xDist = localToWorld.Position.x - listenerLocalToWorld.Position.x;
-                        float yDist = localToWorld.Position.y - listenerLocalToWorld.Position.y;
-                        float zDist = localToWorld.Position.z - listenerLocalToWorld.Position.z;
-                        float distanceToListener = math.sqrt(xDist * xDist + yDist * yDist + zDist * zDist);
-
-                        if (distanceToListener <= distanceAttenuation.minDistance)
-                        {
-                            distanceAttenuationVolume = 1.0f;
-                        }
-                        else if (distanceToListener > distanceAttenuation.maxDistance)
-                        {
-                            distanceAttenuationVolume = 0.0f;
-                        }
-                        else
-                        {
-                            // Reduce distanceToListener by minDistance because, in our simulation, we start lowering the volume after a sound is min distance away from the listener.
-                            distanceToListener -= distanceAttenuation.minDistance;
-
-                            if (distanceAttenuation.rolloffMode == AudioRolloffMode.Linear)
-                            {
-                                float attenuationRange = distanceAttenuation.maxDistance - distanceAttenuation.minDistance;
-                                distanceAttenuationVolume = 1.0f - (distanceToListener / attenuationRange);
-                            }
-                            else if (distanceAttenuation.rolloffMode == AudioRolloffMode.Logarithmic)
-                            {
-                                // In Unity's original implementation of logarithmic attenuation, the volume is halved every minDistance units. We are copying that approach here.
-                                float volumeHalfLives = distanceToListener / distanceAttenuation.minDistance;
-                                distanceAttenuationVolume = 1.0f / math.pow(2.0f, volumeHalfLives);
-                            }
-                        }
-                    }
-
-                    distanceAttenuation.volume = distanceAttenuationVolume;
-                    SetVolume(e, source.volume * distanceAttenuationVolume);
-                }).Run();
-
-            // Update 2d panning.
-            Entities
-                .WithoutBurst()
-                .ForEach((Entity e, ref AudioSource source, ref Audio2dPanning panning) =>
-                {
-                    SetPan(e, panning.pan);
-                }).Run();
-
-            // Update 3d panning.
-            Entities
-                .WithoutBurst()
-                .ForEach((Entity e, ref AudioSource source, ref Audio3dPanning panning) =>
-                {
-                    float pan = 0.0f;
-
-                    if (foundListener && HasComponent<LocalToWorld>(e))
-                    {
-                        LocalToWorld localToWorld = GetComponent<LocalToWorld>(e);
-                        float3 listenerRight = math.normalize(listenerLocalToWorld.Right);
-                        float3 listenerToSound = math.normalize(localToWorld.Position - listenerLocalToWorld.Position);
-                        pan = math.dot(listenerRight, listenerToSound);
-                    }
-
-                    panning.pan = pan;
-                    SetPan(e, pan);
-                }).Run();
-
-            // Update pitch.
-            Entities
-                .WithoutBurst()
-                .ForEach((Entity e, ref AudioSource source, ref AudioPitch pitchEffect) =>
-                {
-                    if (pitchEffect.pitch > 0.0f)
-                        SetPitch(e, pitchEffect.pitch);
-                    else
-                        SetPitch(e, 1.0f);
-                }).Run();
+            return new EntityToStop { e = entity };
         }
     }
 
-    /// <summary>
-    ///  Configures the global audio state, which you can access via GetSingleton<AudioConfig>()
-    ///  This component is attached to the Config entity.
-    /// </summary>
-    public struct AudioConfig : IComponentData
+    public struct SourceIDToStop : IBufferElementData
     {
-        /// <summary>
-        ///  True if the audio context is initialized.
-        /// </summary>
-        /// <remarks>
-        ///  After you export and launch the project, and the AudioSystem updates
-        ///  for the first time, the AudioConfig component attempts to initialize
-        ///  audio. If successful, it sets this value to true.
-        ///
-        ///  Once audio is initialized successfully the AudioConfig component does
-        ///  not re-attempt to initialize it on subsequent AudioSystem updates.
-        /// </remarks>
-        public bool initialized;
+        public uint id;
 
-        /// <summary>
-        ///  If true, pauses the audio context. Set this at any time to pause or
-        ///  resume audio.
-        /// </summary>
-        public bool paused;
+        public static implicit operator uint(SourceIDToStop sourceIDToStop)
+        {
+            return sourceIDToStop.id;
+        }
 
-        /// <summary>
-        ///  True if the audio context is unlocked in the browser.
-        /// </summary>
-        /// <remarks>
-        ///  Some browsers require a user interaction, for example a touch interaction
-        ///  or key input, to unlock the audio context. If the context is locked
-        ///  no audio plays.
-        /// </remarks>
-        public bool unlocked;
+        public static implicit operator SourceIDToStop(uint sourceID)
+        {
+            return new SourceIDToStop { id = sourceID };
+        }
+    }
+
+    public struct EntityPlaying : IBufferElementData
+    {
+        public Entity e;
+
+        public static implicit operator Entity(EntityPlaying entityToStop)
+        {
+            return entityToStop.e;
+        }
+
+        public static implicit operator EntityPlaying(Entity entity)
+        {
+            return new EntityPlaying { e = entity };
+        }
     }
 
     /// <summary>
@@ -408,7 +286,7 @@ namespace Unity.Tiny.Audio
         ///  `isPlaying` will start false, and will be false until the AudioSourceStart tag
         ///  is removed by the Audio system.
         /// </remarks>
-        public bool isPlaying { get; internal set; }
+        public bool isPlaying { get; set; }
     }
 
     /// <summary>
@@ -451,7 +329,7 @@ namespace Unity.Tiny.Audio
         /// Specifies the audio clip's playback stereo pan. Values can range from -1..1.
         /// This value is set automatically by the AudioSystem.
         /// </summary>
-        public float pan { get; internal set; }
+        public float pan { get; set; }
     }
 
     /// <summary>
@@ -488,7 +366,7 @@ namespace Unity.Tiny.Audio
         public AudioRolloffMode rolloffMode;
         public float minDistance;
         public float maxDistance;
-        public float volume { get; internal set; }
+        public float volume { get; set; }
     }
 
     /// <summary>
@@ -513,5 +391,200 @@ namespace Unity.Tiny.Audio
     public struct AudioPitch : IComponentData
     {
         public float pitch;
+    }
+
+    [UpdateInGroup(typeof(PresentationSystemGroup))]
+    public abstract class AudioSystem : SystemBase
+    {
+        protected Entity m_audioEntity;
+
+        protected abstract void InitAudioSystem();
+        protected abstract void DestroyAudioSystem();
+
+        protected override void OnCreate()
+        {
+            InitAudioSystem();
+
+            m_audioEntity = EntityManager.CreateEntity();
+            EntityManager.AddBuffer<EntityToStop>(m_audioEntity);
+            EntityManager.AddBuffer<SourceIDToStop>(m_audioEntity);
+            EntityManager.AddBuffer<EntityPlaying>(m_audioEntity);
+        }
+
+        protected override void OnDestroy()
+        {
+            DestroyAudioSystem();
+
+            EntityManager.DestroyEntity(m_audioEntity);
+        }
+
+        protected override void OnUpdate()
+        {
+            var mgr = EntityManager;
+            Entity audioEntity = m_audioEntity;
+            double currentTime = World.Time.ElapsedTime;
+
+            ClearAudioBuffers();
+
+            Entities
+                .WithEntityQueryOptions(EntityQueryOptions.IncludeDisabled)
+                .ForEach((Entity e, in AudioSourceID audioSourceID) =>
+            {
+                if (!mgr.HasComponent<AudioSource>(e) || mgr.HasComponent<AudioSourceStop>(e) || mgr.HasComponent<Disabled>(e))
+                {
+                    DynamicBuffer<EntityToStop> entitiesToStop = mgr.GetBuffer<EntityToStop>(audioEntity);
+                    entitiesToStop.Add(e);
+
+                    if (audioSourceID.sourceID > 0)
+                    {
+                        DynamicBuffer<SourceIDToStop> sourceIDsToStop = mgr.GetBuffer<SourceIDToStop>(audioEntity);
+                        sourceIDsToStop.Add(audioSourceID.sourceID);
+                    }
+                }
+            }).Run();
+
+            int numEntitiesToStop = mgr.GetBuffer<EntityToStop>(audioEntity).Length;
+            for (int i = 0; i < numEntitiesToStop; i++)
+            {
+                Entity e = mgr.GetBuffer<EntityToStop>(audioEntity)[i];
+
+                if (mgr.HasComponent<AudioSourceStop>(e))
+                    mgr.RemoveComponent<AudioSourceStop>(e);
+
+                if (!mgr.HasComponent<AudioSource>(e))
+                    mgr.RemoveComponent<AudioSourceID>(e);
+            }
+
+            Entities
+                .ForEach((Entity e, in AudioSource audioSource) =>
+                {
+                    bool audioSourceStarting = mgr.HasComponent<AudioSourceStart>(e);
+                    if (audioSourceStarting || audioSource.isPlaying)
+                        mgr.GetBuffer<EntityPlaying>(audioEntity).Add(e);
+                }).Run();
+
+            for (int i = 0; i < mgr.GetBuffer<EntityPlaying>(audioEntity).Length; i++)
+            {
+                Entity e = mgr.GetBuffer<EntityPlaying>(audioEntity)[i];
+                
+                if (!mgr.HasComponent<AudioSourceID>(e))
+                {
+                    AudioSourceID audioNativeSource = new AudioSourceID() { sourceID = 0 };
+                    mgr.AddComponentData(e, audioNativeSource);
+                }
+            }
+
+            // Get the listener position.
+            LocalToWorld listenerLocalToWorld = new LocalToWorld();
+            bool foundListener = false;
+            Entities
+                .WithAll<AudioListener>()
+                .ForEach((Entity e, in LocalToWorld localToWorld) =>
+            {
+                if (!foundListener)
+                {
+                    listenerLocalToWorld = localToWorld;
+                    foundListener = true;
+                }
+            }).Run();
+
+            int numEntitiesPlaying = mgr.GetBuffer<EntityPlaying>(audioEntity).Length;
+            for (int i = 0; i < numEntitiesPlaying; i++)
+            {
+                Entity e = mgr.GetBuffer<EntityPlaying>(audioEntity)[i];
+                
+                if (mgr.HasComponent<AudioDistanceAttenuation>(e))
+                {
+                    AudioDistanceAttenuation distanceAttenuation = mgr.GetComponentData<AudioDistanceAttenuation>(e);
+                    float distanceAttenuationVolume = 0.0f;
+
+                    if (foundListener && mgr.HasComponent<LocalToWorld>(e))
+                    {
+                        LocalToWorld localToWorld = mgr.GetComponentData<LocalToWorld>(e);
+                        float xDist = localToWorld.Position.x - listenerLocalToWorld.Position.x;
+                        float yDist = localToWorld.Position.y - listenerLocalToWorld.Position.y;
+                        float zDist = localToWorld.Position.z - listenerLocalToWorld.Position.z;
+                        float distanceToListener = math.sqrt(xDist * xDist + yDist * yDist + zDist * zDist);
+
+                        if (distanceToListener <= distanceAttenuation.minDistance)
+                        {
+                            distanceAttenuationVolume = 1.0f;
+                        }
+                        else if (distanceToListener > distanceAttenuation.maxDistance)
+                        {
+                            distanceAttenuationVolume = 0.0f;
+                        }
+                        else
+                        {
+                            // Reduce distanceToListener by minDistance because, in our simulation, we start lowering the volume after a sound is min distance away from the listener.
+                            distanceToListener -= distanceAttenuation.minDistance;
+
+                            if (distanceAttenuation.rolloffMode == AudioRolloffMode.Linear)
+                            {
+                                float attenuationRange = distanceAttenuation.maxDistance - distanceAttenuation.minDistance;
+                                distanceAttenuationVolume = 1.0f - (distanceToListener / attenuationRange);
+                            }
+                            else if (distanceAttenuation.rolloffMode == AudioRolloffMode.Logarithmic)
+                            {
+                                // In Unity's original implementation of logarithmic attenuation, the volume is halved every minDistance units. We are copying that approach here.
+                                float volumeHalfLives = distanceToListener / distanceAttenuation.minDistance;
+                                distanceAttenuationVolume = 1.0f / math.pow(2.0f, volumeHalfLives);
+                            }
+                        }
+                    }
+
+                    distanceAttenuation.volume = distanceAttenuationVolume;
+                    mgr.SetComponentData<AudioDistanceAttenuation>(e, distanceAttenuation);
+                }
+
+                if (HasComponent<Audio3dPanning>(e))
+                {
+                    Audio3dPanning panning = mgr.GetComponentData<Audio3dPanning>(e);
+                    float pan = 0.0f;
+
+                    if (foundListener && mgr.HasComponent<LocalToWorld>(e))
+                    {
+                        LocalToWorld localToWorld = mgr.GetComponentData<LocalToWorld>(e);
+                        float3 listenerRight = math.normalize(listenerLocalToWorld.Right);
+                        float3 listenerToSound = math.normalize(localToWorld.Position - listenerLocalToWorld.Position);
+                        pan = math.dot(listenerRight, listenerToSound);
+                    }
+
+                    panning.pan = pan;
+                    mgr.SetComponentData<Audio3dPanning>(e, panning);
+                }
+            }
+
+#if ENABLE_DOTSRUNTIME_PROFILER
+            ProfilerStats.GatheredStats |= ProfilerModes.ProfileAudio;
+
+            ProfilerStats.AccumStats.audioPlayingSources.value = 0;
+            ProfilerStats.AccumStats.audioPausedSources.value = 0;
+            Entities.ForEach((Entity e, ref AudioSource source) =>
+            {
+                if (source.isPlaying)
+                    ProfilerStats.AccumStats.audioPlayingSources.Accumulate(1);
+                else
+                    ProfilerStats.AccumStats.audioPausedSources.Accumulate(1);
+            }).Run();
+
+            // No concept of multiple clips playing per audio source in Tiny Audio
+            ProfilerStats.AccumStats.audioNumSoundChannelInstances = ProfilerStats.AccumStats.audioPlayingSources;
+#endif
+        }
+
+        void ClearAudioBuffers()
+        {
+            var mgr = EntityManager;
+
+            DynamicBuffer<EntityToStop> entitiesToStop = mgr.GetBuffer<EntityToStop>(m_audioEntity);
+            entitiesToStop.Length = 0;
+
+            DynamicBuffer<SourceIDToStop> sourceIDsToStop = mgr.GetBuffer<SourceIDToStop>(m_audioEntity);
+            sourceIDsToStop.Length = 0;
+
+            DynamicBuffer<EntityPlaying> entitiesPlaying = mgr.GetBuffer<EntityPlaying>(m_audioEntity);
+            entitiesPlaying.Length = 0;
+        }
     }
 }
